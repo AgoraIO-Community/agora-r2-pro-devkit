@@ -11,7 +11,8 @@ and Agora RTSA while keeping board-specific hardware behind a clear platform ada
 
 > **Project status:** initial scaffold. Firmware sources, the SoC selection, pin map, partition
 > layout, and build scripts have not been added yet. Capabilities described below are integration
-> requirements, not claims that a board port has been implemented or hardware-validated.
+> requirements, not claims that a board port has been implemented or hardware-validated. The
+> repository layout will be documented after the hardware and build architecture are confirmed.
 
 ## Goals
 
@@ -36,7 +37,7 @@ replaced with values verified against the R2 Pro schematic and bring-up tests.
 | SoC and board SDK | To be selected during board bring-up |
 | Network | Wi-Fi station mode, reconnect, and first-boot provisioning |
 | Audio boundary | 16 kHz, mono, signed 16-bit PCM, frame-based APIs |
-| RTSA packet cadence | 60 ms baseline; change only with a matching RTSA build |
+| RTSA packet cadence | 20 ms baseline; change only with a matching RTSA build |
 | Persistence | Wi-Fi credentials, volume, and required device identity |
 | Input and display | Board dependent; exposed through the platform adapter |
 | UI languages | Simplified Chinese and English |
@@ -54,24 +55,6 @@ replaced with values verified against the R2 Pro schematic and bring-up tests.
 - Bilingual provisioning prompts, pairing-code announcements, and device-service selection.
 - Scripted multi-language builds and documented recovery/flashing procedures.
 
-## Suggested repository layout
-
-The tree below is the intended structure as implementation is added:
-
-```text
-agora-r2-pro-devkit/
-├── components/       portable SDK sources and platform adapters
-├── docs/             hardware, provisioning, build, and validation notes
-├── firmware/         application entry point and board profiles
-├── partitions/       reviewed storage and firmware partition tables
-├── scripts/          dependency checks and reproducible build helpers
-└── tests/            host tests and hardware-test procedures
-```
-
-Keep generated output, downloaded dependencies, local SDK configuration, signing material, and
-built firmware outside version control. Pin external dependencies to exact revisions and record
-their licenses and provenance.
-
 ## Getting started
 
 The first usable milestone requires:
@@ -81,10 +64,10 @@ The first usable milestone requires:
 - R2 Pro hardware, a data-capable USB connection, and recovery/flashing instructions.
 - Access to a compatible device service and valid Agora service configuration.
 
-Clone the repository and its submodules after the build structure is published:
+Clone the repository:
 
 ```sh
-git clone --branch main --recurse-submodules https://github.com/AgoraIO-Community/agora-r2-pro-devkit.git
+git clone --branch main https://github.com/AgoraIO-Community/agora-r2-pro-devkit.git
 cd agora-r2-pro-devkit
 ```
 
