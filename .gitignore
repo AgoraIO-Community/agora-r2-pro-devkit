@@ -1,0 +1,116 @@
+# Build and release output
+/build/
+/build-*/
+/cmake-build-*/
+/out/
+/output/
+/artifacts/
+/releases/
+/dist/
+
+# Generated build-system files
+/CMakeFiles/
+/CMakeCache.txt
+/cmake_install.cmake
+/.ninja_deps
+/.ninja_log
+/*.ninja
+/compile_commands.json
+/Testing/
+
+# Generated board and SDK configuration
+/sdkconfig
+/sdkconfig.*
+!/sdkconfig.defaults
+/managed_components/
+/.cache/
+/.ccache/
+
+# Compiled and linked output
+*.d
+*.o
+*.obj
+*.ko
+*.elf
+*.map
+*.lst
+*.su
+*.gcda
+*.gcno
+*.profraw
+*.img
+*.hex
+*.uf2
+*.rbl
+*.app
+*.a
+*.la
+*.lo
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+
+# Keep explicitly vendored prebuilt runtime libraries.
+!components/**/lib/**/*.a
+!components/**/lib/**/*.so
+!components/**/lib/**/*.so.*
+!components/**/lib/**/*.dylib
+
+# Firmware images and package output
+*.bin
+*.ota
+*.pkg
+
+# Python and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Logs, traces, and profiling output
+*.log
+*.trace
+*.perf.data
+
+# Local secrets and device configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+/certs/private/
+/secrets/
+/local/
+
+# IDE and editor state
+.vscode/
+.idea/
+*.code-workspace
+*.swp
+*.swx
+*~
+
+# Operating-system metadata
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+
+# Patch and merge leftovers
+*.orig
+*.rej
+
+# Repository-local agent and tool state
+/.agents/
+/.codex/
+/skills/
