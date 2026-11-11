@@ -1,0 +1,34 @@
+# Build artifacts
+/build/
+/build-*/
+cmake-build-*/
+compile_commands.json
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Runtime data
+/.mybot-kv-store/
+/.mybot-flash/
+*.log
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swx
+
+# Patch leftovers
+*.orig
+*.rej
+
+# macOS
+.DS_Store
+._*
+
+# Internal, not for public distribution
+/DEVICE_API.md
+
+# Repository-local Codex skills; do not publish with source changes
+/skills/
