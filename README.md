@@ -9,10 +9,11 @@ the R2 Pro AI development kit. The project is intended to run real-time AI voice
 with [agent-studio-device-firmware](https://github.com/AgoraIO-Community/agent-studio-device-firmware)
 and Agora RTSA while keeping board-specific hardware behind a clear platform adapter boundary.
 
-> **Project status:** initial scaffold. Firmware sources, the SoC selection, pin map, partition
-> layout, and build scripts have not been added yet. Capabilities described below are integration
-> requirements, not claims that a board port has been implemented or hardware-validated. The
-> repository layout will be documented after the hardware and build architecture are confirmed.
+> **Project status:** an initial RV1126B Linux device service is available in
+> [`app/botstation-device`](app/botstation-device/README.md). It is an exploratory port, not a
+> confirmed R2 Pro board profile; the official SoC selection, pin map, partition layout, and
+> hardware validation remain pending. The capabilities below are integration requirements, not
+> claims that the R2 Pro has been implemented or hardware-validated.
 
 ## Goals
 
@@ -71,8 +72,8 @@ git clone --branch main https://github.com/AgoraIO-Community/agora-r2-pro-devkit
 cd agora-r2-pro-devkit
 ```
 
-Build and flash commands will be added together with the first working board profile. Until then,
-the repository is documentation-only.
+The device-service README describes its Buildroot integration and external SDK requirements.
+Repository-wide build and flash scripts will follow hardware and board-SDK confirmation.
 
 ## Bring-up checklist
 
