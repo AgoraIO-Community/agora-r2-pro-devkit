@@ -11,11 +11,11 @@ Project-maintained application and Linux integration code uses [Apache-2.0](LICE
 | DejaVu terminal and signature fonts | Renamed 18/20 px subsets; DejaVu/Bitstream Vera terms and notices | [terminal font license](components/mybot_ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt), [inputs](components/mybot_ui/fonts/sources.json) |
 | Source Han Sans Chinese subset | SIL OFL 1.1 | [Chinese font license](components/mybot_ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt) |
 | Montserrat / Font Awesome glyphs | SIL OFL and respective retained notices | [Montserrat](third_party/lvgl/scripts/built_in_font/font_license/Montserrat/OFL.txt), [Font Awesome](third_party/lvgl/scripts/built_in_font/font_license/FontAwesome5/LICENSE.txt) |
-| Agora RTSA | External AArch64 Linux GNU 1.10.1; separate vendor use/distribution terms | [RTSA_SOURCE.txt](docs/dependencies/RTSA_SOURCE.txt) |
+| Agora RTSA 1.10.1 | Complete official package; separate vendor use/distribution terms | [Bundled package](third_party/rtsa/README.en.md), [RTSA_SOURCE.txt](docs/dependencies/RTSA_SOURCE.txt) |
 
 AOSL's additional conditions remain in force; its license must be read before use, modification, deployment or redistribution. This project's root license does not remove those conditions.
 
-RTSA binaries, target system libraries and build caches are excluded from source control. The AArch64 package used here is distinct from the x86_64 development package described in the retained upstream MyBot notice; that x86_64 binary is absent. Local test bundles may include the selected external RTSA library and provenance. Possession or local testing of the archive does not establish public redistribution or production-use rights. Obtain and retain the applicable vendor terms/authorization before distributing an artifact containing it.
+The complete RTSA package is retained in `third_party/rtsa/` with its original notices and documentation, including AArch64 and x86_64 binaries. Application bundles include the selected AArch64 library and its provenance. The official archive supplies no standalone license file; the vendor's applicable use and distribution terms remain in force. Inclusion in this repository does not place RTSA under Apache-2.0 or grant additional rights. Target system libraries and build caches remain outside source control.
 
 Target ALSA, OpenSSL, libdrm, MPP and libc remain system dependencies. They are not copied over device system libraries by this application. Their own notices and the board firmware's distribution terms apply to the respective system contents.
 

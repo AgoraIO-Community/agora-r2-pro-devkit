@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Configure explicitly supplied, offline target dependencies without changing them."""
+"""Configure offline target tools and runtime inputs with the repository's pinned RTSA SDK."""
 
 import argparse
 import hashlib
@@ -58,13 +58,25 @@ def checked_command(command):
     return result.stdout.strip()
 
 
+def vendored_rtsa(lock):
+    matches = [entry for entry in lock['snapshots'] if entry.get('name') == 'rtsa']
+    if len(matches) != 1:
+        raise ValueError('dependency lock must contain one RTSA snapshot')
+    rtsa = matches[0]
+    sdk = (ROOT / rtsa['directory'] / rtsa['sdk_subdirectory']).resolve()
+    library = sdk / rtsa['library_subpath']
+    return rtsa, sdk, library.resolve()
+
+
 def validate_target(values, lock, check_compiler=True, video=False):
     """Validate inputs and return portable identities, excluding private manifest data."""
     external = lock['external']
-    rtsa = external['rtsa']
+    rtsa, expected_sdk, expected_library = vendored_rtsa(lock)
     staging = Path(values['RV1126B_STAGING'])
     sdk = Path(values['AGORA_SDK_DIR'])
     library = Path(values['AGORA_RTC_LIBRARY'])
+    if sdk.resolve() != expected_sdk or library.resolve() != expected_library:
+        raise ValueError('RTSA must use the repository snapshot; configure the local SDK again')
     if not staging.is_dir():
         raise ValueError('target staging is missing')
     if sha256(library) != rtsa['library_sha256']:
@@ -175,7 +187,8 @@ def argument_parser():
     compiler.add_argument('--cross-compile', help='AArch64 GCC-compatible executable prefix')
     compiler.add_argument('--zig', type=Path, help='host Zig executable; create local AArch64 wrappers')
     parser.add_argument('--staging', type=Path, help='target development headers and verified runtime libraries')
-    parser.add_argument('--rtsa-sdk', type=Path, help='Agora SDK root containing include/, lib/, and .config')
+    parser.add_argument('--rtsa-sdk', type=Path,
+                        help='compatibility option; must point to third_party/rtsa/agora_sdk')
     parser.add_argument('--runtime-manifest', type=Path, help='existing offline target library manifest')
     parser.add_argument('--sysroot', type=Path, help='optional complete libc development sysroot')
     parser.add_argument('--reference', type=Path, help=argparse.SUPPRESS)
@@ -188,23 +201,24 @@ def main():
     if args.reference:
         reference = args.reference.expanduser().resolve()
         args.staging = args.staging or reference / 'local/sdk/staging'
-        args.rtsa_sdk = args.rtsa_sdk or reference / 'local/dependencies/rtsa/agora_rtsa_sdk/agora_sdk'
         args.runtime_manifest = args.runtime_manifest or reference / 'local/device-runtime/manifest.json'
         if not args.cross_compile and not args.zig:
             matches = sorted((reference / 'local/toolchains').glob('zig-*/zig'))
             if len(matches) != 1:
                 parser.error('provide --zig or --cross-compile when compiler selection is ambiguous')
             args.zig = matches[0]
-    if not all((args.cross_compile or args.zig, args.staging, args.rtsa_sdk, args.runtime_manifest)):
-        parser.error('provide --cross-compile or --zig, --staging, --rtsa-sdk, and --runtime-manifest')
+    if not all((args.cross_compile or args.zig, args.staging, args.runtime_manifest)):
+        parser.error('provide --cross-compile or --zig, --staging, and --runtime-manifest')
     try:
+        lock = load_json(LOCK)
+        _, sdk, library = vendored_rtsa(lock)
+        if args.rtsa_sdk and args.rtsa_sdk.expanduser().resolve() != sdk:
+            raise ValueError('--rtsa-sdk must point to the repository snapshot third_party/rtsa/agora_sdk')
         values = {'RV1126B_STAGING': str(args.staging.expanduser().resolve()),
-                  'AGORA_SDK_DIR': str(args.rtsa_sdk.expanduser().resolve()),
+                  'AGORA_SDK_DIR': str(sdk), 'AGORA_RTC_LIBRARY': str(library),
                   'RV1126B_RUNTIME_MANIFEST': str(args.runtime_manifest.expanduser().resolve())}
-        values['AGORA_RTC_LIBRARY'] = str(Path(values['AGORA_SDK_DIR']) / 'lib/aarch64/libagora-rtc-sdk.so')
         if args.sysroot:
             values['RV1126B_SYSROOT'] = str(args.sysroot.expanduser().resolve())
-        lock = load_json(LOCK)
         validate_target(values, lock, check_compiler=False)
         if args.zig:
             values['CROSS_COMPILE'] = zig_wrappers(args.zig.expanduser(), ROOT / 'local/sdk/bin')

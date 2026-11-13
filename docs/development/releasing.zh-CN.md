@@ -20,7 +20,7 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 
 中文全配置名称为 `mybot-rv1126b-<version>-aarch64`；英文为 `mybot-rv1126b-<version>-en-US-aarch64`，单配置再附加 `-voice` / `-video`。交付输出包括解包目录、`.tar.gz` 和相邻 `.sha256`；`--output-dir PATH` 可指定独立输出位置。同名已有结果拒绝覆盖，保留已验收的 0.1.1 包。
 
-包内包含所选二进制、RTSA 库、中英文 PCM 提示音、run.sh、用户说明、许可、字体来源、`build-manifest-voice.json` / `build-manifest-video.json`、对应 ABI 报告及 `SHA256SUMS`。公开 manifest/ABI 归一化宿主路径，保留依赖身份；本地报告仍保留诊断信息。
+包内包含所选二进制、仓库内固定的 AArch64 RTSA 库、中英文 PCM 提示音、run.sh、用户说明、许可、字体来源、`build-manifest-voice.json` / `build-manifest-video.json`、对应 ABI 报告及 `SHA256SUMS`。RTSA 来源记录、原始中英文 README 和 `PACKAGE_INFO` 随包保存在 `licenses/`，名称分别为 `RTSA_SOURCE.txt`、`RTSA-README.zh-CN.md`、`RTSA-README.en.md`、`RTSA-PACKAGE_INFO.txt`。源码树保留完整 SDK，设备运行包只携带选定 AArch64 库。公开 manifest/ABI 归一化宿主路径，保留依赖身份；本地报告仍保留诊断信息。
 
 归档顺序、所有者和时间固定。默认时间来自 Git HEAD 提交时间（无 Git 时为 0），可用 `SOURCE_DATE_EPOCH` 显式指定。相同输入和时间重复打包应产生相同字节，需选择两个不同且空的输出目录比较，避免覆盖规则影响检查。
 

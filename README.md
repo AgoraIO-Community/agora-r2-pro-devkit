@@ -14,7 +14,7 @@ The application uses the system's existing network and ALSA configuration. It do
 
 ## Build and test
 
-Use **Python 3.10+**, **CMake 3.25+**, a C/C++ compiler, OpenSSL development files and libdrm development headers. Host UI/tests require neither RTSA nor a target SDK. On Debian/Ubuntu, the development packages include `build-essential`, `pkg-config`, `libssl-dev` and `libdrm-dev`.
+Use **Python 3.10+**, **CMake 3.25+**, a C/C++ compiler, OpenSSL development files and libdrm development headers. Host UI/tests do not load the target RTSA library or require a target SDK. On Debian/Ubuntu, the development packages include `build-essential`, `pkg-config`, `libssl-dev` and `libdrm-dev`.
 
 ```sh
 python3 scripts/doctor.py --host
@@ -26,7 +26,7 @@ ctest --preset host-zh
 
 Use `host-en` for English and `host-ubsan` for undefined-behavior checks. On macOS, explicitly provide the libdrm header directory when it is not installed as a native development package; see [build instructions](docs/user/build.zh-CN.md). Host CI runs on Linux; only the environment recorded in the validation matrix has been tested locally.
 
-Target builds require a matching AArch64 compiler, development staging/sysroot, the pinned Agora RTSA package and a runtime-library manifest. Configure their paths explicitly as described in [independent target setup](docs/user/build.zh-CN.md).
+The complete pinned Agora RTSA 1.10.1 package is included in `third_party/rtsa/`; target builds automatically use its AArch64 library. Supply a matching AArch64 compiler, development staging/sysroot and a runtime-library manifest as described in [independent target setup](docs/user/build.zh-CN.md).
 
 ```sh
 sh scripts/build-rv1126b.sh
@@ -44,7 +44,7 @@ Build and packaging commands run locally and do not deploy to a device. [Getting
 | `components/mybot_platform/` | Board defaults, Linux services and hardware drivers |
 | `components/mybot_ui/` | Pure renderer, pixel-glasses view, expressions and compiled fonts |
 | `cmake/` | Dependency integration and toolchain configuration |
-| `third_party/mybot/`, `third_party/aosl/`, `third_party/lvgl/` | Independently pinned source snapshots; build integration stays in `cmake/dependencies/` |
+| `third_party/mybot/`, `third_party/aosl/`, `third_party/lvgl/`, `third_party/rtsa/` | Independently pinned dependencies, including the complete RTSA package; build integration stays in `cmake/dependencies/` |
 | `tests/`, `tools/ui_preview/` | Host verification and standalone UI preview |
 | `scripts/`, `packaging/` | Build/check tools and delivery templates |
 | `docs/` | User/developer guides, validation and historical evidence |
@@ -56,4 +56,4 @@ Build and packaging commands run locally and do not deploy to a device. [Getting
 - [Dependency layout](docs/development/third-party-layout.zh-CN.md), [source provenance](VENDORED_SOURCES.md)
 - [Contributing](CONTRIBUTING.md), [support](SUPPORT.md), [changelog](CHANGELOG.md)
 
-Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. MyBot/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. RTSA is externally obtained and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.
+Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. MyBot/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. The bundled RTSA package retains its vendor terms and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.

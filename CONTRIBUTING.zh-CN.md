@@ -8,9 +8,9 @@
 
 应用配置与生命周期放在 `app/`；板级默认值、Linux 服务和驱动放在 `components/mybot_platform/`。`components/mybot_ui/` 的 renderer 与视图保持独立，不依赖 DRM、ALSA、MPP 或平台 worker 线程。平台仅使用 MyBot 公共头文件，不引用 SDK 私有接口。
 
-`third_party/` 为固定源码快照。更新时记录准确来源/revision、保留声明、登记本地补丁，并按[依赖流程](docs/development/dependencies.zh-CN.md)同步锁文件与来源。不要批量格式化导入文件或生成文件；字体位图通过固定输入再生成。
+`third_party/` 为固定依赖快照，必需的 RTSA 快照完整保留官方包中的二进制和文档。更新时记录准确来源/revision、保留声明、登记本地补丁，并按[依赖流程](docs/development/dependencies.zh-CN.md)同步锁文件与来源。不要批量格式化导入文件或生成文件；字体位图通过固定输入再生成。
 
-不要提交 token、私有设备身份、凭据、运行数据、个人 SDK 路径或未获准分发的二进制。设备操作及其他仓库修改遵循所有者授权。
+不要提交 token、私有设备身份、凭据、运行数据、个人 SDK 路径或无关构建产物。设备操作及其他仓库修改遵循所有者授权。
 
 ## 检查
 
@@ -35,4 +35,24 @@ git diff --check
 
 中英文 README 保持行为和命令一致；按改动更新配置文档、`CHANGELOG.md` 及[验证状态](docs/validation/README.md)。旧交付包的真机结果不能移用于新二进制。
 
-提交信息使用 Conventional Commits，例如 `refactor(platform): isolate display ownership`。PR 描述问题、最终行为、兼容性、实际检查及剩余硬件验证。贡献默认适用 [LICENSE](LICENSE)，具体文件的其他兼容许可优先。
+## 提交信息
+
+使用 Conventional Commits：
+
+```text
+<type>[optional scope][!]: <subject>
+
+[optional body]
+
+[optional footer]
+```
+
+允许的 type 为 `feat`、`fix`、`docs`、`style`、`refactor`、`perf`、`test`、`build`、`ci`、`chore` 和 `revert`。subject 不超过 72 个字符，使用祈使表达，例如 `refactor(platform): isolate display ownership`。可选正文和 footer 之间留空行。不兼容变更同时使用 `!` 标记和 `BREAKING CHANGE:` footer 说明。
+
+提交前安装仓库 hooks：
+
+```sh
+./scripts/setup-githooks.sh
+```
+
+PR 描述问题、最终行为、兼容性、实际检查及剩余硬件验证。贡献默认适用 [LICENSE](LICENSE)，具体文件的其他兼容许可优先。

@@ -30,6 +30,9 @@ LICENSES = [
     ("components/mybot_ui/fonts/sources.json", "font-sources.json"),
     ("components/mybot_ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt", "chinese-font-OFL.txt"),
     ("docs/dependencies/RTSA_SOURCE.txt", "RTSA_SOURCE.txt"),
+    ("third_party/rtsa/PACKAGE_INFO", "RTSA-PACKAGE_INFO.txt"),
+    ("third_party/rtsa/README.md", "RTSA-README.zh-CN.md"),
+    ("third_party/rtsa/README.en.md", "RTSA-README.en.md"),
     ("docs/dependencies/patches/lvgl-mask-callbacks.patch", "lvgl-mask-callbacks.patch"),
     ("dependencies.lock.json", "dependencies.lock.json"),
 ]

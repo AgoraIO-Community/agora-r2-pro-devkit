@@ -4,7 +4,7 @@
 
 This is a maintainer tool, never a build step. Review its output and the lock diff;
 run dependency, asset-generation and affected build checks after writing a lock.
-External SDK/runtime identities are deliberately left unchanged.
+Complete release snapshots and external runtime identities are deliberately left unchanged.
 """
 
 import argparse
@@ -224,7 +224,13 @@ def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, lice
     if vendor_root is not None:
         current['vendor_root'] = vendor_root
     for snapshot in current['snapshots'] + assets:
-        snapshot['files'] = files_in(root, snapshot['directory'])
+        actual = files_in(root, snapshot['directory'])
+        if 'archive_files' in snapshot:
+            original_files = check.archive_inventory(root, snapshot)
+            if snapshot['files'] != original_files or actual != original_files:
+                raise ValueError('complete release snapshot changed; restore the pinned archive contents or explicitly review a release replacement: '
+                                 + snapshot['directory'])
+        snapshot['files'] = actual
     generated = current['generated_fonts']
     generated['manifest_sha256'] = check.sha256(check.local_path(root, generated['manifest']))
     font_manifest = json.loads(check.local_path(root, generated['manifest']).read_text(encoding='utf-8'))

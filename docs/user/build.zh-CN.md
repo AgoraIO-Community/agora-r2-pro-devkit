@@ -6,7 +6,7 @@
 
 需要 Python **3.10+**、CMake **3.25+**、C/C++ 编译器、构建工具、OpenSSL 开发文件、libdrm 开发头文件和 `pkg-config`。普通构建使用已提交的字库，不要求 Pillow/FreeType。确保 `python3 --version` 满足要求；系统默认版本较旧时，使用合适的解释器执行 Python 命令，并给脚本入口设置 `PYTHON=/path/to/python3.10`。
 
-Debian/Ubuntu 可安装 `build-essential pkg-config libssl-dev libdrm-dev cmake python3`，同时检查发行版提供的实际版本。主机测试不需要 RTSA、AArch64 工具链或设备。
+Debian/Ubuntu 可安装 `build-essential pkg-config libssl-dev libdrm-dev cmake python3`，同时检查发行版提供的实际版本。主机测试不加载目标 RTSA 库，也不需要 AArch64 工具链或设备。
 
 ```sh
 python3 scripts/doctor.py --host
@@ -35,23 +35,22 @@ doctor 的目录直接包含 `drm.h`；CMake 的目录直接包含 `xf86drm.h` /
 
 - 产生 AArch64 Linux GNU ELF 的 C/C++、ar/ranlib 工具链。
 - 与设备兼容的开发 staging（ALSA、OpenSSL、libdrm，视频另需 MPP 头文件/库），必要时提供完整 libc sysroot。
-- [固定 RTSA 包](../dependencies/RTSA_SOURCE.txt)的公共头文件与 AArch64 动态库；20 ms 配置及库哈希必须匹配。
+- 已内置于 `third_party/rtsa/` 的[完整固定 RTSA 包](../dependencies/RTSA_SOURCE.txt)；构建自动选择其公共头文件与 AArch64 动态库，校验 20 ms 配置及库哈希。
 - 用于 ABI 闭包检查的目标运行库快照及 manifest。
 
 运行库快照仅用于验证目标依赖，不能代替完整开发 sysroot。设备不含编译环境，不应从设备运行库推断具有完整 SDK。依赖获取和许可见[依赖指南](../development/dependencies.zh-CN.md)。
 
-显式配置本地路径，实际选项以 `--help` 为准：
+显式配置仓库外的工具链、开发文件和运行库清单路径；RTSA 直接使用仓库内快照，无需另行下载或指定。实际选项以 `--help` 为准：
 
 ```sh
 python3 scripts/configure-local-sdk.py --help
 python3 scripts/configure-local-sdk.py \
   --cross-compile /path/to/toolchain/bin/aarch64-linux-gnu- \
   --staging /path/to/development/staging \
-  --rtsa-sdk /path/to/agora_sdk \
   --runtime-manifest /path/to/device-runtime/manifest.json
 ```
 
-完整 libc sysroot 使用 `--sysroot PATH`；也可用 `--zig PATH` 代替 `--cross-compile`。配置生成忽略的 `local/sdk/config.json` 和 `local/sdk/environment.sh`；不要提交个人路径。执行 `python3 scripts/doctor.py --target` 检查配置，视频另加 `--video`。
+完整 libc sysroot 使用 `--sysroot PATH`；也可用 `--zig PATH` 代替 `--cross-compile`。配置生成忽略的 `local/sdk/config.json` 和 `local/sdk/environment.sh`；不要提交个人路径。执行 `python3 scripts/doctor.py --target` 检查配置，视频另加 `--video`。RTSA 的固定路径为 `third_party/rtsa/agora_sdk/`，库为其中的 `lib/aarch64/libagora-rtc-sdk.so`；配置和 CMake 均绑定该快照。旧配置仍指向仓库外 RTSA 时，重新运行配置命令，不手工改哈希或混用头文件。
 
 ## 目标构建与打包
 

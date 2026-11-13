@@ -56,6 +56,60 @@ def inventory(root, directory):
     return files
 
 
+def archive_inventory(root, entry):
+    """Map an immutable release inventory into repository-relative snapshot paths."""
+    directory = local_path(root, entry['directory'])
+    if not isinstance(entry['archive_files'], dict) or not entry['archive_files']:
+        raise ValueError('complete archive inventory must not be empty')
+    result = {}
+    for name, digest in entry['archive_files'].items():
+        path = local_path(directory, name)
+        if not isinstance(digest, str) or len(digest) != 64 or any(char not in '0123456789abcdef' for char in digest):
+            raise ValueError('invalid complete archive SHA256: ' + name)
+        result[path.relative_to(root).as_posix()] = digest
+    return result
+
+
+def verify_rtsa(root, entry, checked_hash, errors):
+    """Validate the selected target SDK independently of the package's display metadata."""
+    directory = local_path(root, entry['directory'])
+    sdk = local_path(directory, entry['sdk_subdirectory'])
+    library = local_path(sdk, entry['library_subpath'])
+    if entry['architecture'] != 'aarch64':
+        raise ValueError('RTSA target architecture must be aarch64')
+    selected = {library.relative_to(root).as_posix(): entry['library_sha256']}
+    selected.update({local_path(sdk, name).relative_to(root).as_posix(): digest
+                     for name, digest in entry['headers'].items()})
+    for name, digest in selected.items():
+        if entry['files'].get(name) != digest:
+            errors.append('RTSA target identity differs from snapshot: ' + name)
+        checked_hash(name, digest)
+    try:
+        with library.open('rb') as stream:
+            header = stream.read(20)
+        if (header[:6] != b'\x7fELF\x02\x01' or len(header) < 20
+                or int.from_bytes(header[16:18], 'little') != 3
+                or int.from_bytes(header[18:20], 'little') != 183):
+            errors.append('RTSA target library must be an ELF64 little-endian AArch64 shared object')
+    except OSError:
+        errors.append('missing RTSA target library')
+    config_path = sdk / '.config'
+    config_name = config_path.relative_to(root).as_posix()
+    if config_name not in entry['files']:
+        errors.append('RTSA configuration is outside the snapshot inventory')
+    try:
+        config = {}
+        for line in config_path.read_text(encoding='utf-8').splitlines():
+            key, separator, value = line.partition('=')
+            if separator and not key.startswith('#'):
+                config[key] = value
+        for name, value in entry['required_config'].items():
+            if config.get(name) != value:
+                errors.append('RTSA required configuration differs: ' + name)
+    except OSError:
+        errors.append('missing RTSA configuration')
+
+
 def verify_groups(root, lock, checked_hash, errors):
     """Require disjoint snapshot ownership, also for project-maintained assets."""
     groups = [('snapshot', entry) for entry in lock['snapshots']]
@@ -71,6 +125,8 @@ def verify_groups(root, lock, checked_hash, errors):
             if directory.is_relative_to(other) or other.is_relative_to(directory):
                 raise ValueError('dependency group directories overlap: ' + entry['directory'])
         directories.append(directory)
+        if 'archive_files' in entry and entry['files'] != archive_inventory(root, entry):
+            errors.append('complete archive inventory differs from snapshot: ' + entry['directory'])
         expected = set(entry['files'])
         actual = inventory(root, entry['directory'])
         for name in sorted(actual - expected):
@@ -84,6 +140,10 @@ def verify_groups(root, lock, checked_hash, errors):
                 raise ValueError('dependency file has multiple owners: ' + name)
             owners[name] = entry['directory']
             checked_hash(name, digest)
+        if kind == 'snapshot' and entry.get('name') == 'rtsa':
+            if 'archive_files' not in entry:
+                raise ValueError('RTSA requires a complete archive inventory')
+            verify_rtsa(root, entry, checked_hash, errors)
     if 'vendor_root' in lock:
         folder = local_path(root, lock['vendor_root'])
         snapshot_directories = {local_path(root, entry['directory']) for entry in lock['snapshots']}

@@ -2,23 +2,23 @@
 
 固定来源和许可见 [VENDORED_SOURCES](../../VENDORED_SOURCES.md) 与 [THIRD_PARTY_NOTICES](../../THIRD_PARTY_NOTICES.md)。本工程保留自维护代码与快照的边界，构建包装位于 `cmake/dependencies/`，不为迁移目录而重写上游源码。
 
-MyBot、AOSL、LVGL 分别位于 `third_party/mybot/`、`third_party/aosl/`、`third_party/lvgl/`，各自拥有独立源码快照。MyBot 通过父工程设置的 `AOSL_DIR` 引用平级 AOSL，只创建一个 `aosl` target。视图和生成字库属于 `components/mybot_ui/` 的项目管理资源，不作为第三方源码依赖。目录范围及不可删除的构建输入见[第三方目录规则](third-party-layout.zh-CN.md)。
+MyBot、AOSL、LVGL、RTSA 分别位于 `third_party/mybot/`、`third_party/aosl/`、`third_party/lvgl/`、`third_party/rtsa/`，各自拥有独立依赖快照。RTSA 是工程必需依赖，完整保留官方包。MyBot 通过父工程设置的 `AOSL_DIR` 引用平级 AOSL，只创建一个 `aosl` target。视图和生成字库属于 `components/mybot_ui/` 的项目管理资源，不作为第三方源码依赖。目录范围及不可删除的构建输入见[第三方目录规则](third-party-layout.zh-CN.md)。
 
 ## 清单职责
 
 | 记录 | 作用 |
 | --- | --- |
-| `dependencies.lock.json` | 独立源码快照、项目管理资源、版本/身份、结果哈希、路径映射、显式省略与必需输入 |
+| `dependencies.lock.json` | 独立依赖快照、项目管理资源、版本/身份、结果哈希、路径映射、显式省略与必需输入 |
 | `docs/dependencies/imported-sources.json` | 原始导入时的历史路径及哈希；不能当作当前工作树哈希直接比较 |
 | `docs/dependencies/patches/` | 有意保留的本地上游修补 |
-| `docs/dependencies/RTSA_SOURCE.txt` | 外部 RTSA 包、归档与目标库身份、配置、获取和许可边界 |
+| `docs/dependencies/RTSA_SOURCE.txt` | 内置完整 RTSA 包的官方归档、目标库身份、固定路径、配置和厂商条款边界 |
 | `components/mybot_ui/fonts/sources.json` | 字体输入、字符集、生成工具版本与输出身份 |
 
 ```sh
 python3 scripts/check-dependencies.py
 ```
 
-该检查验证已登记的快照、迁移/裁剪结果和生成资源。源码快照目录互不重叠，每个第三方文件有唯一归属，`vendor_root` 内未登记文件会失败。历史导入记录保持原样，旧路径通过当前锁中的映射或显式省略解释；已应用补丁的文件应等于登记的修补结果，不能要求其回到原始导入哈希。省略项必须记录原始哈希、先前目标路径和理由，且这些位置不能残留文件。许可、补丁和 `required_inputs` 中的构建输入受保护，不能作为普通裁剪项。
+该检查验证已登记的快照、迁移/裁剪结果和生成资源。依赖快照目录互不重叠，每个第三方文件有唯一归属，`vendor_root` 内未登记文件会失败。历史导入记录保持原样，旧路径通过当前锁中的映射或显式省略解释；已应用补丁的文件应等于登记的修补结果，不能要求其回到原始导入哈希。省略项必须记录原始哈希、先前目标路径和理由，且这些位置不能残留文件。许可、补丁和 `required_inputs` 中的构建输入受保护，不能作为普通裁剪项。
 
 ## 更新流程
 
@@ -43,7 +43,7 @@ python3 scripts/check-dependencies.py
 | `--map ORIGINAL=CURRENT` 与 `--reason ORIGINAL=说明` | 登记单文件迁移或新适配 |
 | `--map-prefix OLD=NEW` 与 `--reason-prefix OLD=说明` | 将目录移动展开成逐文件映射，拒绝重复、重叠和循环规则 |
 | `--omit ORIGINAL=理由` | 为已经审查并删除的历史输入登记省略，保留原始 SHA256 与此前目标位置 |
-| `--add-snapshot NAME=DIR`、`--revision NAME=HASH`、`--source NAME=URL` | 登记独立的第三方源码快照及准确来源 |
+| `--add-snapshot NAME=DIR`、`--revision NAME=HASH`、`--source NAME=URL` | 登记独立的第三方依赖快照及准确来源 |
 | `--managed-asset NAME=DIR` | 登记项目管理资源分组 |
 | `--required-input PATH`、`--license PATH` | 固定构建必需输入或保留许可，保护其不被裁剪 |
 | `--vendor-root third_party` | 要求第三方根目录仅含 README 与已登记的直接依赖目录 |
@@ -52,11 +52,17 @@ python3 scripts/check-dependencies.py
 
 裁剪前从实际编译命令与头依赖确定闭包，并显式保留 CMake、模板、配置、许可证等必要输入。`required_inputs` 的更新不是自动允许删除文件：先核对构建与许可契约，再审查锁差异。更新器再次运行应无变化。更新锁后重新运行显式 SDK 配置，避免旧本地配置继续绑定过期锁；旧二进制/manifest/ABI 报告必须重建。
 
-## 外部 SDK 与系统库
+## 完整 RTSA 包与外部系统依赖
 
-RTSA、工具链、开发 staging/sysroot 和运行库快照显式配置，见[构建指南](../user/build.zh-CN.md)。RTSA 固定为 AArch64 Linux GNU 1.10.1 的已记录 20 ms 包；归档元数据可能混入 x86_64 描述，需核对实际 ELF 与目标库哈希。配置/doctor 不下载依赖或连接设备。
+RTSA 固定为 AArch64 Linux GNU 1.10.1 的已记录 20 ms 包，完整内置于 `third_party/rtsa/`。官方归档 SHA256 为 `850834b5b925ffb7fb447e97cf9ec5dc33fe0a0f68108e1a4954ee7590870fbe`；99 个文件共 38,268,142 字节，逐文件登记在独立快照中。保留全部头文件、库、示例、原始说明与协作资源，不因当前构建仅使用部分内容而裁剪。归档内两个空 `bin/` 架构目录不含文件，不影响 Git 中完整文件集合的记录。
 
-运行库 manifest 证明 ABI 检查使用的依赖身份；它不是设备完整固件记录，也不是开发 sysroot。目标 ALSA/OpenSSL/libdrm/MPP/libc 仍使用系统库，不向设备系统目录覆盖这些依赖。源码仓库不包含 RTSA 二进制或个人 SDK。
+目标配置自动使用 `third_party/rtsa/agora_sdk/` 和其中的 `lib/aarch64/libagora-rtc-sdk.so`，不再要求外部 `--rtsa-sdk`。CMake 覆盖旧缓存的 RTSA 路径；本地配置仍绑定仓库外 SDK 或旧锁时，重新运行配置命令。原始 `.config` 含 x86_64 包描述，原样保留；实际目标选择同时核对 AArch64 ELF、库哈希和功能配置，不凭元数据中的名称判断架构。
+
+更新 RTSA 时从已核对官方来源与 SHA256 的完整归档重新导入，保留全部官方文件，并同步快照、归档身份、头文件/库哈希、配置契约和来源记录。不得只替换动态库或删除示例与厂商文档；完整包是本项目的依赖契约。
+
+RTSA 快照中的 `archive_files` 保存相对于包根目录的官方文件哈希，与仓库路径清单 `files` 一一对应。普通锁刷新会拒绝完整包的文件修改、增添或删除；升级版本时需审查并显式更新官方归档身份与完整清单，不能通过刷新把裁剪后的目录接受为新基线。
+
+工具链、开发 staging/sysroot 和运行库快照仍需显式配置，见[构建指南](../user/build.zh-CN.md)。运行库 manifest 证明 ABI 检查使用的依赖身份；它不是设备完整固件记录，也不是开发 sysroot。目标 ALSA/OpenSSL/libdrm/MPP/libc 仍使用系统库，不向设备系统目录覆盖这些依赖。个人 SDK 路径与构建缓存不进入源码仓库。配置/doctor 不下载依赖或连接设备。
 
 ## 字库
 

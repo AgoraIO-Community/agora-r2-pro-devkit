@@ -14,7 +14,7 @@
 
 ## 构建与测试
 
-需要 **Python 3.10+**、**CMake 3.25+**、C/C++ 编译器、OpenSSL 开发文件和 libdrm 开发头文件。主机 UI/测试不需要 RTSA 或目标 SDK。Debian/Ubuntu 的开发包包括 `build-essential`、`pkg-config`、`libssl-dev` 和 `libdrm-dev`。
+需要 **Python 3.10+**、**CMake 3.25+**、C/C++ 编译器、OpenSSL 开发文件和 libdrm 开发头文件。主机 UI/测试不加载目标 RTSA 库，也不需要目标 SDK。Debian/Ubuntu 的开发包包括 `build-essential`、`pkg-config`、`libssl-dev` 和 `libdrm-dev`。
 
 ```sh
 python3 scripts/doctor.py --host
@@ -26,7 +26,7 @@ ctest --preset host-zh
 
 英文使用 `host-en`，未定义行为检查使用 `host-ubsan`。macOS 未安装原生 libdrm 开发包时，需显式提供头文件目录，见[构建指南](docs/user/build.zh-CN.md)。主机 CI 面向 Linux；实际已运行的环境以验证矩阵为准。
 
-目标构建需提供匹配的 AArch64 编译器、开发 staging/sysroot、固定 Agora RTSA 包及运行库清单。所有依赖路径均显式配置，步骤见[独立构建指南](docs/user/build.zh-CN.md)。
+完整的固定 Agora RTSA 1.10.1 包已内置于 `third_party/rtsa/`，目标构建自动使用其中的 AArch64 库。另需提供匹配的 AArch64 编译器、开发 staging/sysroot 及运行库清单，步骤见[独立构建指南](docs/user/build.zh-CN.md)。
 
 ```sh
 sh scripts/build-rv1126b.sh
@@ -44,7 +44,7 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 | `components/mybot_platform/` | 板级默认值、Linux 服务与硬件驱动 |
 | `components/mybot_ui/` | 纯渲染、像素眼镜视图、表情和编译字库 |
 | `cmake/` | 依赖集成与工具链配置 |
-| `third_party/mybot/`、`third_party/aosl/`、`third_party/lvgl/` | 分别固定的源码快照；构建集成位于 `cmake/dependencies/` |
+| `third_party/mybot/`、`third_party/aosl/`、`third_party/lvgl/`、`third_party/rtsa/` | 分别固定的依赖快照，包含完整 RTSA 包；构建集成位于 `cmake/dependencies/` |
 | `tests/`、`tools/ui_preview/` | 主机检查与独立 UI 预览 |
 | `scripts/`、`packaging/` | 构建检查工具及交付模板 |
 | `docs/` | 用户/开发指南、验证状态与历史证据 |
@@ -56,4 +56,4 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 - [依赖目录规则](docs/development/third-party-layout.zh-CN.md)、[源码来源](VENDORED_SOURCES.md)
 - [贡献指南](CONTRIBUTING.zh-CN.md)、[支持](SUPPORT.zh-CN.md)、[变更记录](CHANGELOG.md)
 
-自维护代码默认采用 [Apache-2.0](LICENSE)，具体文件声明优先。MyBot/AOSL、LVGL 和字体分别保留原许可，像素眼镜视图遵循文件级许可声明；外部获取的 RTSA 不受本项目许可证覆盖。再分发源码或交付包前，请阅读[第三方声明](THIRD_PARTY_NOTICES.md)和[依赖来源](VENDORED_SOURCES.md)。
+自维护代码默认采用 [Apache-2.0](LICENSE)，具体文件声明优先。MyBot/AOSL、LVGL 和字体分别保留原许可，像素眼镜视图遵循文件级许可声明；内置 RTSA 保留厂商条款，不受本项目许可证覆盖。再分发源码或交付包前，请阅读[第三方声明](THIRD_PARTY_NOTICES.md)和[依赖来源](VENDORED_SOURCES.md)。

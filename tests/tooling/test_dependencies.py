@@ -45,9 +45,12 @@ class OfflineTargetTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix='mybot-dependency-test-')
         self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name).resolve()
+        root_patch = patch.object(sdk, 'ROOT', self.root)
+        root_patch.start()
+        self.addCleanup(root_patch.stop)
         self.staging = self.root / 'staging'
-        self.sdk_path = self.root / 'sdk'
+        self.sdk_path = self.root / 'third_party/rtsa/agora_sdk'
         self.library = self.sdk_path / 'lib/aarch64/libagora-rtc-sdk.so'
         self.write(self.library, elf())
         self.write(self.sdk_path / 'include/agora_rtc_api.h', b'public api')
@@ -60,10 +63,12 @@ class OfflineTargetTests(unittest.TestCase):
         self.manifest = self.root / 'runtime-manifest.json'
         self.entries = [{'path': '/' + self.runtime_name, 'sha256': digest(elf())}]
         self.save_manifest()
-        self.lock = {'external': {'rtsa': {'version': 'fixture', 'library_sha256': digest(elf()),
+        self.lock = {'snapshots': [{'name': 'rtsa', 'directory': 'third_party/rtsa',
+            'sdk_subdirectory': 'agora_sdk', 'library_subpath': 'lib/aarch64/libagora-rtc-sdk.so',
+            'version': 'fixture', 'library_sha256': digest(elf()),
             'headers': {'include/agora_rtc_api.h': digest(b'public api')},
-            'required_config': {'CONFIG_MINIMAL_TIMER_INTERVAL_MS': '20', 'CONFIG_RTM': 'y'}},
-            'runtime': {'libraries': {self.runtime_name: digest(elf())}}}}
+            'required_config': {'CONFIG_MINIMAL_TIMER_INTERVAL_MS': '20', 'CONFIG_RTM': 'y'}}],
+            'external': {'runtime': {'libraries': {self.runtime_name: digest(elf())}}}}
         self.values = {'RV1126B_STAGING': str(self.staging), 'AGORA_SDK_DIR': str(self.sdk_path),
             'AGORA_RTC_LIBRARY': str(self.library), 'RV1126B_RUNTIME_MANIFEST': str(self.manifest)}
 
@@ -90,7 +95,7 @@ class OfflineTargetTests(unittest.TestCase):
 
     def test_rejects_wrong_rtsa_architecture_even_when_hash_matches(self):
         self.library.write_bytes(elf(62))
-        self.lock['external']['rtsa']['library_sha256'] = digest(elf(62))
+        self.lock['snapshots'][0]['library_sha256'] = digest(elf(62))
         with self.assertRaisesRegex(ValueError, 'RTSA library is not AArch64'):
             self.validate()
 
@@ -151,6 +156,64 @@ class OfflineTargetTests(unittest.TestCase):
         self.assertEqual(result.returncode, 2)
         self.assertIn('provide --cross-compile or --zig', result.stderr)
         self.assertNotIn('--reference', result.stderr)
+        self.assertNotIn('--rtsa-sdk,', result.stderr.split('error:')[-1])
+
+    def configure(self, *arguments):
+        lock_path = self.root / 'dependencies.lock.json'
+        lock_path.write_text(json.dumps(self.lock))
+        compiler_prefix = str(self.root / 'tools/aarch64-linux-gnu-')
+        command = ['configure-local-sdk.py', '--cross-compile', compiler_prefix,
+                   '--staging', str(self.staging), '--runtime-manifest', str(self.manifest), *arguments]
+        validate = sdk.validate_target
+        with patch.object(sdk, 'LOCK', lock_path), patch.object(sys, 'argv', command), \
+                patch.object(sdk, 'executable', return_value=compiler_prefix + 'gcc'), \
+                patch.object(sdk, 'validate_target', side_effect=lambda values, lock, **kwargs:
+                             validate(values, lock, check_compiler=False)), patch('sys.stdout'):
+            sdk.main()
+        return sdk.load_json(self.root / 'local/sdk/config.json')
+
+    def test_configuration_defaults_to_repository_rtsa_without_external_sdk_argument(self):
+        config = self.configure()
+        self.assertEqual(config['environment']['AGORA_SDK_DIR'], str(self.sdk_path))
+        self.assertEqual(config['environment']['AGORA_RTC_LIBRARY'], str(self.library))
+        self.assertIn(str(self.sdk_path), (self.root / 'local/sdk/environment.sh').read_text())
+
+    def test_compatibility_sdk_argument_accepts_repository_snapshot(self):
+        config = self.configure('--rtsa-sdk', str(self.sdk_path))
+        self.assertEqual(config['environment']['AGORA_SDK_DIR'], str(self.sdk_path))
+
+    def test_compatibility_sdk_argument_rejects_external_sdk(self):
+        with patch('sys.stderr'), self.assertRaises(SystemExit) as raised:
+            self.configure('--rtsa-sdk', str(self.root / 'external-sdk'))
+        self.assertEqual(raised.exception.code, 2)
+        self.assertFalse((self.root / 'local/sdk/config.json').exists())
+
+    def test_reference_compatibility_uses_repository_rtsa(self):
+        config = self.configure('--reference', str(self.root / 'reference-inputs'))
+        self.assertEqual(config['environment']['AGORA_SDK_DIR'], str(self.sdk_path))
+
+    def test_rejects_stale_external_sdk_path(self):
+        self.values['AGORA_SDK_DIR'] = str(self.root / 'external-sdk')
+        with self.assertRaisesRegex(ValueError, 'repository snapshot'):
+            self.validate()
+
+    def test_rejects_external_library_even_with_matching_bytes(self):
+        external_library = self.root / 'external-sdk/libagora-rtc-sdk.so'
+        self.write(external_library, elf())
+        self.values['AGORA_RTC_LIBRARY'] = str(external_library)
+        with self.assertRaisesRegex(ValueError, 'repository snapshot'):
+            self.validate()
+
+    def test_doctor_rejects_external_paths_with_current_lock(self):
+        lock_path = self.root / 'dependencies.lock.json'
+        lock_path.write_text(json.dumps(self.lock))
+        self.values['AGORA_SDK_DIR'] = str(self.root / 'external-sdk')
+        config = self.root / 'config.json'
+        config.write_text(json.dumps({'schema_version': 1, 'environment': self.values,
+                                     'dependency_lock_sha256': sdk.sha256(lock_path)}))
+        with patch.object(doctor.sdk, 'ROOT', self.root), patch.object(doctor.sdk, 'LOCK', lock_path), \
+                self.assertRaisesRegex(ValueError, 'repository snapshot'):
+            doctor.target_check(config)
 
     def test_stale_configuration_is_rejected_before_target_probes(self):
         path = self.root / 'config.json'

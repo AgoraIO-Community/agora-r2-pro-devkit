@@ -16,12 +16,33 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
       - run: python -m pip install -r requirements-dev.txt
       - run: python scripts/check-quality.py
       - run: python scripts/check-dependencies.py
+      - name: Validate commit messages
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request ]; then
+            range="$BASE_SHA..$HEAD_SHA"
+          elif [ "$EVENT_NAME" = push ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != 0000000000000000000000000000000000000000 ]; then
+            range="$BEFORE_SHA..$HEAD_SHA"
+          else
+            range="$HEAD_SHA^!"
+          fi
+          git log --no-merges --format='%s' "$range" | while IFS= read -r subject; do
+            printf '%s\n' "$subject" | ./githooks/commit-msg --subject-only
+          done
   host:
     runs-on: ubuntu-24.04
     strategy:
@@ -52,14 +73,14 @@ jobs:
         language: [zh, en]
     steps:
       - uses: actions/checkout@v4
-      - name: Configure explicit runner SDK inputs
+      - name: Configure runner tools and runtime inputs
         shell: bash
         run: |
           sysroot_args=()
           if [ -n "${RV1126B_SYSROOT:-}" ]; then sysroot_args=(--sysroot "$RV1126B_SYSROOT"); fi
           python3 scripts/configure-local-sdk.py \
             --cross-compile "${CROSS_COMPILE:?}" --staging "${RV1126B_STAGING:?}" \
-            --rtsa-sdk "${AGORA_SDK_DIR:?}" --runtime-manifest "${RV1126B_RUNTIME_MANIFEST:?}" "${sysroot_args[@]}"
+            --runtime-manifest "${RV1126B_RUNTIME_MANIFEST:?}" "${sysroot_args[@]}"
           python3 scripts/doctor.py --target --video
           python3 scripts/check-dependencies.py
       - name: Build voice and video, validate and package

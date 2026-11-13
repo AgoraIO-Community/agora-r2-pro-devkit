@@ -1,6 +1,6 @@
 # 第三方依赖目录与维护规则
 
-`third_party/` 按直接依赖平铺：每项依赖保存一份源码，具有独立版本、文件清单与许可。项目构建集成位于 `cmake/dependencies/`，项目专用说明位于 `docs/dependencies/`，应用视图和生成资源位于 `components/`。
+`third_party/` 按直接依赖平铺：每项依赖保存一份快照，具有独立版本、文件清单与适用条款。RTSA 保存完整官方包，其他依赖按已登记范围保留源码。项目构建集成位于 `cmake/dependencies/`，项目专用说明位于 `docs/dependencies/`，应用视图和生成资源位于 `components/`。
 
 ## 现行结构
 
@@ -9,10 +9,11 @@ third_party/
 ├── README.md
 ├── mybot/                # MyBot SDK 自身源码、必要 Linux adapters 与构建输入
 ├── aosl/                 # AOSL 公共实现与 Linux HAL
-└── lvgl/                 # LVGL 固定生产子集
+├── lvgl/                 # LVGL 固定生产子集
+└── rtsa/                 # RTSA 1.10.1 完整官方包（含 agora_sdk/、示例与文档）
 
 cmake/dependencies/
-├── sdk.cmake             # MyBot、AOSL 和外部 RTSA 集成
+├── sdk.cmake             # MyBot、AOSL 和内置 RTSA 集成
 ├── public-headers.cmake
 ├── lvgl.cmake
 └── lvgl-sources.cmake
@@ -21,9 +22,9 @@ docs/dependencies/        # 集成说明、补丁和原始导入记录
 dependencies.lock.json   # 当前身份、文件清单、迁移、裁剪与资源记录
 ```
 
-MyBot 依赖 AOSL 和 RTSA，UI 依赖 LVGL；目录平铺后，这些链接依赖继续由 CMake targets 表达。RTSA 是显式配置的外部 SDK；ALSA、OpenSSL、libdrm、MPP 和 libc 使用目标系统开发文件与运行库，不复制到 `third_party/`。
+MyBot 依赖 AOSL 和 RTSA，UI 依赖 LVGL；目录平铺后，这些链接依赖继续由 CMake targets 表达。RTSA 完整包内置于 `third_party/rtsa/`，构建固定选择 `agora_sdk/lib/aarch64/libagora-rtc-sdk.so`。ALSA、OpenSSL、libdrm、MPP 和 libc 使用目标系统开发文件与运行库，不复制到 `third_party/`。
 
-`components/mybot_ui/` 中的视图由锁文件的 `managed_assets` 登记；字库及生成输入由 `generated_fonts` 登记。两者均由项目维护，与三项第三方源码快照分别校验，资源携带的文件级许可继续适用。
+`components/mybot_ui/` 中的视图由锁文件的 `managed_assets` 登记；字库及生成输入由 `generated_fonts` 登记。两者均由项目维护，与四项第三方依赖快照分别校验，资源携带的文件级许可继续适用。
 
 ## MyBot 与 AOSL 的构建边界
 
@@ -47,6 +48,7 @@ set(AOSL_DIR "${PROJECT_SOURCE_DIR}/third_party/aosl"
 | MyBot | SDK 公共头与实现、Linux adapters、PCM 提示资源、必需 CMake 模板和完整许可/notice | 仓库管理及重复协作流程、未使用 host 工具链、未启用测试和示例 |
 | AOSL | 根 CMake、通用源码与头文件、Linux HAL、库内测试实现和完整许可 | 非 Linux HAL、仓库管理文件、独立测试入口 |
 | LVGL | 现有生产子集、所需公共头、许可与版权记录、字体许可、已登记遮罩修补 | 项目集成说明外置到 [docs/dependencies/lvgl.md](../dependencies/lvgl.md) |
+| RTSA | 官方 1.10.1 归档的全部 99 个文件：SDK 头/库、示例、说明和协作资源 | 不裁剪、不修改厂商文件 |
 
 两个容易误删的输入必须保留：
 
@@ -55,7 +57,7 @@ set(AOSL_DIR "${PROJECT_SOURCE_DIR}/third_party/aosl"
 
 LVGL 公共头可能包含未启用模块的声明，不能仅凭某个 `.c` 没有编译就删除对应头文件。本轮保留既有生产子集；mask callback 类型修补仍由独立补丁和结果哈希记录。
 
-本轮从迁移前的 166 个 MyBot 自身文件、330 个 AOSL 文件及 720 个 LVGL 文件，整理为 110、124、719 个文件。262 个文件属于显式裁剪；LVGL 集成说明属于路径迁移，不计作裁剪。原始版权、许可与必需 notice 未裁剪。所有文件以锁清单为准，测试结果另见[验证状态](../validation/README.md)。
+此前目录治理从 166 个 MyBot 自身文件、330 个 AOSL 文件及 720 个 LVGL 文件，整理为 110、124、719 个文件。262 个文件属于显式裁剪；LVGL 集成说明属于路径迁移，不计作裁剪。新增 RTSA 完整包的 99 个文件不属于该裁剪范围；官方 x86_64 内容与未使用示例也完整保留。原始版权、许可与必需 notice 未裁剪。所有文件以锁清单为准，测试结果另见[验证状态](../validation/README.md)。
 
 ## 锁文件与历史记录
 
@@ -63,13 +65,15 @@ LVGL 公共头可能包含未启用模块的声明，不能仅凭某个 `.c` 没
 
 | 记录 | 约束 |
 | --- | --- |
-| `snapshots` | MyBot、AOSL、LVGL 各自记录身份和文件；目录互不包含，每个文件归属唯一 |
+| `snapshots` | MyBot、AOSL、LVGL、RTSA 各自记录身份和文件；目录互不包含，每个文件归属唯一 |
 | `import_adaptations` | 历史路径映射到当前路径，保留原始哈希、当前结果哈希和适配理由 |
 | `import_omissions` | 记录历史路径、`original_sha256`、`previous_path` 和理由；原路径与先前目标均不得残留 |
 | `managed_assets` | 项目维护的 UI 视图，独立于第三方源码快照 |
 | `generated_fonts` | 字库输入、生成器、工具版本及生成字库 |
 | `required_inputs` | 已确认构建闭包内的源码、头、模板和许可输入，禁止省略 |
 | `vendor_root` | 指定 `third_party/` 为完整登记边界，未登记的新文件或依赖不能静默通过 |
+
+RTSA 作为新依赖快照登记，不回写原始导入历史。其官方归档和 AArch64 库哈希另见 [RTSA_SOURCE.txt](../dependencies/RTSA_SOURCE.txt)。
 
 文件移动与裁剪分开登记。先移动后裁剪的文件，省略项保留此前目标位置，替代其适配项。锁更新器不能把有意删除的文件当作新基线，也不能用省略声明掩盖仍存在的文件。必需输入之外还必须保留适用版权和许可，工具保护不能代替许可判断。
 

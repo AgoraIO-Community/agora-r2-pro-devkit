@@ -7,6 +7,8 @@ Changes to project-maintained code follow Semantic Versioning. Validation eviden
 - Manage MyBot, AOSL and LVGL as separate pinned source directories.
 - Record directory migrations, explicit omissions, unique ownership and required build inputs in the dependency lock.
 - Keep the Linux production subset, move integration documentation outside dependency sources, and preserve runtime sources and licenses.
+- Vendor the complete official Agora RTSA 1.10.1 package as an essential independent dependency; pin target builds to its AArch64 library and include vendor documentation in application bundles.
+- Enforce Conventional Commits with a repository hook, message template and CI validation.
 
 This dependency-layout candidate requires its own hardware regression.
 
