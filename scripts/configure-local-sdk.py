@@ -178,7 +178,7 @@ def argument_parser():
     parser.add_argument('--rtsa-sdk', type=Path, help='Agora SDK root containing include/, lib/, and .config')
     parser.add_argument('--runtime-manifest', type=Path, help='existing offline target library manifest')
     parser.add_argument('--sysroot', type=Path, help='optional complete libc development sysroot')
-    parser.add_argument('--reference', type=Path, help='explicit compatibility import from an existing reference checkout')
+    parser.add_argument('--reference', type=Path, help=argparse.SUPPRESS)
     return parser
 
 
@@ -193,10 +193,10 @@ def main():
         if not args.cross_compile and not args.zig:
             matches = sorted((reference / 'local/toolchains').glob('zig-*/zig'))
             if len(matches) != 1:
-                parser.error('--reference requires --zig or --cross-compile when Zig selection is ambiguous')
+                parser.error('provide --zig or --cross-compile when compiler selection is ambiguous')
             args.zig = matches[0]
     if not all((args.cross_compile or args.zig, args.staging, args.rtsa_sdk, args.runtime_manifest)):
-        parser.error('provide --cross-compile or --zig, --staging, --rtsa-sdk, and --runtime-manifest; --reference is optional')
+        parser.error('provide --cross-compile or --zig, --staging, --rtsa-sdk, and --runtime-manifest')
     try:
         values = {'RV1126B_STAGING': str(args.staging.expanduser().resolve()),
                   'AGORA_SDK_DIR': str(args.rtsa_sdk.expanduser().resolve()),

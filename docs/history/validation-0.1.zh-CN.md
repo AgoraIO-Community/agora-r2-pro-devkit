@@ -6,12 +6,12 @@
 
 ## 0.1.0 已完成
 
-- 固定 MyBot 1.3.0、Linux AOSL、CoreS3 像素眼镜视图和 LVGL 9.5.0 源码，保留来源及许可。
+- 固定 MyBot 1.3.0、Linux AOSL、像素眼镜视图和 LVGL 9.5.0 源码，保留来源及许可。
 - Intel macOS 使用 Zig 0.15.2 交叉编译语音/UI与视频/UI两个 AArch64 程序。
 - 语音构建的 9 项传递依赖、视频构建的 11 项传递依赖完成 ELF 架构、加载器、符号版本和 RPATH 检查，均为 `errors=[]`。
 - 产物加载器为 `/lib/ld-linux-aarch64.so.1`，应用 RPATH 为 `$ORIGIN/../lib`。LVGL 9.5 静态链接，未引入设备的 LVGL 8 或额外动态 C++ 运行库。
 - 主机执行 7 项测试：像素缩放/旋转与行填充、输入语义、输入 worker 关闭/回调等待、真实 LVGL 页面/表情、身份 HMAC、UI worker、DRM 失败释放及原 CRTC 恢复。
-- 同一组 7 项测试在 UBSan 构建下通过。检查发现并修复 LVGL 遮罩回调的函数指针类型不匹配；本地补丁保存在 `docs/patches/lvgl-mask-callbacks.patch`，未修改外部参考仓库。
+- 同一组 7 项测试在 UBSan 构建下通过。检查发现并修复 LVGL 遮罩回调的函数指针类型不匹配；本地补丁保存在 `docs/patches/lvgl-mask-callbacks.patch`。
 - 主机生成 10 个流程页、23 种表情和物理方向的 PPM 预览；检查像素眼镜主界面及带前导零的配对码画面。
 
 实际报告位于各构建目录的 `abi-report.json` 和 `Testing/Temporary/LastTest.log`。交付包附带通过检查的 ABI 报告及 SHA256 校验清单。
@@ -59,4 +59,4 @@ RV1126B_BUILD_DIR="$PWD/build-rv1126b-video" sh scripts/build-rv1126b.sh -DMYBOT
 python3 scripts/package-rv1126b.py
 ```
 
-`configure-local-sdk.py` 只读取同级 `agora-r2-pro-devkit` 已有工具链、开发文件和经过哈希核对的库快照。新编译包装器、缓存和产物位于本仓库，不修改参考仓库。它不通过 ADB 连接设备。
+该阶段使用的工具链、开发文件和运行库快照均在主机侧核对；编译包装器、缓存和产物位于本仓库，构建不通过 ADB 连接设备。上面的复现命令记录初版入口，现行依赖配置使用[构建指南](../user/build.zh-CN.md)中的显式参数。

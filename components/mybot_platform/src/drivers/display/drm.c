@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* Resource management adapted from agora-r2-pro-devkit's generic DRM backend. */
+/* DRM framebuffer lifecycle and restoration of the saved display state. */
 #define _POSIX_C_SOURCE 200809L
 #include "drm.h"
 

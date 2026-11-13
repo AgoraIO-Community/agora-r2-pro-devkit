@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A Linux application for running MyBot 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides HTTPS pairing, bidirectional voice, persistent device identity, the CoreS3 pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
+A Linux application for running MyBot 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides HTTPS pairing, bidirectional voice, persistent device identity, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
 
 The current source is the **0.2.0 engineering-governance candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. The reorganized candidate needs a new device regression; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
 
@@ -14,7 +14,7 @@ The application uses the system's existing network and ALSA configuration. It do
 
 ## Build and test
 
-Use **Python 3.10+**, **CMake 3.25+**, a C/C++ compiler, OpenSSL development files and libdrm development headers. Host UI/tests require neither RTSA nor a target SDK or reference repository. On Debian/Ubuntu, the development packages include `build-essential`, `pkg-config`, `libssl-dev` and `libdrm-dev`.
+Use **Python 3.10+**, **CMake 3.25+**, a C/C++ compiler, OpenSSL development files and libdrm development headers. Host UI/tests require neither RTSA nor a target SDK. On Debian/Ubuntu, the development packages include `build-essential`, `pkg-config`, `libssl-dev` and `libdrm-dev`.
 
 ```sh
 python3 scripts/doctor.py --host
@@ -26,7 +26,7 @@ ctest --preset host-zh
 
 Use `host-en` for English and `host-ubsan` for undefined-behavior checks. On macOS, explicitly provide the libdrm header directory when it is not installed as a native development package; see [build instructions](docs/user/build.zh-CN.md). Host CI runs on Linux; only the environment recorded in the validation matrix has been tested locally.
 
-Target builds require a matching AArch64 compiler, development staging/sysroot, the pinned Agora RTSA package and a runtime-library manifest. Configure them explicitly; an existing reference checkout is an optional import source. [Independent target setup](docs/user/build.zh-CN.md) documents both paths.
+Target builds require a matching AArch64 compiler, development staging/sysroot, the pinned Agora RTSA package and a runtime-library manifest. Configure their paths explicitly as described in [independent target setup](docs/user/build.zh-CN.md).
 
 ```sh
 sh scripts/build-rv1126b.sh
@@ -55,4 +55,4 @@ Build and packaging commands run locally and do not deploy to a device. [Getting
 - [Architecture](docs/development/architecture.zh-CN.md), [testing](docs/development/testing.zh-CN.md), [release process](docs/development/releasing.zh-CN.md)
 - [Contributing](CONTRIBUTING.md), [support](SUPPORT.md), [changelog](CHANGELOG.md)
 
-Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. MyBot/AOSL, LVGL, imported views and fonts retain their own terms. RTSA is externally obtained and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.
+Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. MyBot/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. RTSA is externally obtained and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.

@@ -6,7 +6,7 @@
 
 需要 Python **3.10+**、CMake **3.25+**、C/C++ 编译器、构建工具、OpenSSL 开发文件、libdrm 开发头文件和 `pkg-config`。普通构建使用已提交的字库，不要求 Pillow/FreeType。确保 `python3 --version` 满足要求；系统默认版本较旧时，使用合适的解释器执行 Python 命令，并给脚本入口设置 `PYTHON=/path/to/python3.10`。
 
-Debian/Ubuntu 可安装 `build-essential pkg-config libssl-dev libdrm-dev cmake python3`，同时检查发行版提供的实际版本。主机测试不需要 RTSA、AArch64 工具链、设备或兄弟仓库。
+Debian/Ubuntu 可安装 `build-essential pkg-config libssl-dev libdrm-dev cmake python3`，同时检查发行版提供的实际版本。主机测试不需要 RTSA、AArch64 工具链或设备。
 
 ```sh
 python3 scripts/doctor.py --host
@@ -52,14 +52,6 @@ python3 scripts/configure-local-sdk.py \
 ```
 
 完整 libc sysroot 使用 `--sysroot PATH`；也可用 `--zig PATH` 代替 `--cross-compile`。配置生成忽略的 `local/sdk/config.json` 和 `local/sdk/environment.sh`；不要提交个人路径。执行 `python3 scripts/doctor.py --target` 检查配置，视频另加 `--video`。
-
-可选地，从已有、已准备好的参考工程导入其本地工具链/SDK：
-
-```sh
-python3 scripts/configure-local-sdk.py --reference /path/to/agora-r2-pro-devkit
-```
-
-该导入模式只读检查参考文件并在当前仓库写入配置/包装器，不访问设备或修改参考仓库。没有 `--reference` 时不默认探测兄弟仓库。
 
 ## 目标构建与打包
 

@@ -24,7 +24,7 @@ python3 scripts/check-dependencies.py
 
 变更 SDK 时验证公共 API 兼容、音频 20 ms 契约、Linux adapters 和 RTSA exports；变更 LVGL 时保留 mask callback 类型修补或确认上游已包含等价修复。执行依赖检查、双语/UBSan、受影响目标构建和预览。说明新增许可或分发条件，更新验证矩阵；不得由版本号推断设备已通过。
 
-原始 `third_party/lvgl/README.integration.md` 和像素眼镜来源说明保留 ESP32 集成历史，当前 Linux 构建以本目录和现行架构指南为准。`imported-sources.json` 内历史 `local_patches` 路径属于原始记录，补丁现位于 `docs/dependencies/patches/`。
+`third_party/lvgl/README.integration.md` 和像素眼镜来源说明记录集成范围与适用许可，当前 Linux 构建以本目录和现行架构指南为准。`imported-sources.json` 内历史 `local_patches` 路径属于原始记录，补丁现位于 `docs/dependencies/patches/`。
 
 更新结果哈希使用仓库维护脚本，先预览再写入：
 

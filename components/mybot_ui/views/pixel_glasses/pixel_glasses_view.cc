@@ -1,8 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* Copyright (c) 2026 Project Contributors */
-/* Pixel-glasses geometry and process-skin colors follow the product simulator's
- * src/expressions.js and src/reference-style.js. The renderer owns Linux view
- * state and LVGL objects; the display adapter owns panel and DMA buffers. */
+/* The renderer owns pixel-glasses geometry, colors, state and LVGL objects.
+ * The display adapter owns physical output and framebuffer resources. */
 #include "lvgl_view.h"
 #include "pixel_glasses.h"
 #include "pixel_expression_shapes.h"
@@ -515,7 +514,7 @@ int mybot_lvgl_view_create(lv_display_t *display) {
         return -1;
     }
     /* The 640x480 view uses a 576x504 artwork at (32,-12), matching the
-     * CoreS3 composition. Only empty artwork margins are cropped. Geometry
+     * pixel-glasses composition. Only empty artwork margins are cropped. Geometry
      * remains in integer pixels; the DRM adapter owns physical rotation. */
     s_view->artwork_width = width * 9 / 10;
     s_view->artwork_height = s_view->artwork_width * kArtworkHeight / kArtworkWidth;

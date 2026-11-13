@@ -108,10 +108,7 @@ headers.
 ### Removed
 
 - Remove the duplicated `examples/bk725x` firmware project and `platforms/bk725x` adapters.
-  BK platform code, board configuration, and firmware resources are maintained in the independent
-  [BK7258](https://github.com/junlon2006/mybot-bk7258) and
-  [BK7259](https://github.com/junlon2006/mybot-bk7259) projects. The SDK core and Linux reference
-  implementation remain in this repository.
+  The SDK core and Linux reference implementation remain in this repository.
 
 ### Compatibility
 
@@ -165,10 +162,9 @@ headers.
   and expose it to LCD platforms as the `MYBOT_LCD_INDICATOR_VP_REGISTERED` overlay indicator. The
   device subscribes to the RTM channel matching the RTC channel before RTC join, and consumes the
   voiceprint status from the channel subscription callback while retaining P2P RTM callbacks.
-- Synchronize the BK725x adapter with the validated BK7258 integration: the application controller
-  now owns the APSTA/STA and MyBot lifecycle with a small polling loop, shared playback ownership is
-  explicit, and the dual LCD renders the voiceprint status indicator (red pending mark, green
-  success mark) on the conversation screen.
+- Update the BK725x adapter: the application controller now owns the APSTA/STA and MyBot lifecycle
+  with a small polling loop, shared playback ownership is explicit, and the dual LCD renders the
+  voiceprint status indicator (red pending mark, green success mark) on the conversation screen.
 
 ### Changed
 
@@ -229,9 +225,8 @@ headers.
   protocol boundaries, device lifecycle recovery, RTC errors, and application cleanup.
 - Add one-shot `mybot_platform_descriptor_t` registration with complete validation and
   synchronous startup checks for configuration-required ops.
-- Add the BK725x platform port under `platforms/bk725x` and synchronize the complete BK7258
-  reference project under `examples/bk725x`, with the full firmware implementation maintained at
-  <https://github.com/junlon2006/mybot-bk7258>.
+- Add the BK725x platform port under `platforms/bk725x` and its firmware example under
+  `examples/bk725x`.
 - Add `MYBOT_STATE_IN_CONVERSATION = 7` to the public `mybot_state_t` enum. After the device service
   accepts a conversation, `mybot_get_state()` reports this state until normal teardown returns to
   `MYBOT_STATE_READY`; `MYBOT_STATE_WIFI_DISCONNECTED` takes precedence during runtime connectivity
@@ -287,10 +282,8 @@ headers.
 
 - Replace the bundled x86_64 Linux Agora RTSA Lite static package with shared-library build
   `1267429` (`v1.10.1`) and accept either shared or static target libraries in CMake integrations.
-- Document the [mybot-esp32](https://github.com/junlon2006/mybot-esp32) cross-platform reference
-  project in the porting guide and repository documentation.
-- Sync the complete BK725x platform adaptation with the BK7258 reference project, including
-  descriptor-based registration and embedded TLS root verification.
+- Update the BK725x platform adaptation with descriptor-based registration and embedded TLS root
+  verification.
 - Restrict the SDK-internal LCD facade to the application control owner and remove its redundant
   render mutex.
 - **Breaking:** remove `mybot_request_exit()`; host applications stop directly after their own exit

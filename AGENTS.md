@@ -2,6 +2,8 @@
 
 Follow the user's task and preserve unrelated changes. This is a Linux/CMake application for RV1126B; do not apply ESP-IDF, FreeRTOS or flash-partition conventions.
 
+Project documentation and tool output describe this application and its required dependencies. Omit background about other application repositories. Preserve applicable copyright and license notices.
+
 - `app/` owns configuration, identity, runtime guards and lifecycle. `components/mybot_platform/` owns board defaults, Linux services and drivers. `components/mybot_ui/` owns a pure 640×480 renderer and views. Use MyBot public headers only.
 - `third_party/` is a pinned snapshot boundary. Make dependency changes deliberately, retain licenses, record patches and synchronize `dependencies.lock.json` and provenance. Do not bulk-format snapshots or generated fonts. See `VENDORED_SOURCES.md`.
 - Keep credentials, runtime data, private device identifiers, local SDK paths and generated packages out of commits. Generated outputs belong in ignored `build/`, `local/` and `dist/` directories.

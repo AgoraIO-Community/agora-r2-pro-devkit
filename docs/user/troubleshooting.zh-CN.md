@@ -6,7 +6,7 @@
 | --- | --- |
 | Python/CMake 版本错误 | 检查实际解释器与 `cmake --version`；需要 Python 3.10+、CMake 3.25+；脚本可用 `PYTHON` 指定解释器 |
 | host 配置缺 OpenSSL/libdrm | 安装开发包；macOS 显式传 OpenSSL 前缀及 `RV1126B_TEST_DRM_INCLUDE`，不要为绕过错误静默跳过 DRM 门禁 |
-| SDK 配置找不到目录 | 用显式依赖路径，或明确 `--reference`；正式构建不自动依赖同级参考仓库 |
+| SDK 配置找不到目录 | 检查显式配置的工具链、staging、RTSA 和运行库清单路径，再执行 `python3 scripts/doctor.py --target` |
 | RTSA 哈希/架构/ptime 不匹配 | 使用记录的 AArch64 Linux GNU 20 ms 包；不要只根据包名或 `.config` 推断库架构 |
 | ABI 检查失败 | 查看 `abi-report.json`；确认运行库 manifest、开发文件、加载器、GLIBC 符号版本及 RPATH 匹配，不复制不明库覆盖系统 |
 | 打包提示缺少变体或构建过期 | 显式选择 profile/language，重新构建对应目录；不要把旧二进制改名为新版本或关闭身份检查 |

@@ -21,6 +21,6 @@ This governance candidate requires a new hardware regression. Optional video, au
 
 ## 0.1.0 — 2026-11-13
 
-- Initial MyBot 1.3.0 RV1126B Linux application: HTTPS pairing, bidirectional voice, persistent identity, evdev input and CoreS3 UI.
+- Initial MyBot 1.3.0 RV1126B Linux application: HTTPS pairing, bidirectional voice, persistent identity, evdev input and pixel-glasses UI.
 - Optional V4L2/MPP JPEG uplink, AArch64 ABI checks and self-contained test bundles.
 - User verified checksums and the default voice/UI business flow on hardware. Optional video and extended stability were not accepted by that result.

@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-面向 **RV1126B TEST2 RK805B V10** 的 MyBot 1.3.0 Linux 应用，提供 HTTPS 配对、双向语音、稳定设备身份与持久化、CoreS3 像素眼镜 UI，以及可选的 V4L2/MPP JPEG 上行。
+面向 **RV1126B TEST2 RK805B V10** 的 MyBot 1.3.0 Linux 应用，提供 HTTPS 配对、双向语音、稳定设备身份与持久化、像素眼镜 UI，以及可选的 V4L2/MPP JPEG 上行。
 
 当前源码为 **0.2.0 工程治理候选版**。0.1.0 的语音/UI业务流程和 0.1.1 的文字渲染优化已由用户真机验收；目录重组后的候选版需要重新进行设备回归。可选视频和长时间稳定性专项尚未完成。[验证状态](docs/validation/README.md)是结果的唯一现行入口。
 
@@ -14,7 +14,7 @@
 
 ## 构建与测试
 
-需要 **Python 3.10+**、**CMake 3.25+**、C/C++ 编译器、OpenSSL 开发文件和 libdrm 开发头文件。主机 UI/测试不需要 RTSA、目标 SDK 或兄弟仓库。Debian/Ubuntu 的开发包包括 `build-essential`、`pkg-config`、`libssl-dev` 和 `libdrm-dev`。
+需要 **Python 3.10+**、**CMake 3.25+**、C/C++ 编译器、OpenSSL 开发文件和 libdrm 开发头文件。主机 UI/测试不需要 RTSA 或目标 SDK。Debian/Ubuntu 的开发包包括 `build-essential`、`pkg-config`、`libssl-dev` 和 `libdrm-dev`。
 
 ```sh
 python3 scripts/doctor.py --host
@@ -26,7 +26,7 @@ ctest --preset host-zh
 
 英文使用 `host-en`，未定义行为检查使用 `host-ubsan`。macOS 未安装原生 libdrm 开发包时，需显式提供头文件目录，见[构建指南](docs/user/build.zh-CN.md)。主机 CI 面向 Linux；实际已运行的环境以验证矩阵为准。
 
-目标构建需提供匹配的 AArch64 编译器、开发 staging/sysroot、固定 Agora RTSA 包及运行库清单。所有路径显式配置；现有参考仓库可作为可选导入源。[独立构建指南](docs/user/build.zh-CN.md)说明两种配置方式。
+目标构建需提供匹配的 AArch64 编译器、开发 staging/sysroot、固定 Agora RTSA 包及运行库清单。所有依赖路径均显式配置，步骤见[独立构建指南](docs/user/build.zh-CN.md)。
 
 ```sh
 sh scripts/build-rv1126b.sh
@@ -55,4 +55,4 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 - [架构](docs/development/architecture.zh-CN.md)、[测试](docs/development/testing.zh-CN.md)、[发布流程](docs/development/releasing.zh-CN.md)
 - [贡献指南](CONTRIBUTING.zh-CN.md)、[支持](SUPPORT.zh-CN.md)、[变更记录](CHANGELOG.md)
 
-自维护代码默认采用 [Apache-2.0](LICENSE)，具体文件声明优先。MyBot/AOSL、LVGL、导入视图和字体分别保留原许可；外部获取的 RTSA 不受本项目许可证覆盖。再分发源码或交付包前，请阅读[第三方声明](THIRD_PARTY_NOTICES.md)和[依赖来源](VENDORED_SOURCES.md)。
+自维护代码默认采用 [Apache-2.0](LICENSE)，具体文件声明优先。MyBot/AOSL、LVGL 和字体分别保留原许可，像素眼镜视图遵循文件级许可声明；外部获取的 RTSA 不受本项目许可证覆盖。再分发源码或交付包前，请阅读[第三方声明](THIRD_PARTY_NOTICES.md)和[依赖来源](VENDORED_SOURCES.md)。

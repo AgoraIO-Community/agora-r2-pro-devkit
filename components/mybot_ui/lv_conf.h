@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-/* Linux configuration for the CoreS3 view; shared by library and consumers. */
+/* Linux configuration for the pixel-glasses view; shared by library and consumers. */
 #ifndef LV_CONF_H
 #define LV_CONF_H
 

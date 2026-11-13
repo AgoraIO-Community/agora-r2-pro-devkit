@@ -2,37 +2,43 @@
 
 This is a production subset of LVGL 9.5.0, pinned to upstream commit
 `85aa60d18b3d5e5588d7b247abf90198f07c8a63` from
-<https://github.com/lvgl/lvgl>. This RV1126B import carries one source patch:
-`src/draw/sw/lv_draw_sw_mask.c` uses correctly typed callback wrappers to remove
-function-pointer undefined behavior found by Clang UBSan. The original source
-hash and the patch are recorded in the parent project's documentation. The
-integration description below records the original ESP32 subset.
+<https://github.com/lvgl/lvgl>. The application builds it as the static
+`mybot_lvgl` target using [lvgl.cmake](../../cmake/dependencies/lvgl.cmake) and
+the explicit [source list](../../cmake/dependencies/lvgl-sources.cmake).
 
-The import retains public/internal headers, core display and object code,
-software drawing, text fonts, basic widgets, flex layout, and the built-in
-binary decoder required by LVGL initialization. It excludes examples, demos,
-tests, downloads, other platform implementations, optional image codecs, and
-unused font bitmaps. The bundled Montserrat fonts include the upstream Font Awesome 5
-symbol glyphs. Their licenses are retained under
-`scripts/built_in_font/font_license/`; `LICENCE.txt` and `COPYRIGHTS.md` retain
-the upstream library notices.
+## Linux configuration and ownership
 
-Local files:
+- [lv_conf.h](../../components/mybot_ui/lv_conf.h) selects 32-bit color, libc
+  memory/string/formatting functions, one software draw unit, and the widgets
+  used by the UI. Built-in themes and external image/font decoders are disabled.
+- [renderer.c](../../components/mybot_ui/src/renderer.c) creates a native
+  640×480 `LV_COLOR_FORMAT_XRGB8888` display, a canvas and a partial draw buffer.
+  Generated fonts are compiled into the UI component; rendering needs no
+  runtime font files.
+- [lv_mem_clib.c](../../components/mybot_ui/src/lv_mem_clib.c) implements the
+  allocator hooks with libc `malloc`, `realloc` and `free`. Heap statistics are
+  unavailable through these portable hooks.
+- The target's [display worker](../../components/mybot_platform/src/services/display_runtime.c)
+  owns LVGL initialization, updates, timer handling and destruction. Other
+  threads publish copied content through the display service. LVGL uses
+  `LV_OS_NONE`; callers must preserve this single-owner model.
+- The [DRM backend](../../components/mybot_platform/src/drivers/display/drm.c)
+  owns the physical framebuffer and output restoration. It rotates the native
+  canvas for the panel; rotation and framebuffer pitch handling remain outside
+  the renderer.
 
-- `CMakeLists.txt` registers sources only for `CONFIG_MYBOT_LVGL_UI`.
-  This hidden setting is enabled automatically for display boards and disabled for headless boards.
-  Dependencies remain declared during ESP-IDF's early component discovery.
-- `Kconfig` supplies the draw-buffer alignment required by the display port.
-- `lv_conf.h` selects RGB565, a single software draw unit, basic widgets,
-  Montserrat 10/12/14/32, and disables built-in themes, external decoders, and diagnostics.
-  The platform supplies its own light/dark palettes and Chinese font subset.
-- `local/lv_mem_psram.c` implements LVGL's custom allocator interface. Objects
-  and draw scratch allocations use PSRAM with no internal-RAM fallback. An
-  aligned allocation header tracks blocks so `lv_mem_deinit()` can reclaim
-  remaining allocations. Allocation failures return `NULL`; failed realloc
-  preserves the original allocation. All calls require the port's LVGL lock,
-  except initialization/destruction while the runtime is quiescent.
+## Local patch and licenses
 
-`lv_mem_monitor()` reports the complete PSRAM heap, including other firmware
-users. LCD DMA transfer buffers and the RTOS task/locks are allocated by the
-port separately and are not covered by this allocator.
+[`src/draw/sw/lv_draw_sw_mask.c`](src/draw/sw/lv_draw_sw_mask.c) uses correctly
+typed callback wrappers to remove function-pointer undefined behavior found by
+Clang UBSan. The [patch](../../docs/dependencies/patches/lvgl-mask-callbacks.patch)
+and [dependency lock](../../dependencies.lock.json) record the change and its
+result hashes.
+
+The snapshot retains headers and production sources for the selected core,
+display, drawing, text, widget and layout features. The bundled Montserrat
+fonts include upstream Font Awesome 5 symbol glyphs; their licenses remain
+under [scripts/built_in_font/font_license/](scripts/built_in_font/font_license/).
+[LICENCE.txt](LICENCE.txt) and [COPYRIGHTS.md](COPYRIGHTS.md) retain the library
+notices. Application font inputs and licenses are recorded in the
+[font manifest](../../components/mybot_ui/fonts/sources.json).

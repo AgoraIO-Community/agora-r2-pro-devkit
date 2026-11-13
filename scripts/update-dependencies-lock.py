@@ -70,7 +70,7 @@ def changes(before, after, prefix=''):
     return ['updated ' + prefix] if before != after else []
 
 
-def refresh(root, lock, mappings=None, reasons=None, include_cores3_view=False, licenses=()):
+def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, licenses=()):
     if lock.get('schema_version') != 1:
         raise ValueError('unsupported dependency lock schema')
     mappings, reasons = mappings or {}, reasons or {}
@@ -110,13 +110,12 @@ def refresh(root, lock, mappings=None, reasons=None, include_cores3_view=False, 
         patch['sha256'] = check.sha256(check.local_path(root, patch['path']))
         patch['result_path'] = adaptations[source]['path']
         patch['result_sha256'] = adaptations[source]['result_sha256']
-    if include_cores3_view:
+    if include_ui_view:
         directory = 'components/mybot_ui/views/pixel_glasses'
         if not any(item['directory'] == directory for item in current['snapshots']):
-            current['snapshots'].append({'name': 'cores3-pixel-glasses', 'version': 'native-640x480',
-                'revision': history['revisions']['ui_reference_commit'],
-                'source': 'https://github.com/junlon2006/mybot-esp32',
-                'scope': 'CoreS3-derived view, geometry, expressions and retained license/provenance',
+            current['snapshots'].append({'name': 'pixel-glasses', 'version': 'native-640x480',
+                'source': 'project-maintained',
+                'scope': 'pixel-glasses view, geometry, expressions and retained licenses',
                 'directory': directory, 'files': {}})
         licenses = tuple(licenses) + (
             'components/mybot_ui/views/pixel_glasses/LICENSE.MIT.txt',
@@ -164,7 +163,8 @@ def main():
     parser.add_argument('--write', action='store_true', help='write changes; inspect the resulting diff before committing')
     parser.add_argument('--map', action='append', default=[], metavar='ORIGINAL_PATH=CURRENT_PATH', help='register a reviewed path migration')
     parser.add_argument('--reason', action='append', default=[], metavar='ORIGINAL_PATH=EXPLANATION', help='required for each new adaptation or changed mapping')
-    parser.add_argument('--include-cores3-view', action='store_true', help='register the migrated view snapshot and retained licenses once')
+    parser.add_argument('--include-ui-view', action='store_true', help='register the UI files and retained licenses once')
+    parser.add_argument('--include-cores3-view', dest='include_ui_view', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--license', action='append', default=[], metavar='PATH', help='record a retained repository-relative license')
     parser.add_argument('--json', action='store_true')
     args = parser.parse_args()
@@ -173,7 +173,7 @@ def main():
     try:
         lock = json.loads(path.read_text(encoding='utf-8'))
         updated, modified = refresh(root, lock, assignments(args.map, '--map'), assignments(args.reason, '--reason'),
-                                    args.include_cores3_view, args.license)
+                                    args.include_ui_view, args.license)
         if args.write and modified:
             write_lock(path, updated)
     except (OSError, ValueError, KeyError, TypeError) as error:

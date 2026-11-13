@@ -47,19 +47,7 @@ platforms/my_mcu/
 Integrate the SDK through its public platform operations without copying board-specific sources
 or resources into this repository.
 
-## Reference port projects
-
-The following independent repositories maintain the MCU adapters, board configuration, assets,
-and firmware builds. Use them directly for device integration; this SDK repository keeps the Linux
-reference implementation without duplicate MCU source trees.
-
-- [mybot-bk7258](https://github.com/junlon2006/mybot-bk7258) for BK7258;
-- [mybot-bk7259](https://github.com/junlon2006/mybot-bk7259) for BK7259;
-- [mybot-esp32](https://github.com/junlon2006/mybot-esp32) for ESP32.
-
-Use them to study target build integration, AOSL platform wiring, descriptor registration, and
-firmware lifecycle. When a reference project differs, use the SDK public headers as the authority
-for interface contracts and ownership boundaries.
+Use the SDK public headers as the authority for interface contracts and ownership boundaries.
 
 ## Step 3: Implement the required platform operations
 

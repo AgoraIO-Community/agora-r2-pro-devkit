@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Generate native-resolution 4 bpp UI fonts from SHA256-pinned sources.
 
-Derived from mybot-esp32's font generators. Source TTF/OTF files stay external;
+Source TTF/OTF files stay external;
 the generated fonts use renamed MyBot families and retain upstream font terms.
 """
 import argparse

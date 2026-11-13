@@ -25,7 +25,7 @@ LICENSES = [
     ("third_party/lvgl/scripts/built_in_font/font_license/Montserrat/OFL.txt", "Montserrat-OFL.txt"),
     ("third_party/lvgl/scripts/built_in_font/font_license/FontAwesome5/LICENSE.txt", "FontAwesome-LICENSE.txt"),
     ("components/mybot_ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt", "terminal-font-LICENSE.txt"),
-    ("components/mybot_ui/views/pixel_glasses/LICENSE.MIT.txt", "cores3-view-MIT.txt"),
+    ("components/mybot_ui/views/pixel_glasses/LICENSE.MIT.txt", "pixel-glasses-MIT.txt"),
     ("components/mybot_ui/fonts/sources.json", "font-sources.json"),
     ("components/mybot_ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt", "chinese-font-OFL.txt"),
     ("docs/dependencies/RTSA_SOURCE.txt", "RTSA_SOURCE.txt"),

@@ -370,15 +370,11 @@ mybot/
 
 ## 文档
 
-本仓库维护 SDK 核心与 Linux 参考实现。BK7258、BK7259 和 ESP32 的平台适配、板级配置与
-固件构建统一在以下独立工程中维护。
+本仓库维护 SDK 核心与 Linux 参考实现。产品集成方提供平台适配、板级配置与固件构建。
 
 - [公共头文件](include/mybot/) — API 与平台接口契约的权威定义；本 README 保留项目概览
 - [docs/PORTING.md](docs/PORTING.md)（[简体中文](docs/PORTING.zh-CN.md)）— 新平台移植指南
   的集成流程与验收清单
-- [mybot-bk7258](https://github.com/junlon2006/mybot-bk7258) — BK7258 参考固件工程
-- [mybot-bk7259](https://github.com/junlon2006/mybot-bk7259) — BK7259 参考固件工程
-- [mybot-esp32](https://github.com/junlon2006/mybot-esp32) — ESP32 跨平台参考工程
 - [docs/EMBEDDED.md](docs/EMBEDDED.md)（[简体中文](docs/EMBEDDED.zh-CN.md)）— 面向 MCU
   集成者的体积、内存、线程/栈、时序、功耗与日志说明
 - [docs/RELEASING.md](docs/RELEASING.md)（[简体中文](docs/RELEASING.zh-CN.md)）— 版本发布流程

@@ -42,17 +42,7 @@ platforms/my_mcu/
 
 通过 SDK 公共平台 ops 集成，不将板级源码或资源复制到本仓库。
 
-## 参考移植工程
-
-以下独立仓库维护 MCU 平台适配、板级配置、资源与固件构建，设备集成请直接使用对应工程。
-SDK 仓库保留 Linux 参考实现，不再同步 MCU 源码副本。
-
-- [mybot-bk7258](https://github.com/junlon2006/mybot-bk7258)：BK7258；
-- [mybot-bk7259](https://github.com/junlon2006/mybot-bk7259)：BK7259；
-- [mybot-esp32](https://github.com/junlon2006/mybot-esp32)：ESP32。
-
-可用这些工程了解目标构建集成、AOSL 平台接线、描述符注册和固件生命周期。参考工程存在
-差异时，接口契约和所有权边界以 SDK 公共头文件为准。
+接口契约和所有权边界以 SDK 公共头文件为准。
 
 ## 第 3 步：实现必需平台操作
 

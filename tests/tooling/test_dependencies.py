@@ -145,12 +145,12 @@ class OfflineTargetTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'runtime staging is not a sysroot'):
             self.validate()
 
-    def test_no_arguments_do_not_guess_reference_checkout(self):
+    def test_no_arguments_require_explicit_dependencies(self):
         result = subprocess.run([sys.executable, str(ROOT / 'scripts/configure-local-sdk.py')],
                                 text=True, capture_output=True)
         self.assertEqual(result.returncode, 2)
         self.assertIn('provide --cross-compile or --zig', result.stderr)
-        self.assertNotIn('agora-r2-pro-devkit', result.stderr)
+        self.assertNotIn('--reference', result.stderr)
 
     def test_stale_configuration_is_rejected_before_target_probes(self):
         path = self.root / 'config.json'

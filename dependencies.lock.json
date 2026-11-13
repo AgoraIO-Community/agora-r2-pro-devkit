@@ -24,14 +24,14 @@
         "third_party/mybot/.gitignore": "1a9da69a9e975ab5b9e0ecaf6a368adbbc12571ca4423073bcf39fff25b1f034",
         "third_party/mybot/.gitmessage": "210c48d309c3791efe09e1424ecd45eb17ef3729b0f1f9e842749c679be673ae",
         "third_party/mybot/.gitmodules": "110d15be9ffa047239336800264c165b96da3ef2bfb29e053530e3e45728439e",
-        "third_party/mybot/AGENTS.md": "5664332e4b8318dfe4934d3ca714b385798c60b7ec9a32538b2e0261cf16b309",
-        "third_party/mybot/CHANGELOG.md": "c8ca6265300f5239a9dbd5e499625544f45565e6329b82137297f1ad5633ce6d",
+        "third_party/mybot/AGENTS.md": "115e7501938a65238b7fa122c85da8ca547ff2be96688a57ef8ae333ac1526a8",
+        "third_party/mybot/CHANGELOG.md": "16f58a1bb68136d7d12015d043c6e262494d7869c298f0590e3725ba7ba7a619",
         "third_party/mybot/CMakeLists.txt": "6663313a9c3303871126f3b8f4d5e972a06ee27757f106a7899aba8e8080437a",
         "third_party/mybot/CONTRIBUTING.md": "68e87b824709018f1794c9fca08b3b3073b0858ff80865b1977258a386bd0ca6",
         "third_party/mybot/CONTRIBUTING.zh-CN.md": "f6a91a85b5463af03e3eb03a9cce8dc87d4db6c0a2e1acc9ee52300ef598446f",
         "third_party/mybot/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-        "third_party/mybot/README.md": "01e0dad6709b9a410f911ab6b83f6e493b9d852ef078b0f4570a85dabedc9a6f",
-        "third_party/mybot/README.zh-CN.md": "a82802a1f9fbb4d0c61404b8859d49cb5d790ad16d4f13af21a257f12c961a0e",
+        "third_party/mybot/README.md": "d17f640af36b36941d78c5327435f6393f0effbcf16963cfe066551604992908",
+        "third_party/mybot/README.zh-CN.md": "5dc361a300b6ace87ba9283b050cc3a95bf3442f53684e033c9f6841ad07fd4f",
         "third_party/mybot/SUPPORT.md": "2c255213620996dfe026371cec6f8189ce6704b8fdb68687ae14501f27bb7108",
         "third_party/mybot/SUPPORT.zh-CN.md": "651c2a1d92147fca024f667a0ab0070e4a9ff3b96605fb36005f70d04033e314",
         "third_party/mybot/THIRD_PARTY_NOTICES.md": "314b5e47277ecd66e4205877f5d492acb55d0a058f3d39a8221a174168bebfec",
@@ -65,10 +65,10 @@
         "third_party/mybot/docs/Doxyfile.in": "062f7bd2393fe1613253ba4da553744325c2b0cf1ffa9a726b40ffe081ea8164",
         "third_party/mybot/docs/EMBEDDED.md": "9506a3ef93df2e01645a46c5dc5bb5465322783327b36e6f42d363d1b54e8498",
         "third_party/mybot/docs/EMBEDDED.zh-CN.md": "44a1d9213dd5784b797425f02f559c4e54437882e12ef1aa548329b5001d10da",
-        "third_party/mybot/docs/PORTING.md": "4c447fd8b47997ab9564dae6bb11041d4c632f1cc0eeacb4ca410a3d926967bd",
-        "third_party/mybot/docs/PORTING.zh-CN.md": "4902329a201dad91ea0a8cdd3f6d5dcd9ebc8e230da30cc2913a44117a3db36e",
-        "third_party/mybot/docs/RELEASING.md": "d283a34b7e4ba573f439d6c4e8a55318bba72f8c49ffd62f0b26eee0da46793d",
-        "third_party/mybot/docs/RELEASING.zh-CN.md": "cb2d8e349a1f12b6958654a66d143553547d741c749e9f7e76852943c3ed9d9d",
+        "third_party/mybot/docs/PORTING.md": "7f4554203825dfda1371776d1682286d35acd021c4a2e742dcfd3395f1a90300",
+        "third_party/mybot/docs/PORTING.zh-CN.md": "558c4b4038e3ef6ba380cc0cc0f3140b95f2d22f3d359a354dd53256ae2259ea",
+        "third_party/mybot/docs/RELEASING.md": "04f94fecb23da41c28ba7355136fd8c9028f8ec2dbab395fba0efafaa48af613",
+        "third_party/mybot/docs/RELEASING.zh-CN.md": "42d161b492c89faff3f936a3237308488ec15d9e85fbc44469d34c99e0eda3a1",
         "third_party/mybot/examples/linux/CMakeLists.txt": "3e95fecf4fa39dff4d4302cd85c23d5fc50caf74bec083079dd7f9527256c62a",
         "third_party/mybot/examples/linux/main.c": "29c4d2d5762f725979aee3463d4d01a0220a7152624fec61e856b49b3860fa56",
         "third_party/mybot/githooks/commit-msg": "fbca86077a9ad7a0dc4b110f39d271405ad96e177128709447f377cda0dc34e6",
@@ -528,7 +528,7 @@
       "files": {
         "third_party/lvgl/COPYRIGHTS.md": "18dff80ab6d19cca167018a2883b73f5575ccf1e6dff60a58b1f99425b666439",
         "third_party/lvgl/LICENCE.txt": "27a80bd36832ab42d35ad60c08b2b230a807a9bc0d58e94ec1531543dc49cbe8",
-        "third_party/lvgl/README.integration.md": "11b5abeac50537121b39c2c014526d4a32aff84291db497d6a345a4442eabf61",
+        "third_party/lvgl/README.integration.md": "a66a21937bd8aa2c6448c5f4bb39ec58b80d56d04732c68a751ea91194ee0960",
         "third_party/lvgl/lv_version.h": "fa0c49e41ae3125e82bedcc3e62e7202b5340f7dd4cd51fd212c414361b59879",
         "third_party/lvgl/lvgl.h": "bfd10da864777a7c44afd4c7de6ec4ededef6e7371a4108b64b80d5161a84400",
         "third_party/lvgl/scripts/built_in_font/font_license/FontAwesome5/LICENSE.txt": "de784a808496d49f5f80dd9d1d6e9a51cff712cfbc339e7c25155631ae3cdb5d",
@@ -1249,21 +1249,20 @@
       }
     },
     {
-      "name": "cores3-pixel-glasses",
+      "name": "pixel-glasses",
       "version": "native-640x480",
-      "revision": "2782cc88f52c8a46419654b72a918a8273cc23bf",
-      "source": "https://github.com/junlon2006/mybot-esp32",
-      "scope": "CoreS3-derived view, geometry, expressions and retained license/provenance",
+      "source": "project-maintained",
+      "scope": "pixel-glasses view, geometry, expressions and retained licenses",
       "directory": "components/mybot_ui/views/pixel_glasses",
       "files": {
         "components/mybot_ui/views/pixel_glasses/LICENSE.MIT.txt": "2ca6f4729fee065d98db37056df2740f813db7aa9a5ff94d6fd58e33232f2cd7",
-        "components/mybot_ui/views/pixel_glasses/PIXEL_GLASSES_SOURCES.md": "74f2b41ef10ef7c6e959765082db2a5b513244c7621d360bba456146616dfb06",
+        "components/mybot_ui/views/pixel_glasses/PIXEL_GLASSES_SOURCES.md": "2dfea216fb591ea95d821eb7e47bb91b34c60a9d9e4aa6f7fa2d55038addcff2",
         "components/mybot_ui/views/pixel_glasses/lvgl_view.h": "c67bec53f75087c2960c84ebf197c173c4dbbc623de15916b639ac3a854d0bbc",
-        "components/mybot_ui/views/pixel_glasses/pixel_expression_masks.h": "44701e08bad2dfa3ccaa31a0727c4e4896f83109be60a3d1276e16c8bf43ef2d",
+        "components/mybot_ui/views/pixel_glasses/pixel_expression_masks.h": "3f0adcc7a7f7e04681a682023574f4cfa7b1cab5548d6b82f8ac6240c0b05a05",
         "components/mybot_ui/views/pixel_glasses/pixel_expression_shapes.h": "53e5ba308227615afd759567d55075ac22e81bbac1947e9f74982d4c5e155004",
         "components/mybot_ui/views/pixel_glasses/pixel_expressions.c": "edaa31dafdee7a6e801b558b9a311bafea3a1d32eea75a0d81ee9a1933fa8b5e",
         "components/mybot_ui/views/pixel_glasses/pixel_glasses.h": "9cd9d810d89030ecabd3fac3cddf3087b8425295435114b915726f1a7303dab7",
-        "components/mybot_ui/views/pixel_glasses/pixel_glasses_view.cc": "bba583ada025e44c4868e2ff6b25f8c02aaaa7b056cae54d07babe22d5aa2c80"
+        "components/mybot_ui/views/pixel_glasses/pixel_glasses_view.cc": "ca99e93f26fe66e4545e93edcb73a1ac2ff619e729df61cc4af40a2987ba6766"
       }
     }
   ],
@@ -1278,49 +1277,49 @@
       "path": "components/mybot_ui/src/expression_policy.h",
       "original_sha256": "5824acd1986fd05cd39aba6fe2f22453e471fc3679f4f655559443a8889130fc",
       "result_sha256": "f2bc1231884616f16611e757ff78106f79612b0ce50529d23ed305ddbd4ad831",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/include/display/lvgl_view.h": {
       "path": "components/mybot_ui/views/pixel_glasses/lvgl_view.h",
       "original_sha256": "c67bec53f75087c2960c84ebf197c173c4dbbc623de15916b639ac3a854d0bbc",
       "result_sha256": "c67bec53f75087c2960c84ebf197c173c4dbbc623de15916b639ac3a854d0bbc",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/include/display/pixel_expression.h": {
       "path": "components/mybot_ui/include/mybot_ui/expression.h",
       "original_sha256": "ad7cbe309234804355c184bed9af4f2d583ed6a90f206655b0226e311e64651a",
       "result_sha256": "ad7cbe309234804355c184bed9af4f2d583ed6a90f206655b0226e311e64651a",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/include/display/pixel_glasses.h": {
       "path": "components/mybot_ui/views/pixel_glasses/pixel_glasses.h",
       "original_sha256": "d26de78b0916947963a67c96c88e3798e12915fedc1e8ab288fca262ae3c22b5",
       "result_sha256": "9cd9d810d89030ecabd3fac3cddf3087b8425295435114b915726f1a7303dab7",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/include/mybot_platform/display_status.h": {
       "path": "components/mybot_ui/include/mybot_ui/display_status.h",
       "original_sha256": "fe2c1d976fd852db69a43292506253b7909d05206ea4ea5ff183f8145cb56283",
       "result_sha256": "fe2c1d976fd852db69a43292506253b7909d05206ea4ea5ff183f8145cb56283",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/view/LVGL_VIEW_FONT_LICENSE.txt": {
       "path": "components/mybot_ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt",
       "original_sha256": "f55c2d43dd905011515f5e46ba78d180027e314ef8ccaaf53a9e88fe316767cd",
       "result_sha256": "f55c2d43dd905011515f5e46ba78d180027e314ef8ccaaf53a9e88fe316767cd",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/view/PIXEL_GLASSES_SOURCES.md": {
       "path": "components/mybot_ui/views/pixel_glasses/PIXEL_GLASSES_SOURCES.md",
       "original_sha256": "9c41e4895b8278431d771e486106bf0d5e2c2a3d1dcc114f40231bbdb01a2325",
-      "result_sha256": "74f2b41ef10ef7c6e959765082db2a5b513244c7621d360bba456146616dfb06",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "result_sha256": "2dfea216fb591ea95d821eb7e47bb91b34c60a9d9e4aa6f7fa2d55038addcff2",
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/view/TERMINAL_FONT_LICENSE.txt": {
       "path": "components/mybot_ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt",
       "original_sha256": "f0ddcc1c203ffeaef26410893fe1b0c578ad23f5dc3db8a2f359693f2af60395",
       "result_sha256": "f0ddcc1c203ffeaef26410893fe1b0c578ad23f5dc3db8a2f359693f2af60395",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/view/lvgl_fonts.c": {
       "path": "components/mybot_ui/fonts/generated/lvgl_fonts.c",
@@ -1331,20 +1330,20 @@
     "ui/view/pixel_expression_masks.h": {
       "path": "components/mybot_ui/views/pixel_glasses/pixel_expression_masks.h",
       "original_sha256": "44701e08bad2dfa3ccaa31a0727c4e4896f83109be60a3d1276e16c8bf43ef2d",
-      "result_sha256": "44701e08bad2dfa3ccaa31a0727c4e4896f83109be60a3d1276e16c8bf43ef2d",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "result_sha256": "3f0adcc7a7f7e04681a682023574f4cfa7b1cab5548d6b82f8ac6240c0b05a05",
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/view/pixel_expression_shapes.h": {
       "path": "components/mybot_ui/views/pixel_glasses/pixel_expression_shapes.h",
       "original_sha256": "53e5ba308227615afd759567d55075ac22e81bbac1947e9f74982d4c5e155004",
       "result_sha256": "53e5ba308227615afd759567d55075ac22e81bbac1947e9f74982d4c5e155004",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/view/pixel_expressions.c": {
       "path": "components/mybot_ui/views/pixel_glasses/pixel_expressions.c",
       "original_sha256": "5289608a547f978d53e625638ac68c6240335f26194bd44c7dbd2150c44bd4a5",
       "result_sha256": "edaa31dafdee7a6e801b558b9a311bafea3a1d32eea75a0d81ee9a1933fa8b5e",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "ui/view/pixel_fonts.c": {
       "path": "components/mybot_ui/fonts/generated/pixel_fonts.c",
@@ -1355,8 +1354,8 @@
     "ui/view/pixel_glasses_view.cc": {
       "path": "components/mybot_ui/views/pixel_glasses/pixel_glasses_view.cc",
       "original_sha256": "c128562e29bbd41a7b57556c0adc986cf0800ed89743122460624328050cad57",
-      "result_sha256": "bba583ada025e44c4868e2ff6b25f8c02aaaa7b056cae54d07babe22d5aa2c80",
-      "reason": "CoreS3-derived native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
+      "result_sha256": "ca99e93f26fe66e4545e93edcb73a1ac2ff619e729df61cc4af40a2987ba6766",
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable."
     },
     "platforms/rv1126b/rv1126b_audio.c": {
       "path": "components/mybot_platform/src/drivers/audio/alsa_audio.c",
@@ -1385,8 +1384,56 @@
     "third_party/lvgl/README.integration.md": {
       "path": "third_party/lvgl/README.integration.md",
       "original_sha256": "aaf7440f882619840593b5b0058f37c40be06ecf9b6c8972abb9dc943c13c37b",
-      "result_sha256": "11b5abeac50537121b39c2c014526d4a32aff84291db497d6a345a4442eabf61",
-      "reason": "Update the integration description to document the retained LVGL subset and typed callback patch."
+      "result_sha256": "a66a21937bd8aa2c6448c5f4bb39ec58b80d56d04732c68a751ea91194ee0960",
+      "reason": "Limit bundled documentation to SDK contracts and required dependencies; runtime sources and license notices unchanged."
+    },
+    "third_party/mybot/AGENTS.md": {
+      "path": "third_party/mybot/AGENTS.md",
+      "original_sha256": "5664332e4b8318dfe4934d3ca714b385798c60b7ec9a32538b2e0261cf16b309",
+      "result_sha256": "115e7501938a65238b7fa122c85da8ca547ff2be96688a57ef8ae333ac1526a8",
+      "reason": "Limit bundled documentation to SDK contracts and required dependencies; runtime sources and license notices unchanged."
+    },
+    "third_party/mybot/CHANGELOG.md": {
+      "path": "third_party/mybot/CHANGELOG.md",
+      "original_sha256": "c8ca6265300f5239a9dbd5e499625544f45565e6329b82137297f1ad5633ce6d",
+      "result_sha256": "16f58a1bb68136d7d12015d043c6e262494d7869c298f0590e3725ba7ba7a619",
+      "reason": "Limit bundled documentation to SDK contracts and required dependencies; runtime sources and license notices unchanged."
+    },
+    "third_party/mybot/README.md": {
+      "path": "third_party/mybot/README.md",
+      "original_sha256": "01e0dad6709b9a410f911ab6b83f6e493b9d852ef078b0f4570a85dabedc9a6f",
+      "result_sha256": "d17f640af36b36941d78c5327435f6393f0effbcf16963cfe066551604992908",
+      "reason": "Limit bundled documentation to SDK contracts and required dependencies; runtime sources and license notices unchanged."
+    },
+    "third_party/mybot/README.zh-CN.md": {
+      "path": "third_party/mybot/README.zh-CN.md",
+      "original_sha256": "a82802a1f9fbb4d0c61404b8859d49cb5d790ad16d4f13af21a257f12c961a0e",
+      "result_sha256": "5dc361a300b6ace87ba9283b050cc3a95bf3442f53684e033c9f6841ad07fd4f",
+      "reason": "Limit bundled documentation to SDK contracts and required dependencies; runtime sources and license notices unchanged."
+    },
+    "third_party/mybot/docs/PORTING.md": {
+      "path": "third_party/mybot/docs/PORTING.md",
+      "original_sha256": "4c447fd8b47997ab9564dae6bb11041d4c632f1cc0eeacb4ca410a3d926967bd",
+      "result_sha256": "7f4554203825dfda1371776d1682286d35acd021c4a2e742dcfd3395f1a90300",
+      "reason": "Limit bundled documentation to SDK contracts and required dependencies; runtime sources and license notices unchanged."
+    },
+    "third_party/mybot/docs/PORTING.zh-CN.md": {
+      "path": "third_party/mybot/docs/PORTING.zh-CN.md",
+      "original_sha256": "4902329a201dad91ea0a8cdd3f6d5dcd9ebc8e230da30cc2913a44117a3db36e",
+      "result_sha256": "558c4b4038e3ef6ba380cc0cc0f3140b95f2d22f3d359a354dd53256ae2259ea",
+      "reason": "Limit bundled documentation to SDK contracts and required dependencies; runtime sources and license notices unchanged."
+    },
+    "third_party/mybot/docs/RELEASING.md": {
+      "path": "third_party/mybot/docs/RELEASING.md",
+      "original_sha256": "d283a34b7e4ba573f439d6c4e8a55318bba72f8c49ffd62f0b26eee0da46793d",
+      "result_sha256": "04f94fecb23da41c28ba7355136fd8c9028f8ec2dbab395fba0efafaa48af613",
+      "reason": "Limit bundled documentation to SDK contracts and required dependencies; runtime sources and license notices unchanged."
+    },
+    "third_party/mybot/docs/RELEASING.zh-CN.md": {
+      "path": "third_party/mybot/docs/RELEASING.zh-CN.md",
+      "original_sha256": "cb2d8e349a1f12b6958654a66d143553547d741c749e9f7e76852943c3ed9d9d",
+      "result_sha256": "42d161b492c89faff3f936a3237308488ec15d9e85fbc44469d34c99e0eda3a1",
+      "reason": "Limit bundled documentation to SDK contracts and required dependencies; runtime sources and license notices unchanged."
     }
   },
   "local_patches": [
@@ -1417,7 +1464,7 @@
       }
     },
     "generator": "scripts/generate-ui-fonts.py",
-    "generator_sha256": "67829a1491b12c51ad83a2dad7ae15df2f70fa3160300ef96c9c7fa5f464c4d9",
+    "generator_sha256": "f287abe5046d24d520c9217b47b5a028804877eb6437bebd6e903767b6b17b3e",
     "pillow_version": "10.2.0",
     "freetype_version": "2.13.2",
     "outputs": {
