@@ -129,7 +129,7 @@ mybot-rv1126b/
 | 模块 / target | 职责 | 边界 |
 | --- | --- | --- |
 | `mybot-rv1126b` | CLI、身份、进程保护、运行目录、SDK 与平台启动关闭 | 不包含具体硬件 I/O；保留单一清理出口 |
-| SDK public-header INTERFACE target | 供 host renderer/tests 使用 MyBot 公共类型 | 不链接 RTSA，不导出 SDK 私有目录 |
+| SDK public-header INTERFACE target | 供 host renderer/tests 使用 agent-studio-device-firmware 公共类型 | 不链接 RTSA，不导出 SDK 私有目录 |
 | `mybot_ui` | 固定 640×480 renderer、view、表情、字库 | 通过已有 present 回调交付画布，不依赖 DRM、ALSA、MPP 或 pthread |
 | `mybot_linux_display` | UI worker、DRM、旋转/blit、显示失败清理 | 位于平台组件中；拥有线程及显示资源，调用 renderer |
 | `mybot_platform` | 平台描述符、ALSA、evdev、网络监测、可选视频和 Linux 服务集成 | 调用 SDK 公共接口，不拥有第二套配对/会话状态机 |

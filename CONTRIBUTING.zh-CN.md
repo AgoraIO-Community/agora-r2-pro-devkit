@@ -6,7 +6,7 @@
 
 ## 代码边界
 
-应用配置与生命周期放在 `src/application/`；板级默认值、Linux 服务和驱动放在 `src/platform/`。`src/ui/` 的 renderer 与视图保持独立，不依赖 DRM、ALSA、MPP 或平台 worker 线程。平台仅使用 MyBot 公共头文件，不引用 SDK 私有接口。
+应用配置与生命周期放在 `src/application/`；板级默认值、Linux 服务和驱动放在 `src/platform/`。`src/ui/` 的 renderer 与视图保持独立，不依赖 DRM、ALSA、MPP 或平台 worker 线程。平台仅使用 agent-studio-device-firmware 公共头文件，不引用 SDK 私有接口。
 
 内部路径调整保留 `mybot_platform/`、`mybot_ui/` 公共头文件命名空间和 CMake target。开发工具程序放在 `tools/`；构建、检查、生成与打包自动化放在 `scripts/`。
 

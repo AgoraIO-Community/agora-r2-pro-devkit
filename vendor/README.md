@@ -4,12 +4,12 @@ Each direct dependency owns one snapshot and an independent entry in the depende
 
 | Directory | Role | Scope |
 | --- | --- | --- |
-| `mybot/` | MyBot SDK 1.3.0 | SDK, required Linux adapters, assets and build inputs |
+| `mybot/` | agent-studio-device-firmware 1.3.0 | SDK, required Linux adapters, assets and build inputs |
 | `aosl/` | AOSL runtime | Fixed recorded revision, common implementation and Linux HAL |
 | `lvgl/` | LVGL 9.5.0 | Production subset and required headers/licenses |
 | `rtsa/` | Agora RTSA 1.10.1 | Complete official package: headers, binaries, examples and upstream documentation |
 
-MyBot links AOSL through `AOSL_DIR`; neither dependency is copied into the other. Target builds use the pinned AArch64 library at `rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so`. Project-owned integration stays in `../cmake/dependencies/`, and application UI/resources stay in `../src/ui/`.
+agent-studio-device-firmware links AOSL through `AOSL_DIR`; neither dependency is copied into the other. Target builds use the pinned AArch64 library at `rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so`. Project-owned integration stays in `../cmake/dependencies/`, and application UI/resources stay in `../src/ui/`.
 
 The maintained application, platform and UI modules are siblings under `../src/`. Directory names do not change the public include namespaces or CMake targets. This `vendor/` boundary owns dependency content only; developer programs and automation remain in `../tools/` and `../scripts/` respectively.
 

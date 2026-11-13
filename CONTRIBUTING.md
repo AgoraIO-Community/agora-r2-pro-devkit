@@ -6,7 +6,7 @@ Keep contributions focused on an observable problem. Explain compatibility effec
 
 ## Code boundaries
 
-Application configuration and lifecycle belong in `src/application/`. Board defaults, Linux services and drivers belong in `src/platform/`. The renderer and views in `src/ui/` remain independent of DRM, ALSA, MPP and platform worker threads. Platform code consumes public MyBot headers, not SDK private interfaces.
+Application configuration and lifecycle belong in `src/application/`. Board defaults, Linux services and drivers belong in `src/platform/`. The renderer and views in `src/ui/` remain independent of DRM, ALSA, MPP and platform worker threads. Platform code consumes public agent-studio-device-firmware headers, not SDK private interfaces.
 
 Keep the public `mybot_platform/` and `mybot_ui/` include namespaces and CMake targets stable when reorganizing internal paths. Developer programs belong in `tools/`; build, validation, generation and packaging automation belongs in `scripts/`.
 

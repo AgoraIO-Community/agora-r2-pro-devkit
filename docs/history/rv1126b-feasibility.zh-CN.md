@@ -1,4 +1,4 @@
-# MyBot RV1126B 移植可行性与实施方案
+# agora-r2-pro-devkit RV1126B 移植可行性与实施方案
 
 > 历史记录：本文保留对应阶段的判断、路径和命令，不作为当前操作指南。现行入口见[文档索引](../README.md)，结果以[验证状态](../validation/README.md)为准。
 
@@ -6,11 +6,11 @@
 
 ## 1. 结论与推荐路线
 
-移植具备明确可行路径：将当前 MyBot 1.3.0 作为固定依赖，在 RV1126B 现有 AArch64 Linux 上实现独立用户态应用。采用 Linux AOSL、Agora AArch64 RTSA 和板级 Linux 硬件接口；UI 使用工艺灰像素眼镜风格。
+移植具备明确可行路径：将 agent-studio-device-firmware 1.3.0 作为固定依赖，在 RV1126B 现有 AArch64 Linux 上实现独立用户态应用。采用 Linux AOSL、Agora AArch64 RTSA 和板级 Linux 硬件接口；UI 使用工艺灰像素眼镜风格。
 
 当前不需要重做内核、驱动或系统镜像。优先完成语音应用的本地交叉编译，再接入像素眼镜 UI 与摄像头；部署和硬件验收属于后续阶段。NPU 不在云端语音对话的必需依赖中，可在需要本地唤醒时单独接入。
 
-现有资料支持上述路线，但尚未证明“当前 MyBot 1.3.0 + 新 UI + 本板硬件”组合已能运行。本次没有上传文件、安装程序、运行新的设备应用、停止服务、修改配置、开流、设置混音器或执行 DRM modeset。
+现有资料支持上述路线，但尚未证明“当前 agent-studio-device-firmware 1.3.0 + 新 UI + 本板硬件”组合已能运行。本次没有上传文件、安装程序、运行新的设备应用、停止服务、修改配置、开流、设置混音器或执行 DRM modeset。
 
 ## 2. 资料与版本基线
 
@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | [瑞芯微 RV1126B 官方介绍](https://www.rock-chips.com/a/cn/product/RV11xilie/2025/1208/2117.html) | 本次已获取网页 | SoC 能力；不能替代具体开发板、驱动与应用验证 |
 | [agent-studio-device-firmware](https://github.com/AgoraIO-Community/agent-studio-device-firmware/blob/4c36cbee4fe8908b37ccee12dcebc0b17bc436f1/CMakeLists.txt) | 1.3.0，`4c36cbee4fe8908b37ccee12dcebc0b17bc436f1`，工作区干净 | 目标 SDK 与公共接口 |
-| [AOSL 固定版本](https://github.com/AgoraIO-Community/agent-studio-device-firmware/blob/4c36cbee4fe8908b37ccee12dcebc0b17bc436f1/.gitmodules) | agent-studio-device-firmware 的 gitlink 为 `84e086084ebcd0ae2455a0ce5721950c5fe2e656` | SDK 固定的 AOSL Linux 源码依赖 |
+| [AOSL 固定版本](https://github.com/AgoraIO-Community/agent-studio-device-firmware/blob/4c36cbee4fe8908b37ccee12dcebc0b17bc436f1/.gitmodules) | MyBot gitlink 为 `84e086084ebcd0ae2455a0ce5721950c5fe2e656` | SDK 固定的 AOSL Linux 源码依赖 |
 | [目标 RTSA 来源](../dependencies/RTSA_SOURCE.txt) | 1.10.1，AArch64 Linux GNU，20 ms | 本地已有目标库、头文件与构建元数据 |
 
 构建需要固定工具链、开发头文件、运行库快照及其清单，记录实际文件哈希与本地补丁；仅记录源码版本不足以复现目标产物。
@@ -57,7 +57,7 @@
 ```mermaid
 flowchart TB
     app[RV1126B 应用：配置、稳定身份、生命周期]
-    sdk[固定版本 MyBot SDK：配对、会话、RTC/RTM、音频流水线]
+    sdk[固定版本 agent-studio-device-firmware：配对、会话、RTC/RTM、音频流水线]
     aosl[AOSL Linux + AArch64 RTSA]
     ops[公共 platform descriptor]
     audio[ALSA：16 kHz mono ↔ 48 kHz stereo]
@@ -85,12 +85,12 @@ flowchart TB
 
 | 模块 | 实现方式 | 接入要求 |
 | --- | --- | --- |
-| AOSL | 当前 MyBot 固定版本的 Linux HAL | 初始化固定依赖；无需新写 RV1126B HAL |
+| AOSL | 当前 agent-studio-device-firmware 固定版本的 Linux HAL | 初始化固定依赖；无需新写 RV1126B HAL |
 | RTC / RTM | 目标 RTSA 1.10.1 | 显式指定 AArch64 库及同一软件包头文件；ptime 使用 20 ms |
 | 采集 / 播放 | `rv1126b_audio.c` | 对照 1.3.0 回调契约核查短 I/O、EAGAIN、XRUN、线程安全 stop 与资源销毁 |
 | 网络状态 | `rv1126b_network.c` | 保留当前连接上报和断开/恢复通知；IPv4 地址与默认路由不等于服务可达 |
-| HTTPS | 当前 MyBot `linux_https_openssl.c` | 复用新版实现；校验证书链、主机名、SNI；支持控制与后台 worker 的独立并发连接 |
-| KV / 提示音 | 当前 MyBot Linux 文件实现 | 新应用使用独立目录和语言资源；保留原子替换及访问权限语义 |
+| HTTPS | 当前 agent-studio-device-firmware 的 `linux_https_openssl.c` | 复用新版实现；校验证书链、主机名、SNI；支持控制与后台 worker 的独立并发连接 |
+| KV / 提示音 | 当前 agent-studio-device-firmware Linux 文件实现 | 新应用使用独立目录和语言资源；保留原子替换及访问权限语义 |
 | 按键 | Linux evdev/keymap | 按板级能力选择键码；早期本地构建可采用 stdin 输入实现 |
 | 触摸 | 新增 Linux evdev 适配 | 读取 `axs_ts` 事件，统一横屏坐标、短触与长按规则 |
 | LCD / 表情 | 像素眼镜视图与显示策略 | 接入 Linux LVGL 9.5 owner，复制借用状态，使用单调时钟 |
@@ -103,7 +103,7 @@ SDK 必需的表为 Wi-Fi、KV、key、audio capture 和 audio playback；生产
 
 - SDK 音频接口计数为 PCM frames。20 ms 对应每路 320 帧、640 字节；保持云端 AEC 开启，参考信号来自播放设备实际接受的 RTC PCM，本地配对提示音不进入参考。无需新增第二条硬件参考采集通道。
 - 已有 ALSA `plug` 可承担格式转换；仍需确认双声道分别是什么信号、混合后的麦克风质量、放音路径延迟与增益。48 kHz 双声道是当前观测配置，不能推断硬件只支持此格式。
-- MyBot 1.3.0 要求产品按固定身份输入和平台派生 key 生成 HMAC-SHA256，截取前 12 字节，形成 `RV1126B-<24 个大写十六进制字符>`，共 32 字符。独立缓冲至少 33 字节。公共头文件提到 MAC，移植指南允许稳定设备标识；优先确定可长期稳定的出厂 MAC，并固定规范化方法与派生 key。
+- agent-studio-device-firmware 1.3.0 要求产品按固定身份输入和平台派生 key 生成 HMAC-SHA256，截取前 12 字节，形成 `RV1126B-<24 个大写十六进制字符>`，共 32 字符。独立缓冲至少 33 字节。公共头文件提到 MAC，移植指南允许稳定设备标识；优先确定可长期稳定的出厂 MAC，并固定规范化方法与派生 key。
 - 已有设备身份和绑定不能根据格式相似推断兼容；身份派生规则必须固定，升级时保持身份与 KV 策略。本次没有生成新身份或更改绑定。
 - 板载 `adc-keys` 的公开 capability bitmap 解码为键码 1、105、106、139，未声明 164（KEY_PLAYPAUSE），也未声明音量键。实际物理键映射需后续验证；默认键码应依据板级能力选择。
 - 初期采用显式触发会话，首次 READY 后等待用户通过触摸、按键或终端开始。
@@ -168,7 +168,7 @@ Linux 采用一个 UI owner 线程处理 LVGL、显示刷新和定时器，SDK �
 
 构建原则：
 
-1. 固定当前 MyBot 与 AOSL；主 SDK 目录不做板级修改。初始化其固定 AOSL 子模块，或在过渡构建中通过 `AOSL_DIR` 指向经过来源核对的同版本源码。
+1. 固定当前 agent-studio-device-firmware 与 AOSL；主 SDK 目录不做板级修改。初始化其固定 AOSL 子模块，或在过渡构建中通过 `AOSL_DIR` 指向经过来源核对的同版本源码。
 2. `CONFIG_PLATFORM=linux`；`MYBOT_BUILD_LINUX_PLATFORM=OFF`，按需编译新版 Linux KV、HTTPS、提示音等源文件；关闭 SDK 自带示例与目标测试。
 3. 语音配置采用 `MYBOT_AUDIO_PTIME_MS=20`、`MYBOT_CLOUD_AEC=ON`、`MYBOT_ENABLE_HTTPS=ON`、`MYBOT_ALLOW_INSECURE_HTTP=OFF`、`MYBOT_WAKE_WORDS=OFF`，第一阶段关闭视频。
 4. 显式提供同一 RTSA 包的 `AGORA_SDK_DIR` 和 AArch64 `AGORA_RTC_LIBRARY`，避免落入 SDK 自带的 x86_64 / 60 ms 默认值。
@@ -225,7 +225,7 @@ P1 和 P2 可在本地独立推进。P3 前必须明确现有服务、网络、�
 - 获取并核对官方网页；核对 SDK 公共头文件、目标依赖元数据和 Linux 硬件接口。
 - ADB 只读确认系统、CPU、内存、声卡当前状态、公开 ALSA 配置、显示、输入、摄像头节点、服务占用和七项运行库哈希。
 - 对评估阶段既有 AArch64 应用执行 ELF 检查，加载器、16 项传递依赖及符号版本检查通过，`errors=[]`。报告仅写入主机临时目录，该结果不等同于本项目产物已通过。
-- 使用当前 MyBot 的 CMake 校验函数，目标 RTSA 包通过 20 ms 与视频功能元数据检查。
+- 使用当前 agent-studio-device-firmware 的 CMake 校验函数，目标 RTSA 包通过 20 ms 与视频功能元数据检查。
 - 解析目标 RTSA 动态符号表，当前 `mybot_agora_rtc.c` 引用的 16 个 `agora_rtc_*` / `agora_rtm_*` 函数名均存在。函数数量以当前源码统计为准。
 - 执行像素眼镜视图的既有主机回归，适配器生命周期/状态策略与真实 LVGL 渲染器生命周期检查通过。构建与临时产物仅位于主机临时目录；本次未启用 sanitizer，该结果不代表 RV1126B UI 已完成。
 
@@ -237,7 +237,7 @@ P1 和 P2 可在本地独立推进。P3 前必须明确现有服务、网络、�
 | 评估阶段既有本地 AArch64 应用产物 | `45aef5903c081a6e7ce3636abf3e67501530a91282c8daf9f32facb4da6886ed` |
 | 设备现有 `/usr/bin/botstation-device` | `88601b6b6d9ce25087183f0dc4a4fd8808053bcee48d0271cda810608b052ce9` |
 
-未完成当前 MyBot 1.3.0 的目标构建、函数/结构体的完整 ABI 验证、新 UI 的 RV1126B 适配、云端会话测试或任何新程序的上板运行。静态依赖检查不覆盖 `dlopen` 模块、配置/字体资源、驱动行为和业务效果；函数名存在也不证明运行语义一致。
+未完成当前 agent-studio-device-firmware 1.3.0 的目标构建、函数/结构体的完整 ABI 验证、新 UI 的 RV1126B 适配、云端会话测试或任何新程序的上板运行。静态依赖检查不覆盖 `dlopen` 模块、配置/字体资源、驱动行为和业务效果；函数名存在也不证明运行语义一致。
 
 当前最值得实施的下一步是 P1 的新版语音本地构建，并行完成 P2 的像素眼镜视图移植与离屏验证；它们都不要求修改设备文件。
 

@@ -2,7 +2,7 @@
 
 固定来源和许可见 [VENDORED_SOURCES](../../VENDORED_SOURCES.md) 与 [THIRD_PARTY_NOTICES](../../THIRD_PARTY_NOTICES.md)。本工程保留自维护代码与快照的边界，构建包装位于 `cmake/dependencies/`，不为迁移目录而重写上游源码。
 
-MyBot、AOSL、LVGL、RTSA 分别位于 `vendor/mybot/`、`vendor/aosl/`、`vendor/lvgl/`、`vendor/rtsa/`，各自拥有独立依赖快照。RTSA 是工程必需依赖，完整保留官方包。MyBot 通过父工程设置的 `AOSL_DIR` 引用平级 AOSL，只创建一个 `aosl` target。视图和生成字库属于 `src/ui/` 的项目管理资源，不作为第三方源码依赖。目录范围及不可删除的构建输入见[第三方目录规则](third-party-layout.zh-CN.md)。
+agent-studio-device-firmware、AOSL、LVGL、RTSA 分别位于 `vendor/mybot/`、`vendor/aosl/`、`vendor/lvgl/`、`vendor/rtsa/`，各自拥有独立依赖快照。RTSA 是工程必需依赖，完整保留官方包。SDK 通过父工程设置的 `AOSL_DIR` 引用平级 AOSL，只创建一个 `aosl` target。视图和生成字库属于 `src/ui/` 的项目管理资源，不作为第三方源码依赖。目录范围及不可删除的构建输入见[第三方目录规则](third-party-layout.zh-CN.md)。
 
 ## 清单职责
 

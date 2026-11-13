@@ -12,13 +12,13 @@ src/
 
 vendor/
 ├── README.md
-├── mybot/                # MyBot SDK 自身源码、必要 Linux adapters 与构建输入
+├── mybot/                # agent-studio-device-firmware 源码、必要 Linux adapters 与构建输入
 ├── aosl/                 # AOSL 公共实现与 Linux HAL
 ├── lvgl/                 # LVGL 固定生产子集
 └── rtsa/                 # RTSA 1.10.1 完整官方包（含 agora_sdk/、示例与文档）
 
 cmake/dependencies/
-├── sdk.cmake             # MyBot、AOSL 和内置 RTSA 集成
+├── sdk.cmake             # agent-studio-device-firmware、AOSL 和内置 RTSA 集成
 ├── public-headers.cmake
 ├── lvgl.cmake
 └── lvgl-sources.cmake
@@ -27,15 +27,15 @@ docs/dependencies/        # 集成说明、补丁和原始导入记录
 dependencies.lock.json   # 当前身份、文件清单、迁移、裁剪与资源记录
 ```
 
-MyBot 依赖 AOSL 和 RTSA，UI 依赖 LVGL；目录平铺后，这些链接依赖继续由 CMake targets 表达。RTSA 完整包内置于 `vendor/rtsa/`，构建固定选择 `agora_sdk/lib/aarch64/libagora-rtc-sdk.so`。ALSA、OpenSSL、libdrm、MPP 和 libc 使用目标系统开发文件与运行库，不复制到 `vendor/`。
+agent-studio-device-firmware 依赖 AOSL 和 RTSA，UI 依赖 LVGL；目录平铺后，这些链接依赖继续由 CMake targets 表达。RTSA 完整包内置于 `vendor/rtsa/`，构建固定选择 `agora_sdk/lib/aarch64/libagora-rtc-sdk.so`。ALSA、OpenSSL、libdrm、MPP 和 libc 使用目标系统开发文件与运行库，不复制到 `vendor/`。
 
 `src/ui/` 中的视图由锁文件的 `managed_assets` 登记；字库及生成输入由 `generated_fonts` 登记。两者均由项目维护，与四项第三方依赖快照分别校验，资源携带的文件级许可继续适用。
 
-## MyBot 与 AOSL 的构建边界
+## agent-studio-device-firmware 与 AOSL 的构建边界
 
 AOSL 原嵌套目录的 330 个文件先原样移动，再单独登记裁剪；版本保持为已有记录的固定 commit `84e086084ebcd0ae2455a0ce5721950c5fe2e656`，不将其描述为本轮重新核验过的上游版本。
 
-父工程在调用 MyBot 的 `add_subdirectory()` 前设置 `AOSL_DIR`，由 SDK 创建唯一的 `aosl` target：
+父工程在调用 SDK 的 `add_subdirectory()` 前设置 `AOSL_DIR`，由 SDK 创建唯一的 `aosl` target：
 
 ```cmake
 set(AOSL_DIR "${PROJECT_SOURCE_DIR}/vendor/aosl"
@@ -52,7 +52,7 @@ set(AOSL_DIR "${PROJECT_SOURCE_DIR}/vendor/aosl"
 
 | 依赖 | 保留内容 | 有意裁剪 |
 | --- | --- | --- |
-| MyBot | SDK 公共头与实现、Linux adapters、PCM 提示资源、必需 CMake 模板和完整许可/notice | 仓库管理及重复协作流程、未使用 host 工具链、未启用测试和示例 |
+| agent-studio-device-firmware | SDK 公共头与实现、Linux adapters、PCM 提示资源、必需 CMake 模板和完整许可/notice | 仓库管理及重复协作流程、未使用 host 工具链、未启用测试和示例 |
 | AOSL | 根 CMake、通用源码与头文件、Linux HAL、库内测试实现和完整许可 | 非 Linux HAL、仓库管理文件、独立测试入口 |
 | LVGL | 现有生产子集、所需公共头、许可与版权记录、字体许可、已登记遮罩修补 | 项目集成说明外置到 [docs/dependencies/lvgl.md](../dependencies/lvgl.md) |
 | RTSA | 官方 1.10.1 归档的全部 99 个文件：SDK 头/库、示例、说明和协作资源 | 不裁剪、不修改厂商文件 |
@@ -64,7 +64,7 @@ set(AOSL_DIR "${PROJECT_SOURCE_DIR}/vendor/aosl"
 
 LVGL 公共头可能包含未启用模块的声明，不能仅凭某个 `.c` 没有编译就删除对应头文件。本轮保留既有生产子集；mask callback 类型修补仍由独立补丁和结果哈希记录。
 
-此前目录治理从 166 个 MyBot 自身文件、330 个 AOSL 文件及 720 个 LVGL 文件，整理为 110、124、719 个文件。262 个文件属于显式裁剪；LVGL 集成说明属于路径迁移，不计作裁剪。新增 RTSA 完整包的 99 个文件不属于该裁剪范围；官方 x86_64 内容与未使用示例也完整保留。原始版权、许可与必需 notice 未裁剪。所有文件以锁清单为准，测试结果另见[验证状态](../validation/README.md)。
+此前目录治理从 166 个 agent-studio-device-firmware 自身文件、330 个 AOSL 文件及 720 个 LVGL 文件，整理为 110、124、719 个文件。262 个文件属于显式裁剪；LVGL 集成说明属于路径迁移，不计作裁剪。新增 RTSA 完整包的 99 个文件不属于该裁剪范围；官方 x86_64 内容与未使用示例也完整保留。原始版权、许可与必需 notice 未裁剪。所有文件以锁清单为准，测试结果另见[验证状态](../validation/README.md)。
 
 ## 锁文件与历史记录
 
@@ -72,7 +72,7 @@ LVGL 公共头可能包含未启用模块的声明，不能仅凭某个 `.c` 没
 
 | 记录 | 约束 |
 | --- | --- |
-| `snapshots` | MyBot、AOSL、LVGL、RTSA 各自记录身份和文件；目录互不包含，每个文件归属唯一 |
+| `snapshots` | agent-studio-device-firmware、AOSL、LVGL、RTSA 各自记录身份和文件；目录互不包含，每个文件归属唯一 |
 | `import_adaptations` | 历史路径映射到当前路径，保留原始哈希、当前结果哈希和适配理由 |
 | `import_omissions` | 记录历史路径、`original_sha256`、`previous_path` 和理由；原路径与先前目标均不得残留 |
 | `path_migrations` | 保存目录整体迁移的 `from`、`to` 和 `reason`，拒绝旧目录重新出现、目标缺失或循环规则 |

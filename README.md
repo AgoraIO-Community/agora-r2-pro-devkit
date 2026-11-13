@@ -1,8 +1,8 @@
-# mybot-rv1126b
+# agora-r2-pro-devkit
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A Linux application for running MyBot 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides HTTPS pairing, bidirectional voice, persistent device identity, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
+A Linux application for running agent-studio-device-firmware 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides HTTPS pairing, bidirectional voice, persistent device identity, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
 
 The current source is the **0.2.2 source-layout candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. The reorganized candidate needs a new device regression; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
 
@@ -61,4 +61,4 @@ Project-maintained modules live under `src/`; pinned dependency snapshots live u
 - [Dependency layout](docs/development/third-party-layout.zh-CN.md), [source provenance](VENDORED_SOURCES.md)
 - [Contributing](CONTRIBUTING.md), [support](SUPPORT.md), [changelog](CHANGELOG.md)
 
-Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. MyBot/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. The bundled RTSA package retains its vendor terms and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.
+Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. agent-studio-device-firmware/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. The bundled RTSA package retains its vendor terms and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.

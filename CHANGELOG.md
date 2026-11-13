@@ -13,7 +13,7 @@ This source-layout candidate requires its own hardware regression.
 
 ## 0.2.1 — Unreleased
 
-- Manage MyBot, AOSL and LVGL as separate pinned source directories.
+- Manage agent-studio-device-firmware, AOSL and LVGL as separate pinned source directories.
 - Record directory migrations, explicit omissions, unique ownership and required build inputs in the dependency lock.
 - Keep the Linux production subset, move integration documentation outside dependency sources, and preserve runtime sources and licenses.
 - Vendor the complete official Agora RTSA 1.10.1 package as an essential independent dependency; pin target builds to its AArch64 library and include vendor documentation in application bundles.
@@ -40,6 +40,6 @@ This governance candidate requires a new hardware regression. Optional video, au
 
 ## 0.1.0 — 2026-11-13
 
-- Initial MyBot 1.3.0 RV1126B Linux application: HTTPS pairing, bidirectional voice, persistent identity, evdev input and pixel-glasses UI.
+- Initial agent-studio-device-firmware 1.3.0 RV1126B Linux application: HTTPS pairing, bidirectional voice, persistent identity, evdev input and pixel-glasses UI.
 - Optional V4L2/MPP JPEG uplink, AArch64 ABI checks and self-contained test bundles.
 - User verified checksums and the default voice/UI business flow on hardware. Optional video and extended stability were not accepted by that result.

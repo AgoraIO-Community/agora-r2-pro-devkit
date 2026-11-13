@@ -4,7 +4,7 @@ Follow the user's task and preserve unrelated changes. This is a Linux/CMake app
 
 Project documentation and tool output describe this application and its required dependencies. Omit background about other application repositories. Preserve applicable copyright and license notices.
 
-- `src/application/` owns configuration, identity, runtime guards and lifecycle. `src/platform/` owns board defaults, Linux services and drivers. `src/ui/` owns a pure 640×480 renderer and views. Use MyBot public headers only.
+- `src/application/` owns configuration, identity, runtime guards and lifecycle. `src/platform/` owns board defaults, Linux services and drivers. `src/ui/` owns a pure 640×480 renderer and views. Use agent-studio-device-firmware public headers only.
 - Keep public include namespaces (`mybot_platform/`, `mybot_ui/`) and CMake targets stable during directory refactors. `tools/` contains developer programs; `scripts/` contains build/check/generation/packaging automation.
 - `vendor/` is a pinned snapshot boundary. Keep the required RTSA package complete, including vendor binaries and documentation. Make dependency changes deliberately, retain licenses, record patches and synchronize `dependencies.lock.json` and provenance. Do not bulk-format snapshots or generated fonts. See `VENDORED_SOURCES.md`.
 - Follow the Conventional Commits format and allowed types in `CONTRIBUTING.md`; keep the subject imperative and within 72 characters, mark incompatible changes with `!` and a `BREAKING CHANGE:` footer, and install `./scripts/setup-githooks.sh`.

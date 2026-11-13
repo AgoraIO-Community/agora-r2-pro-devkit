@@ -1,8 +1,8 @@
-# mybot-rv1126b
+# agora-r2-pro-devkit
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-面向 **RV1126B TEST2 RK805B V10** 的 MyBot 1.3.0 Linux 应用，提供 HTTPS 配对、双向语音、稳定设备身份与持久化、像素眼镜 UI，以及可选的 V4L2/MPP JPEG 上行。
+面向 **RV1126B TEST2 RK805B V10** 的 agent-studio-device-firmware 1.3.0 Linux 应用，提供 HTTPS 配对、双向语音、稳定设备身份与持久化、像素眼镜 UI，以及可选的 V4L2/MPP JPEG 上行。
 
 当前源码为 **0.2.2 源码目录重构候选版**。0.1.0 的语音/UI业务流程和 0.1.1 的文字渲染优化已由用户真机验收；目录重组后的候选版需要重新进行设备回归。可选视频和长时间稳定性专项尚未完成。[验证状态](docs/validation/README.md)是结果的唯一现行入口。
 
@@ -61,4 +61,4 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 - [依赖目录规则](docs/development/third-party-layout.zh-CN.md)、[源码来源](VENDORED_SOURCES.md)
 - [贡献指南](CONTRIBUTING.zh-CN.md)、[支持](SUPPORT.zh-CN.md)、[变更记录](CHANGELOG.md)
 
-自维护代码默认采用 [Apache-2.0](LICENSE)，具体文件声明优先。MyBot/AOSL、LVGL 和字体分别保留原许可，像素眼镜视图遵循文件级许可声明；内置 RTSA 保留厂商条款，不受本项目许可证覆盖。再分发源码或交付包前，请阅读[第三方声明](THIRD_PARTY_NOTICES.md)和[依赖来源](VENDORED_SOURCES.md)。
+自维护代码默认采用 [Apache-2.0](LICENSE)，具体文件声明优先。agent-studio-device-firmware/AOSL、LVGL 和字体分别保留原许可，像素眼镜视图遵循文件级许可声明；内置 RTSA 保留厂商条款，不受本项目许可证覆盖。再分发源码或交付包前，请阅读[第三方声明](THIRD_PARTY_NOTICES.md)和[依赖来源](VENDORED_SOURCES.md)。

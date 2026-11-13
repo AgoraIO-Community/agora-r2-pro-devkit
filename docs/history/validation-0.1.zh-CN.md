@@ -6,7 +6,7 @@
 
 ## 0.1.0 已完成
 
-- 固定 MyBot 1.3.0、Linux AOSL、像素眼镜视图和 LVGL 9.5.0 源码，保留来源及许可。
+- 固定 agent-studio-device-firmware 1.3.0、Linux AOSL、像素眼镜视图和 LVGL 9.5.0 源码，保留来源及许可。
 - Intel macOS 使用 Zig 0.15.2 交叉编译语音/UI与视频/UI两个 AArch64 程序。
 - 语音构建的 9 项传递依赖、视频构建的 11 项传递依赖完成 ELF 架构、加载器、符号版本和 RPATH 检查，均为 `errors=[]`。
 - 产物加载器为 `/lib/ld-linux-aarch64.so.1`，应用 RPATH 为 `$ORIGIN/../lib`。LVGL 9.5 静态链接，未引入设备的 LVGL 8 或额外动态 C++ 运行库。
