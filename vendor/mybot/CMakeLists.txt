@@ -1,0 +1,321 @@
+cmake_minimum_required(VERSION 3.16)
+
+# Single source of truth for the SDK version. include/mybot/mybot_version.h is
+# generated from mybot_version.h.in at configure time, so the code can never
+# drift from the version declared here.
+set(MYBOT_VERSION_MAJOR 1)
+set(MYBOT_VERSION_MINOR 3)
+set(MYBOT_VERSION_PATCH 0)
+set(MYBOT_VERSION_PRERELEASE "")
+if(MYBOT_VERSION_PRERELEASE)
+    set(MYBOT_VERSION_STRING
+        "${MYBOT_VERSION_MAJOR}.${MYBOT_VERSION_MINOR}.${MYBOT_VERSION_PATCH}-${MYBOT_VERSION_PRERELEASE}")
+else()
+    set(MYBOT_VERSION_STRING
+        "${MYBOT_VERSION_MAJOR}.${MYBOT_VERSION_MINOR}.${MYBOT_VERSION_PATCH}")
+endif()
+
+project(mybot VERSION ${MYBOT_VERSION_MAJOR}.${MYBOT_VERSION_MINOR}.${MYBOT_VERSION_PATCH}
+        LANGUAGES C)
+
+include(GNUInstallDirs)
+
+configure_file(include/mybot/mybot_version.h.in
+               ${CMAKE_CURRENT_BINARY_DIR}/include/mybot/mybot_version.h @ONLY)
+
+set(CMAKE_C_STANDARD 99)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    set(MYBOT_TOP_LEVEL ON)
+else()
+    set(MYBOT_TOP_LEVEL OFF)
+endif()
+
+if(MYBOT_TOP_LEVEL AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(MYBOT_LINUX_DEFAULT ON)
+else()
+    set(MYBOT_LINUX_DEFAULT OFF)
+endif()
+
+# MYBOT_BUILD_LINUX_PLATFORM selects the bundled reference platform implementations under
+# platforms/linux/ (ALSA audio/volume, stdin keys, file KV, console LCD, PCM
+# announcements, development host networking and optional OpenSSL TLS). It is
+# independent from CONFIG_PLATFORM, which selects the AOSL HAL port consumed
+# by third_party/aosl (e.g. linux, esp32, bk725x).
+option(MYBOT_BUILD_LINUX_PLATFORM "Build the bundled Linux platform implementations (requires CONFIG_PLATFORM=linux)" ${MYBOT_LINUX_DEFAULT})
+option(MYBOT_BUILD_EXAMPLES "Build mybot example applications" ${MYBOT_LINUX_DEFAULT})
+option(MYBOT_BUILD_TESTS "Build mybot tests" ${MYBOT_LINUX_DEFAULT})
+option(MYBOT_ENABLE_ASAN "Enable AddressSanitizer for mybot targets" OFF)
+option(MYBOT_ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer for mybot targets" OFF)
+option(MYBOT_ENABLE_COVERAGE "Instrument mybot targets for gcov code coverage" OFF)
+
+set(MYBOT_AUDIO_PTIME_MS "60" CACHE STRING "Audio packet duration: 20, 40, or 60 ms")
+set_property(CACHE MYBOT_AUDIO_PTIME_MS PROPERTY STRINGS 20 40 60)
+option(MYBOT_CLOUD_AEC "Enable server-side acoustic echo cancellation" ON)
+option(MYBOT_WAKE_WORDS "Enable the platform local-ASR wake-word implementation" OFF)
+option(MYBOT_ENABLE_VIDEO "Enable encoded video uplink" OFF)
+set(MYBOT_VIDEO_MAX_FRAME_BYTES "524288" CACHE STRING
+    "Maximum encoded video frame accepted by the SDK")
+option(MYBOT_AI_QOS "Enable Agora AI-driven QoS optimization" ON)
+set(MYBOT_FAST_SEND_MULTIPLIER "3" CACHE STRING "Agora fast-send multiplier: 1 through 5")
+set_property(CACHE MYBOT_FAST_SEND_MULTIPLIER PROPERTY STRINGS 1 2 3 4 5)
+option(MYBOT_ENABLE_HTTPS "Enable HTTPS device-service transport" ON)
+option(MYBOT_ALLOW_INSECURE_HTTP "Allow plaintext HTTP for local development" OFF)
+
+if(NOT MYBOT_ENABLE_HTTPS AND NOT MYBOT_ALLOW_INSECURE_HTTP)
+    message(FATAL_ERROR
+        "Enable MYBOT_ENABLE_HTTPS or explicitly set MYBOT_ALLOW_INSECURE_HTTP=ON")
+endif()
+
+if(NOT MYBOT_AUDIO_PTIME_MS MATCHES "^(20|40|60)$")
+    message(FATAL_ERROR "MYBOT_AUDIO_PTIME_MS must be 20, 40, or 60")
+endif()
+if(NOT MYBOT_FAST_SEND_MULTIPLIER MATCHES "^[1-5]$")
+    message(FATAL_ERROR "MYBOT_FAST_SEND_MULTIPLIER must be an integer from 1 through 5")
+endif()
+if(NOT MYBOT_VIDEO_MAX_FRAME_BYTES MATCHES "^[1-9][0-9]*$")
+    message(FATAL_ERROR "MYBOT_VIDEO_MAX_FRAME_BYTES must be a positive integer")
+endif()
+
+set(AOSL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/aosl" CACHE PATH
+    "Path to the AOSL source tree")
+set(AGORA_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/agora_rtsa_sdk/agora_sdk" CACHE PATH
+    "Path to the Agora RTSA SDK package")
+set(AGORA_RTC_LIBRARY "${AGORA_SDK_DIR}/lib/x86_64/libagora-rtc-sdk.so" CACHE FILEPATH
+    "Path to the Agora RTSA library for the target architecture")
+
+include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/mybot_rtsa_ptime.cmake")
+
+if(NOT TARGET aosl)
+    set(AOSL_DECLARE_PROJECT OFF CACHE BOOL "Build AOSL as a standalone project" FORCE)
+    set(AOSL_COMPILE_TEST OFF CACHE BOOL "Build AOSL tests" FORCE)
+    include("${AOSL_DIR}/CMakeLists.txt")
+    add_library(aosl STATIC ${AOSL_ADD_SOURCES})
+    target_include_directories(aosl
+        PUBLIC ${AOSL_ADD_INCLUDES_PUBLIC}
+        PRIVATE ${AOSL_ADD_INCLUDES_PRIVATE}
+    )
+    target_compile_options(aosl PRIVATE ${AOSL_ADD_OPTIONS})
+    target_compile_definitions(aosl PRIVATE ${AOSL_ADD_DEFINITIONS})
+    # Make the exported target relocatable: installed AOSL headers are merged
+    # under ${CMAKE_INSTALL_INCLUDEDIR}. Builds inside this tree keep the
+    # original source include roots through per-path BUILD_INTERFACE entries.
+    set_property(TARGET aosl PROPERTY INTERFACE_INCLUDE_DIRECTORIES "")
+    foreach(_aosl_dir IN LISTS AOSL_ADD_INCLUDES_PUBLIC)
+        set_property(TARGET aosl APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+            "$<BUILD_INTERFACE:${_aosl_dir}>")
+    endforeach()
+    set_property(TARGET aosl APPEND PROPERTY INTERFACE_INCLUDE_DIRECTORIES
+        "$<INSTALL_INTERFACE:include>")
+endif()
+
+if(NOT TARGET agora-rtc-sdk)
+    if(NOT EXISTS "${AGORA_SDK_DIR}/include/agora_rtc_api.h")
+        message(FATAL_ERROR
+            "Agora RTSA headers were not found under AGORA_SDK_DIR=${AGORA_SDK_DIR}")
+    endif()
+    if(NOT EXISTS "${AGORA_RTC_LIBRARY}")
+        message(FATAL_ERROR "Agora RTSA library was not found: ${AGORA_RTC_LIBRARY}")
+    endif()
+    set(_agora_rtc_library_type STATIC)
+    if(AGORA_RTC_LIBRARY MATCHES "\\.so(\\.[0-9]+)*$" OR
+       AGORA_RTC_LIBRARY MATCHES "\\.dylib$")
+        set(_agora_rtc_library_type SHARED)
+    endif()
+    add_library(agora-rtc-sdk ${_agora_rtc_library_type} IMPORTED GLOBAL)
+    set_target_properties(agora-rtc-sdk PROPERTIES
+        IMPORTED_LOCATION "${AGORA_RTC_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${AGORA_SDK_DIR}/include"
+    )
+    unset(_agora_rtc_library_type)
+else()
+    # A parent project may provide the target, but ptime validation must still
+    # describe the exact SDK that supplies the ABI. Require inspectable
+    # imported target properties so a mismatched predeclared target cannot pass
+    # silently.
+    get_target_property(_agora_target_includes agora-rtc-sdk INTERFACE_INCLUDE_DIRECTORIES)
+    get_target_property(_agora_target_location agora-rtc-sdk IMPORTED_LOCATION)
+    if(NOT _agora_target_includes OR NOT _agora_target_location OR
+       NOT "${_agora_target_includes}" MATCHES "(^|;)${AGORA_SDK_DIR}/include(;|$)" OR
+       NOT "${_agora_target_location}" STREQUAL "${AGORA_RTC_LIBRARY}")
+        message(FATAL_ERROR
+            "Predefined agora-rtc-sdk must expose INTERFACE_INCLUDE_DIRECTORIES=${AGORA_SDK_DIR}/include "
+            "and IMPORTED_LOCATION=${AGORA_RTC_LIBRARY} so the validated RTSA package is explicit")
+    endif()
+    unset(_agora_target_includes)
+    unset(_agora_target_location)
+endif()
+
+mybot_check_rtsa_ptime("${AGORA_SDK_DIR}" "${MYBOT_AUDIO_PTIME_MS}")
+mybot_check_rtsa_video("${AGORA_SDK_DIR}" "${MYBOT_ENABLE_VIDEO}")
+
+function(mybot_enable_sanitizers target)
+    if(MYBOT_ENABLE_ASAN AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${target} PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
+        target_link_options(${target} PRIVATE -fsanitize=address)
+    endif()
+    if(MYBOT_ENABLE_UBSAN AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${target} PRIVATE -fsanitize=undefined -fno-sanitize-recover=all)
+        target_link_options(${target} PRIVATE -fsanitize=undefined)
+    endif()
+    if(MYBOT_ENABLE_COVERAGE AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${target} PRIVATE --coverage -g -O0)
+        if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+            # SDK workers and tests update shared gcov counters concurrently.
+            target_compile_options(${target} PRIVATE -fprofile-update=atomic)
+        endif()
+        target_link_options(${target} PRIVATE --coverage)
+    endif()
+endfunction()
+
+add_library(mybot_sdk STATIC
+    src/core/mybot_app.c
+    src/core/mybot_device_command.c
+    src/core/mybot_device_lifecycle.c
+    src/core/mybot_presenter.c
+    src/core/mybot_state_model.c
+    src/core/mybot_version.c
+    src/media/mybot_audio.c
+    src/media/mybot_media_pipeline.c
+    src/media/mybot_wake_words.c
+    src/media/mybot_video.c
+    src/platform/mybot_announce.c
+    src/platform/mybot_key.c
+    src/platform/mybot_https.c
+    src/platform/mybot_kv_store.c
+    src/platform/mybot_lcd.c
+    src/platform/mybot_platform.c
+    src/platform/mybot_wifi.c
+    src/rtc/mybot_agora_rtc.c
+    src/service/mybot_device_client.c
+    src/support/mybot_http_header.c
+    src/support/mybot_http_client.c
+    src/support/mybot_json.c
+    src/support/mybot_ringbuf.c
+    src/support/mybot_url.c
+)
+add_library(mybot::sdk ALIAS mybot_sdk)
+set_target_properties(mybot_sdk PROPERTIES EXPORT_NAME sdk)
+
+# MYBOT_API expands to dllexport while building a Windows DLL, dllimport for
+# Windows consumers, and default visibility on GCC/Clang. The separate
+# -fvisibility=hidden option keeps unannotated internal symbols out of any
+# future shared build.
+target_compile_definitions(mybot_sdk PRIVATE MYBOT_BUILDING_LIBRARY)
+if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(mybot_sdk PRIVATE -fvisibility=hidden)
+endif()
+
+target_include_directories(mybot_sdk
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/internal
+)
+target_compile_definitions(mybot_sdk PUBLIC
+    MYBOT_AUDIO_PTIME_MS=${MYBOT_AUDIO_PTIME_MS}
+    MYBOT_CLOUD_AEC=$<BOOL:${MYBOT_CLOUD_AEC}>
+    MYBOT_WAKE_WORDS=$<BOOL:${MYBOT_WAKE_WORDS}>
+    MYBOT_ENABLE_VIDEO=$<BOOL:${MYBOT_ENABLE_VIDEO}>
+    MYBOT_VIDEO_MAX_FRAME_BYTES=${MYBOT_VIDEO_MAX_FRAME_BYTES}
+    MYBOT_AI_QOS=$<BOOL:${MYBOT_AI_QOS}>
+    MYBOT_FAST_SEND_MULTIPLIER=${MYBOT_FAST_SEND_MULTIPLIER}
+    MYBOT_ENABLE_HTTPS=$<BOOL:${MYBOT_ENABLE_HTTPS}>
+    MYBOT_ALLOW_INSECURE_HTTP=$<BOOL:${MYBOT_ALLOW_INSECURE_HTTP}>
+)
+target_link_libraries(mybot_sdk PUBLIC
+    aosl
+    $<BUILD_INTERFACE:agora-rtc-sdk>
+    $<INSTALL_INTERFACE:mybot::agora-rtc-sdk>
+)
+if(UNIX)
+    find_package(Threads REQUIRED)
+    target_link_libraries(mybot_sdk PUBLIC Threads::Threads ${CMAKE_DL_LIBS} m)
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    target_link_libraries(mybot_sdk PUBLIC rt)
+endif()
+mybot_enable_sanitizers(mybot_sdk)
+
+# The Linux reference platform implementations (ALSA) require the AOSL Linux HAL. CONFIG_PLATFORM
+# is set by third_party/aosl; reject a mismatch at configure time instead of
+# failing later with confusing compiler errors.
+if(MYBOT_BUILD_LINUX_PLATFORM AND NOT CONFIG_PLATFORM STREQUAL "linux")
+    message(FATAL_ERROR
+        "MYBOT_BUILD_LINUX_PLATFORM=ON requires CONFIG_PLATFORM=linux "
+        "(current: '${CONFIG_PLATFORM}'). CONFIG_PLATFORM selects the AOSL HAL port; "
+        "MYBOT_BUILD_LINUX_PLATFORM selects the mybot Linux platform implementations.")
+endif()
+
+if(MYBOT_BUILD_LINUX_PLATFORM)
+    add_subdirectory(platforms/linux)
+endif()
+
+if(MYBOT_BUILD_EXAMPLES)
+    if(NOT MYBOT_BUILD_LINUX_PLATFORM)
+        message(FATAL_ERROR "MYBOT_BUILD_EXAMPLES currently requires MYBOT_BUILD_LINUX_PLATFORM=ON")
+    endif()
+    add_subdirectory(examples/linux)
+endif()
+
+if(MYBOT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+include(CMakePackageConfigHelpers)
+set(MYBOT_INSTALL_CMAKEDIR ${CMAKE_INSTALL_LIBDIR}/cmake/mybot)
+
+install(TARGETS mybot_sdk aosl
+    EXPORT mybotTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+install(EXPORT mybotTargets
+    FILE mybotTargets.cmake
+    NAMESPACE mybot::
+    DESTINATION ${MYBOT_INSTALL_CMAKEDIR}
+)
+
+configure_package_config_file(
+    cmake/mybotConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/mybotConfig.cmake
+    INSTALL_DESTINATION ${MYBOT_INSTALL_CMAKEDIR}
+)
+configure_file(cmake/mybot_rtsa_ptime.cmake
+               ${CMAKE_CURRENT_BINARY_DIR}/mybot_rtsa_ptime.cmake COPYONLY)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/mybotConfigVersion.cmake
+    VERSION ${MYBOT_VERSION_STRING}
+    COMPATIBILITY SameMajorVersion
+)
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/mybotConfig.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/mybotConfigVersion.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/mybot_rtsa_ptime.cmake
+    DESTINATION ${MYBOT_INSTALL_CMAKEDIR}
+)
+
+configure_file(docs/Doxyfile.in ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile @ONLY)
+
+# Keep the project license and third-party terms with every installed development package.
+install(FILES LICENSE THIRD_PARTY_NOTICES.md DESTINATION ${CMAKE_INSTALL_DOCDIR})
+
+# AOSL is bundled with the installed package. Headers merge into include/api and include/hal,
+# matching the build-time include layout; its additional terms are installed alongside ours.
+install(DIRECTORY ${AOSL_DIR}/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY ${AOSL_DIR}/platform/include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        FILES_MATCHING PATTERN "*.h")
+install(DIRECTORY ${AOSL_DIR}/platform/src/${CONFIG_PLATFORM}/config/
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR} FILES_MATCHING PATTERN "*.h")
+install(FILES ${AOSL_DIR}/LICENSE DESTINATION ${CMAKE_INSTALL_DOCDIR} RENAME aosl-LICENSE)
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/include/mybot/mybot_version.h
+        DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/mybot)
+install(DIRECTORY include/mybot DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+        PATTERN "*.in" EXCLUDE)

@@ -1,0 +1,4 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#include "build_identity.h"
+const volatile char rv1126b_build_identity[] =
+    "MYBOT_RV1126B_BUILD_CONFIG:@PROJECT_VERSION@;@RV1126B_LANGUAGE@;video=@RV1126B_VIDEO_NUMBER@;ptime_ms=20;board=@RV1126B_BOARD@";

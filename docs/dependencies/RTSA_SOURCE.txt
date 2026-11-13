@@ -1,0 +1,45 @@
+Package: Agora-RTSALite-RmRdRcAuAcAjCF-aarch64-linux-gnu-v1.10.1-20260907_142445-1285791
+Source URL: https://download.agora.io/rtsasdk/release/Agora-RTSALite-RmRdRcAuAcAjCF-aarch64-linux-gnu-v1.10.1-20260907_142445-1285791.tgz
+Archive SHA256: 850834b5b925ffb7fb447e97cf9ec5dc33fe0a0f68108e1a4954ee7590870fbe
+Original source record: 2026-10-12
+Vendored: 2026-11-13
+Vendored location: vendor/rtsa
+Import scope: all 99 official files, 38,268,142 bytes, unmodified
+Target SDK root: vendor/rtsa/agora_sdk
+Target library: vendor/rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so
+Library SHA256: 0e878752644d94227c2aa5f3a9d2259c4098850297c867a2460cbbf8c66d3d98
+
+Observed ELF: little-endian ELF64, AArch64 (183), DYN (3).
+SONAME: libagora-rtc-sdk.so
+NEEDED: libm.so.6, libpthread.so.0, libc.so.6, ld-linux-aarch64.so.1
+Required GLIBC symbol version observed: GLIBC_2.17
+CONFIG_MINIMAL_TIMER_INTERVAL_MS=20
+CONFIG_RTM=y
+CONFIG_RTM_CHANNEL=y
+CONFIG_RTC_STRING_UID=y
+CONFIG_AUDIO_CODEC_OPUS=y
+CONFIG_AUDIO_JITTER_BUFFER=y
+
+The complete official package is an essential committed dependency. Its
+headers, libraries, examples, documentation, collaboration guides and skills
+are retained unchanged and inventoried in dependencies.lock.json. The archive's
+two empty agora_sdk/bin architecture directories have no files to record in Git.
+The compressed download itself is not duplicated in the source tree.
+
+The vendor archive also contains x86_64 binaries. PACKAGE_INFO names the
+AArch64 release, while agora_sdk/.config CONFIG_PACKAGE_INFO names x86_64.
+Preserve the original metadata. Application builds select the locked AArch64
+ELF explicitly, using the public headers from the same package; local setup
+requires no external RTSA path or download. CMake resets stale SDK/library
+cache paths to this vendored package. Re-run local SDK configuration if an
+existing configuration still references an external RTSA package.
+
+Runtime packages contain the selected AArch64 library, this provenance record,
+and the original README.md, README.en.md and PACKAGE_INFO under licenses/.
+The complete SDK remains in the source repository. Actual build, ABI and
+hardware evidence is recorded separately in docs/validation/README.md.
+
+The official archive provides no standalone license file. Its original notices
+and documentation are preserved. Vendor use and distribution terms remain
+applicable; this project's Apache-2.0 license and this provenance record do not
+grant additional redistribution or product-use rights for RTSA.
