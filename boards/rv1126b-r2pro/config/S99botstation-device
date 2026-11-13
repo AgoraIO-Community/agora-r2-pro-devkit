@@ -1,0 +1,62 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+
+DAEMON=/usr/bin/botstation-device
+CONFIG=/etc/botstation-device.conf
+PIDFILE=/run/botstation-device.pid
+LOGFILE=/var/log/botstation-device.log
+
+if [ -r "$CONFIG" ]; then
+    . "$CONFIG"
+fi
+
+start_service() {
+    [ "${BOTSTATION_ENABLED:-1}" = "1" ] || exit 0
+    [ -x "$DAEMON" ] || { echo "missing $DAEMON"; exit 1; }
+    mountpoint -q /userdata || { echo "/userdata is not mounted"; exit 1; }
+
+    amixer -c 0 sset "ACodec_LP Digital Gain Volume" 0 >/dev/null ||
+        { echo "cannot set codec digital gain"; exit 1; }
+    amixer -c 0 sset "ACodec_LP PGA Gain Volume" 23 >/dev/null ||
+        { echo "cannot set codec PGA gain"; exit 1; }
+
+    if [ -e /etc/botstation-video-capture ]; then
+        pidof rkaiq_3A_server >/dev/null ||
+            { echo "rkaiq_3A_server is not running"; exit 1; }
+        ! pidof rkipc >/dev/null ||
+            { echo "rkipc must stop before video capture starts"; exit 1; }
+    fi
+
+    mkdir -p /run /userdata/botstation
+    touch "$LOGFILE"
+    chmod 0600 "$LOGFILE"
+    start-stop-daemon -S -b -m -p "$PIDFILE" -x "$DAEMON" \
+        >>"$LOGFILE" 2>&1
+}
+
+stop_service() {
+    [ -r "$PIDFILE" ] || return 0
+    pid=$(cat "$PIDFILE")
+    case "$pid" in
+        ''|*[!0-9]*) echo "invalid PID file"; rm -f "$PIDFILE"; return 1 ;;
+    esac
+    kill -TERM "$pid" 2>/dev/null || { rm -f "$PIDFILE"; return 0; }
+    count=0
+    while [ "$count" -lt 60 ]; do
+        kill -0 "$pid" 2>/dev/null || { rm -f "$PIDFILE"; return 0; }
+        count=$((count + 1))
+        sleep 1
+    done
+    echo "botstation-device did not stop within 60 seconds"
+    return 1
+}
+
+case "${1:-}" in
+    start) start_service ;;
+    stop) stop_service ;;
+    restart) stop_service && start_service ;;
+    status)
+        [ -r "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
+        ;;
+    *) echo "Usage: $0 {start|stop|restart|status}"; exit 1 ;;
+esac

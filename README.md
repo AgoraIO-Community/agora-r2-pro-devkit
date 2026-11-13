@@ -10,10 +10,26 @@ with [agent-studio-device-firmware](https://github.com/AgoraIO-Community/agent-s
 and Agora RTSA while keeping board-specific hardware behind a clear platform adapter boundary.
 
 > **Project status:** an initial RV1126B Linux device service is available in
-> [`app/botstation-device`](app/botstation-device/README.md). It is an exploratory port, not a
+> [`docs/botstation-device.md`](docs/botstation-device.md). It is an exploratory port, not a
 > confirmed R2 Pro board profile; the official SoC selection, pin map, partition layout, and
 > hardware validation remain pending. The capabilities below are integration requirements, not
 > claims that the R2 Pro has been implemented or hardware-validated.
+
+## Repository layout
+
+```text
+src/botstation-device/     Service lifecycle and configuration
+src/platform/rv1126b/      RV1126B platform adapters
+boards/rv1126b-r2pro/      Board runtime configuration and assumptions
+third_party/               Pinned SDK, external RTSA and source manifests
+tests/                     Unit and platform tests
+integrations/              Buildroot external tree
+docs/                      Architecture, build and validation contracts
+scripts/                   Host and target build entry points
+```
+
+See the [documentation index](docs/README.md) for architecture, build,
+dependency and validation contracts.
 
 ## Goals
 
@@ -72,8 +88,11 @@ git clone --branch main https://github.com/AgoraIO-Community/agora-r2-pro-devkit
 cd agora-r2-pro-devkit
 ```
 
-The device-service README describes its Buildroot integration and external SDK requirements.
-Repository-wide build and flash scripts will follow hardware and board-SDK confirmation.
+The device service requires an RV1126B AArch64 SDK, an authorized 20 ms Agora
+RTSA package, and the target Rockchip media/display libraries. Host validation
+and target build commands are documented in [docs/build.md](docs/build.md).
+Repository-wide image and flash scripts still depend on hardware and board-SDK
+confirmation.
 
 ## Bring-up checklist
 

@@ -1,0 +1,30 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+set -eu
+
+project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+: "${AGORA_SDK_DIR:?Set AGORA_SDK_DIR to an authorized AArch64 RTSA SDK}"
+: "${AGORA_RTC_LIBRARY:?Set AGORA_RTC_LIBRARY to the matching shared library}"
+: "${CMAKE_TOOLCHAIN_FILE:?Set CMAKE_TOOLCHAIN_FILE to the vendor Buildroot toolchain}"
+
+MYBOT_AUDIO_PTIME_MS=${MYBOT_AUDIO_PTIME_MS:-20}
+MYBOT_ENABLE_VIDEO=${MYBOT_ENABLE_VIDEO:-ON}
+BOTSTATION_ENABLE_LVGL_UI=${BOTSTATION_ENABLE_LVGL_UI:-ON}
+BOTSTATION_BUILD_DIR=${BOTSTATION_BUILD_DIR:-"$project_root/build-aarch64"}
+
+cmake -S "$project_root" -B "$BOTSTATION_BUILD_DIR" \
+    -DCMAKE_TOOLCHAIN_FILE="$CMAKE_TOOLCHAIN_FILE" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DAGORA_SDK_DIR="$AGORA_SDK_DIR" \
+    -DAGORA_RTC_LIBRARY="$AGORA_RTC_LIBRARY" \
+    -DMYBOT_AUDIO_PTIME_MS="$MYBOT_AUDIO_PTIME_MS" \
+    -DMYBOT_ENABLE_VIDEO="$MYBOT_ENABLE_VIDEO" \
+    -DBOTSTATION_ENABLE_LVGL_UI="$BOTSTATION_ENABLE_LVGL_UI" \
+    -DBOTSTATION_BUILD_TESTS=OFF
+
+cmake --build "$BOTSTATION_BUILD_DIR" -j"${JOBS:-4}"
+
+if [ -n "${BOTSTATION_INSTALL_ROOT:-}" ]; then
+    DESTDIR="$BOTSTATION_INSTALL_ROOT" \
+        cmake --install "$BOTSTATION_BUILD_DIR" --prefix /usr
+fi

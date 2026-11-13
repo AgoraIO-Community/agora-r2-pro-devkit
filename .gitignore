@@ -116,5 +116,5 @@ desktop.ini
 /skills/
 
 # Agora RTSA packages are externally supplied and must not be committed.
-/app/botstation-device/third_party/agora-rtsa/agora_rtsa_sdk/
-/app/botstation-device/third_party/mybot/third_party/agora_rtsa_sdk/
+/third_party/agora-rtsa/agora_rtsa_sdk/
+/third_party/agent-studio-device-firmware/third_party/agora_rtsa_sdk/

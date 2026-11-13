@@ -1,0 +1,55 @@
+config BR2_PACKAGE_BOTSTATION_DEVICE
+	bool "botstation-device"
+	depends on BR2_aarch64
+	depends on BR2_TOOLCHAIN_USES_GLIBC
+	select BR2_PACKAGE_ALSA_LIB
+	select BR2_PACKAGE_ALSA_UTILS
+	select BR2_PACKAGE_CA_CERTIFICATES
+	select BR2_PACKAGE_OPENSSL
+	help
+	  RV1126B Linux device service for the Agora R2 Pro reference port.
+
+	  An authorized Agora RTSA package must be supplied separately.
+
+if BR2_PACKAGE_BOTSTATION_DEVICE
+
+config BR2_PACKAGE_BOTSTATION_DEVICE_RTSA_SDK_DIR
+	string "Agora RTSA SDK directory"
+	help
+	  Directory containing include/agora_rtc_api.h and package metadata.
+
+config BR2_PACKAGE_BOTSTATION_DEVICE_RTSA_LIBRARY
+	string "Agora RTSA shared library"
+	help
+	  Optional explicit path to the AArch64 libagora-rtc-sdk.so. Leave
+	  empty to use <RTSA SDK directory>/lib/aarch64/libagora-rtc-sdk.so.
+
+choice
+	prompt "Audio packet duration"
+	default BR2_PACKAGE_BOTSTATION_DEVICE_PTIME_20
+
+config BR2_PACKAGE_BOTSTATION_DEVICE_PTIME_20
+	bool "20 ms"
+
+config BR2_PACKAGE_BOTSTATION_DEVICE_PTIME_40
+	bool "40 ms"
+
+config BR2_PACKAGE_BOTSTATION_DEVICE_PTIME_60
+	bool "60 ms"
+
+endchoice
+
+config BR2_PACKAGE_BOTSTATION_DEVICE_VIDEO
+	bool "Camera JPEG uplink"
+	depends on BR2_PACKAGE_ROCKCHIP_MPP
+	help
+	  Requires Rockchip MPP, RKAIQ and a working sensor/ISP configuration.
+
+config BR2_PACKAGE_BOTSTATION_DEVICE_LVGL_UI
+	bool "LVGL DRM workflow display"
+	depends on BR2_PACKAGE_LVGL
+	help
+	  Requires LVGL 8, lv_drivers DRM support and libdrm from the product
+	  Buildroot tree.
+
+endif

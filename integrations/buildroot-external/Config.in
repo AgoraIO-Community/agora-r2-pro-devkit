@@ -1,0 +1,5 @@
+menu "Agora R2 Pro"
+
+source "$BR2_EXTERNAL_AGORA_R2_PRO_PATH/package/botstation-device/Config.in"
+
+endmenu

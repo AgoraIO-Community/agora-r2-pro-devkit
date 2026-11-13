@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install formatting tools
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+
+      - name: Repository layout
+        run: ./scripts/check-layout.sh
+
+      - name: Shell syntax
+        run: |
+          for script in scripts/*.sh boards/rv1126b-r2pro/config/S99botstation-device; do
+            sh -n "$script"
+          done
+
+      - name: Format
+        run: |
+          find src tests -type f \( -name '*.c' -o -name '*.h' \) \
+            -exec clang-format --dry-run --Werror {} +
+
+      - name: SPDX
+        run: |
+          find src tests -type f \( -name '*.c' -o -name '*.h' \) -print0 |
+            while IFS= read -r -d '' file; do
+              head -n 5 "$file" | grep -q 'SPDX-License-Identifier:' || {
+                echo "missing SPDX header: $file" >&2
+                exit 1
+              }
+            done
+
+      - name: Whitespace
+        run: git diff-tree --check HEAD^ HEAD
