@@ -1,0 +1,12 @@
+# Repository guide
+
+Follow the user's task and preserve unrelated changes. This is a Linux/CMake application for RV1126B; do not apply ESP-IDF, FreeRTOS or flash-partition conventions.
+
+- `app/` owns configuration, identity, runtime guards and lifecycle. `components/mybot_platform/` owns board defaults, Linux services and drivers. `components/mybot_ui/` owns a pure 640×480 renderer and views. Use MyBot public headers only.
+- `third_party/` is a pinned snapshot boundary. Make dependency changes deliberately, retain licenses, record patches and synchronize `dependencies.lock.json` and provenance. Do not bulk-format snapshots or generated fonts. See `VENDORED_SOURCES.md`.
+- Keep credentials, runtime data, private device identifiers, local SDK paths and generated packages out of commits. Generated outputs belong in ignored `build/`, `local/` and `dist/` directories.
+- Device access, deployment, external repositories and Git history changes follow the current user's authorization. Build/check/package scripts must not implicitly deploy or connect to a device.
+- Preserve the current CLI/identity/KV, 16 kHz mono S16/20 ms audio and native UI contracts during structural refactors. Keep public/private include boundaries explicit.
+- Use Python 3.10+ and CMake 3.25+. Run checks appropriate to the change as documented in `docs/development/testing.zh-CN.md`; keep missing dependencies visible. Record actual results in `docs/validation/README.md`, separating host, cross-build and hardware evidence.
+
+Do not claim unexecuted checks passed. Keep English/Chinese entry points aligned and update affected docs with code. This guide does not require an extra approval step for work already authorized by the user.

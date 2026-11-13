@@ -1,47 +1,58 @@
 # mybot-rv1126b
 
-RV1126B Linux application for MyBot 1.3.0: bidirectional voice, HTTPS pairing,
-CoreS3 pixel-glasses UI and optional V4L2/MPP JPEG uplink.
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-首版面向 RV1126B TEST2 RK805B V10 的现有 AArch64 Buildroot 系统。UI 沿用 M5Stack
-CoreS3 工艺灰像素眼镜，采用应用内静态 LVGL 9.5，原生 640×480 渲染，默认旋转
-270° 输出到物理 480×640 DSI 屏幕。SDK 侧音频为 16 kHz mono S16、20 ms，云端 AEC 开启。
+A Linux application for running MyBot 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides HTTPS pairing, bidirectional voice, persistent device identity, the CoreS3 pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
 
-0.1.0 默认语音/UI流程已由用户在板端验证通过。0.1.1 改为原生分辨率和目标字号字库，用户已完成真机测试并确认显示效果满足需求。
+The current source is the **0.2.0 engineering-governance candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. The reorganized candidate needs a new device regression; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
 
-- [首版验证步骤](docs/first-validation.zh-CN.md)：上传、原服务停止、UI/语音/视频测试及恢复。
-- [0.1.1 原生文字渲染](docs/ui-native-fonts.zh-CN.md)：改动、字库来源和升级说明。
-- [构建与验证记录](docs/validation.zh-CN.md)：实际检查、覆盖范围和限制。
-- [移植可行性与实施方案](docs/rv1126b-feasibility.zh-CN.md)：硬件与接口依据。
-- [依赖来源与许可](THIRD_PARTY_NOTICES.md)。
+## Platform and behavior
 
-## 本地构建
+The recorded device baseline is AArch64 Buildroot 2024.02, Linux 6.1, glibc 2.41, ALSA, DRM/KMS and a physical 480×640 DSI screen. The UI renders at 640×480 with a default 270° rotation and statically linked LVGL 9.5. Audio uses 16 kHz mono signed-16 PCM, 20 ms frames and Cloud AEC.
 
-当前 Intel macOS 可直接复用同级 `agora-r2-pro-devkit` 的已准备 SDK。需要 Python 3.7+、
-CMake 3.18+、make、主机 C/C++ 编译器及主机 OpenSSL 开发文件。
+The application uses the system's existing network and ALSA configuration. It does not install firmware, provisioning, autostart, OTA, wakeword/NPU, video downlink or a local camera preview. A short touch or Menu key starts/stops a conversation. Runtime data defaults to `/userdata/mybot-rv1126b`; upgrades preserve pairing when server and identity configuration stay the same.
+
+## Build and test
+
+Use **Python 3.10+**, **CMake 3.25+**, a C/C++ compiler, OpenSSL development files and libdrm development headers. Host UI/tests require neither RTSA nor a target SDK or reference repository. On Debian/Ubuntu, the development packages include `build-essential`, `pkg-config`, `libssl-dev` and `libdrm-dev`.
 
 ```sh
-python3 scripts/configure-local-sdk.py
-sh scripts/test-host.sh
+python3 scripts/doctor.py --host
+python3 scripts/check-dependencies.py
+cmake --preset host-zh
+cmake --build --preset host-zh
+ctest --preset host-zh
+```
+
+Use `host-en` for English and `host-ubsan` for undefined-behavior checks. On macOS, explicitly provide the libdrm header directory when it is not installed as a native development package; see [build instructions](docs/user/build.zh-CN.md). Host CI runs on Linux; only the environment recorded in the validation matrix has been tested locally.
+
+Target builds require a matching AArch64 compiler, development staging/sysroot, the pinned Agora RTSA package and a runtime-library manifest. Configure them explicitly; an existing reference checkout is an optional import source. [Independent target setup](docs/user/build.zh-CN.md) documents both paths.
+
+```sh
 sh scripts/build-rv1126b.sh
-RV1126B_BUILD_DIR="$PWD/build-rv1126b-video" sh scripts/build-rv1126b.sh -DMYBOT_ENABLE_VIDEO=ON
-python3 scripts/package-rv1126b.py
+RV1126B_BUILD_DIR="$PWD/build/rv1126b-video-zh" sh scripts/build-rv1126b.sh -DMYBOT_ENABLE_VIDEO=ON
+python3 scripts/package-rv1126b.py --profile all --language zh-CN
 ```
 
-交付包输出到 `dist/mybot-rv1126b-0.1.1-aarch64.tar.gz`，包含默认语音/UI程序和可选视频程序、
-RTSA 库、提示音、许可证、ABI 报告与校验清单。打包脚本会拒绝覆盖已有同名解包目录，重打包前
-可先移走旧目录。
+Build and packaging commands run locally and do not deploy to a device. [Getting started](docs/user/getting-started.zh-CN.md) covers manual installation, service ownership, upgrade and rollback.
 
-独立工具链可以设置 `CROSS_COMPILE`、`RV1126B_STAGING`、`AGORA_SDK_DIR`、
-`AGORA_RTC_LIBRARY`，完整 libc sysroot 另设 `RV1126B_SYSROOT`。
-英文构建加 `-DRV1126B_LANGUAGE=en-US` 并使用单独的构建目录。
+## Project layout
 
-本地 UI 预览：
+| Directory | Responsibility |
+| --- | --- |
+| `app/` | Configuration, identity, process guards and application lifecycle |
+| `components/mybot_platform/` | Board defaults, Linux services and hardware drivers |
+| `components/mybot_ui/` | Pure renderer, pixel-glasses view, expressions and compiled fonts |
+| `cmake/` | Dependency integration and toolchain configuration |
+| `third_party/` | Pinned upstream source snapshots |
+| `tests/`, `tools/ui_preview/` | Host verification and standalone UI preview |
+| `scripts/`, `packaging/` | Build/check tools and delivery templates |
+| `docs/` | User/developer guides, validation and historical evidence |
 
-```sh
-mkdir -p dist/preview
-build-host/mybot-ui-preview dist/preview
-```
+## Documentation and contribution
 
-所有构建、打包与主机测试脚本均不部署或启动设备程序。设备端的 `run.sh` 由验证者手动运行，
-使用独立的 `/userdata/mybot-rv1126b` 保存身份绑定数据与 RTSA 日志。
+- [Documentation index](docs/README.md), [configuration](docs/user/configuration.zh-CN.md), [troubleshooting](docs/user/troubleshooting.zh-CN.md)
+- [Architecture](docs/development/architecture.zh-CN.md), [testing](docs/development/testing.zh-CN.md), [release process](docs/development/releasing.zh-CN.md)
+- [Contributing](CONTRIBUTING.md), [support](SUPPORT.md), [changelog](CHANGELOG.md)
+
+Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. MyBot/AOSL, LVGL, imported views and fonts retain their own terms. RTSA is externally obtained and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.

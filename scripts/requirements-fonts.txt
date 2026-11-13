@@ -1,0 +1,2 @@
+# Regeneration also checks FreeType 2.13.2 and the source manifest hashes.
+Pillow==10.2.0

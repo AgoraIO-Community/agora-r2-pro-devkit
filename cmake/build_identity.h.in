@@ -1,0 +1,6 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#ifndef RV1126B_BUILD_IDENTITY_H
+#define RV1126B_BUILD_IDENTITY_H
+extern const volatile char rv1126b_build_identity[];
+extern const volatile char rv1126b_build_source_identity[];
+#endif

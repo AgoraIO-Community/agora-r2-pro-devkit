@@ -1,0 +1,56 @@
+# 当前验证状态
+
+本页是项目验证状态的唯一现行入口。更新日期：2026-11-13。当前源码版本：**0.2.0 工程治理候选版**。历史检查保持其原始版本归属，不自动移用于新二进制。
+
+目标基线：**RV1126B TEST2 RK805B V10**、AArch64 Buildroot 2024.02、Linux 6.1.172、glibc 2.41，物理屏幕 480×640。已记录的本地主机为 **Intel macOS**，交叉编译使用 Zig 0.15.2；Linux/Apple Silicon 的新 CI/开发入口需以实际运行证据为准。
+
+| 版本 / 变体 | 类别 | 证据与结果 | 限制 |
+| --- | --- | --- | --- |
+| 0.1.0，默认语音/UI | 用户真机 | 用户提供 `sha256sum -c SHA256SUMS` 全部 OK、`--version`；随后确认 `./run.sh` 全部流程打通，业务符合预期 | 不是视频或长期专项验收 |
+| 0.1.1，默认语音/UI | 用户真机 | 用户升级后确认“测试通过，效果满足需求”，文字清晰度优化满足要求 | 不扩展为可选视频/音质/AEC/长期并发专项 |
+| 0.1.1，中英文 UI | 本地主机 | 中文完整 7 项测试及 UBSan 通过，英文真实 renderer 回归通过；10 流程页、23 表情、文字边界及像素粒度检查；字体 `--check` 通过 | 原始 Intel macOS 环境，详情见历史记录 |
+| 0.1.1，语音/视频 | 交叉构建与 ABI | 两个 AArch64 程序构建；9 / 11 项依赖检查 `errors=[]`，加载器和 RPATH 符合预期 | ABI/构建不证明相机和物理音视频质量 |
+| 0.2.0，中文/英文/UBSan | 本地主机 | Intel macOS，三套 preset 均 13/13；每套包含 67 项 Python 工具用例、ALSA/网络故障清理与线程退出测试 | 公共 Linux CI 尚未在远端执行 |
+| 0.2.0，中英文 UI | 基线回归 | 每种语言 34 帧 SHA256 与 0.1.1 逐字节一致；固定字库再生成 `--check` 通过 | 物理显示仍需候选包真机回归 |
+| 0.2.0，zh-CN/en-US × voice/video | 交叉构建与 ABI | 四套 AArch64 构建及 manifest 生成通过；语音 9、视频 11 项依赖，全部 `errors=[]` | 未在设备运行 |
+| 0.2.0，依赖/工程/制品 | 本地检查 | host/target doctor、锁文件与更新幂等、格式/SPDX/语法/文档链接通过；中英文预检包生成；两独立目录的中文归档 SHA256 相同 | 归档可复现不等于编译字节可复现；开发包标明 dirty 源码 |
+| 0.2.0，治理候选 | 真机 | 尚未执行 | 不能继承 0.1.1 硬件结论 |
+| 公共 CI / 其他宿主组合 | CI / 环境 | 以仓库对应提交实际 workflow 运行记录为准 | 配置存在不等于已运行通过 |
+
+## 保留的基线制品
+
+0.1.1 中文全配置包：`mybot-rv1126b-0.1.1-aarch64.tar.gz`，SHA256：
+
+```text
+b028d775d3e91858c54f4b1ac336da4f7eeea41cfe618acfb9ade90e69e2abf7
+```
+
+0.1.0 包 SHA256：
+
+```text
+de26c8978e939e1c41dbdbdf73bd624809e90552ae4ff71701920043f65d9716
+```
+
+这些是已记录本地交付制品的身份，不表示远端发布。0.1.1 源码提交基线为 `dev@0589cde`；治理方案以该 revision 审查。完整旧检查见[0.1 历史验证](../history/validation-0.1.zh-CN.md)，原生渲染依据见[0.1.1 字体记录](../history/ui-native-fonts.zh-CN.md)。
+
+## 尚未完成的硬件专项
+
+- 0.2.0 候选的绑定复用、UI方向/文字/动画、语音、输入/音量、重复启停及退出恢复。
+- 视频首帧/云端接收、方向/颜色、V4L2/MPP 启停与语音/UI并发。
+- 音质/增益和 AEC 测量、物理按键位置、网络恢复、显示恢复和长时间稳定性。
+
+初始设备检查由代理只读执行；0.1.0/0.1.1 部署及真机测试由用户完成。本轮工程治理在主机进行，不隐式上传或运行设备程序。设备状态不能根据历史快照推断。
+
+新增证据应记录版本/revision、包 SHA256、profile/language、板型/系统、命令、执行者、结果及未覆盖项。指南见[测试](../development/testing.zh-CN.md)与[上手](../user/getting-started.zh-CN.md)。
+
+## 0.2.0 本轮复现与证据
+
+本地检查使用 Python 3.10.19、CMake 4.2.0、AppleClang 17、clang-format 11 和 Zig 0.15.2。macOS 主机测试显式提供 libdrm 开发头文件与 OpenSSL；目标使用显式配置并核对的 RTSA、staging 与 runtime manifest。没有借主机测试隐式导入目标 SDK。
+
+- 主机结果：`build/host-{zh,en,ubsan}/Testing/Temporary/LastTest.log`。
+- 目标证据：四个 `build/rv1126b-{voice,video}-{zh,en}/abi-report.json` 和 `build-manifest.json`；候选包保留归一化报告。
+- 工具用例：34 项依赖/锁更新、27 项制品身份/归档、6 项构建参数解析。
+- 构建配置隔离额外使用 `-DMYBOT_ENABLE_VIDEO:BOOL=TRUE` 验证英文视频目录选择。
+- 未修改 SDK/LVGL 快照，原 0.1.0/0.1.1 归档保留且哈希复核一致。
+
+开发候选包位于 `dist/mybot-rv1126b-0.2.0-aarch64.tar.gz` 和 `dist/mybot-rv1126b-0.2.0-en-US-aarch64.tar.gz`；确切归档 SHA256 以相邻 `.sha256` 为准，包内文件以 `SHA256SUMS` 核对。未创建远端发布或执行设备部署。

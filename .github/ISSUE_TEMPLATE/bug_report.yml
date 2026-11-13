@@ -1,0 +1,40 @@
+name: Bug report / 缺陷报告
+description: Report a reproducible application, build or packaging problem.
+title: "[Bug]: "
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Version and environment / 版本与环境
+      description: Commit/version, modified tree, board/OS/libc, host/toolchain, language and voice/video profile.
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence
+    attributes:
+      label: Observed in / 发生环境
+      options:
+        - Physical device / 真机
+        - Host test or preview / 主机测试或预览
+        - Cross-build or package check / 交叉构建或打包
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction / 复现步骤
+      description: Include the exact command and shortest reproducible sequence.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior / 预期与实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs / 脱敏日志
+      description: Remove credentials, pairing codes, IDs, serials, MAC addresses and private paths. Do not attach KV data or proprietary SDKs.
+      render: text

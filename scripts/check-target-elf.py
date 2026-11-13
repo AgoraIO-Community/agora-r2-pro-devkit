@@ -108,6 +108,8 @@ def main():
                 errors.append(entry["path"] + ": " + name + " lacks " + ", ".join(absent))
     if binary["interpreter"] != "/lib/ld-linux-aarch64.so.1":
         errors.append("Unexpected target interpreter: " + binary["interpreter"])
+    if binary["runpaths"] != ["$ORIGIN/../lib"]:
+        errors.append("Executable RPATH must be exactly $ORIGIN/../lib")
     loader = libraries.get("ld-linux-aarch64.so.1")
     if not loader or loader["machine"] != 183:
         errors.append("Missing AArch64 dynamic loader in supplied runtime")

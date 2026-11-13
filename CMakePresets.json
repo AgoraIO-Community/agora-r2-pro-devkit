@@ -1,0 +1,154 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 25,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "host-base",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "RV1126B_HOST_ONLY": "ON",
+        "RV1126B_BUILD_TESTS": "ON",
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "target-base",
+      "hidden": true,
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "${sourceDir}/cmake/toolchains/aarch64-linux-gnu.cmake",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "host-zh",
+      "inherits": "host-base",
+      "cacheVariables": {
+        "RV1126B_LANGUAGE": "zh-CN"
+      }
+    },
+    {
+      "name": "host-en",
+      "inherits": "host-base",
+      "cacheVariables": {
+        "RV1126B_LANGUAGE": "en-US"
+      }
+    },
+    {
+      "name": "host-ubsan",
+      "inherits": "host-base",
+      "cacheVariables": {
+        "RV1126B_LANGUAGE": "zh-CN",
+        "RV1126B_ENABLE_UBSAN": "ON"
+      }
+    },
+    {
+      "name": "rv1126b-voice-zh",
+      "inherits": "target-base",
+      "cacheVariables": {
+        "RV1126B_LANGUAGE": "zh-CN",
+        "MYBOT_ENABLE_VIDEO": "OFF"
+      }
+    },
+    {
+      "name": "rv1126b-voice-en",
+      "inherits": "target-base",
+      "cacheVariables": {
+        "RV1126B_LANGUAGE": "en-US",
+        "MYBOT_ENABLE_VIDEO": "OFF"
+      }
+    },
+    {
+      "name": "rv1126b-video-zh",
+      "inherits": "target-base",
+      "cacheVariables": {
+        "RV1126B_LANGUAGE": "zh-CN",
+        "MYBOT_ENABLE_VIDEO": "ON"
+      }
+    },
+    {
+      "name": "rv1126b-video-en",
+      "inherits": "target-base",
+      "cacheVariables": {
+        "RV1126B_LANGUAGE": "en-US",
+        "MYBOT_ENABLE_VIDEO": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "host-zh",
+      "configurePreset": "host-zh",
+      "jobs": 4
+    },
+    {
+      "name": "host-en",
+      "configurePreset": "host-en",
+      "jobs": 4
+    },
+    {
+      "name": "host-ubsan",
+      "configurePreset": "host-ubsan",
+      "jobs": 4
+    },
+    {
+      "name": "rv1126b-voice-zh",
+      "configurePreset": "rv1126b-voice-zh",
+      "jobs": 4
+    },
+    {
+      "name": "rv1126b-voice-en",
+      "configurePreset": "rv1126b-voice-en",
+      "jobs": 4
+    },
+    {
+      "name": "rv1126b-video-zh",
+      "configurePreset": "rv1126b-video-zh",
+      "jobs": 4
+    },
+    {
+      "name": "rv1126b-video-en",
+      "configurePreset": "rv1126b-video-en",
+      "jobs": 4
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "host-zh",
+      "configurePreset": "host-zh",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "host-en",
+      "configurePreset": "host-en",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    },
+    {
+      "name": "host-ubsan",
+      "configurePreset": "host-ubsan",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "noTestsAction": "error"
+      }
+    }
+  ]
+}
