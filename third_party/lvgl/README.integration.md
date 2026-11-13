@@ -1,0 +1,38 @@
+# LVGL integration
+
+This is a production subset of LVGL 9.5.0, pinned to upstream commit
+`85aa60d18b3d5e5588d7b247abf90198f07c8a63` from
+<https://github.com/lvgl/lvgl>. This RV1126B import carries one source patch:
+`src/draw/sw/lv_draw_sw_mask.c` uses correctly typed callback wrappers to remove
+function-pointer undefined behavior found by Clang UBSan. The original source
+hash and the patch are recorded in the parent project's documentation. The
+integration description below records the original ESP32 subset.
+
+The import retains public/internal headers, core display and object code,
+software drawing, text fonts, basic widgets, flex layout, and the built-in
+binary decoder required by LVGL initialization. It excludes examples, demos,
+tests, downloads, other platform implementations, optional image codecs, and
+unused font bitmaps. The bundled Montserrat fonts include the upstream Font Awesome 5
+symbol glyphs. Their licenses are retained under
+`scripts/built_in_font/font_license/`; `LICENCE.txt` and `COPYRIGHTS.md` retain
+the upstream library notices.
+
+Local files:
+
+- `CMakeLists.txt` registers sources only for `CONFIG_MYBOT_LVGL_UI`.
+  This hidden setting is enabled automatically for display boards and disabled for headless boards.
+  Dependencies remain declared during ESP-IDF's early component discovery.
+- `Kconfig` supplies the draw-buffer alignment required by the display port.
+- `lv_conf.h` selects RGB565, a single software draw unit, basic widgets,
+  Montserrat 10/12/14/32, and disables built-in themes, external decoders, and diagnostics.
+  The platform supplies its own light/dark palettes and Chinese font subset.
+- `local/lv_mem_psram.c` implements LVGL's custom allocator interface. Objects
+  and draw scratch allocations use PSRAM with no internal-RAM fallback. An
+  aligned allocation header tracks blocks so `lv_mem_deinit()` can reclaim
+  remaining allocations. Allocation failures return `NULL`; failed realloc
+  preserves the original allocation. All calls require the port's LVGL lock,
+  except initialization/destruction while the runtime is quiescent.
+
+`lv_mem_monitor()` reports the complete PSRAM heap, including other firmware
+users. LCD DMA transfer buffers and the RTOS task/locks are allocated by the
+port separately and are not covered by this allocator.
