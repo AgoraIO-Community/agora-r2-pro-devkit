@@ -2,6 +2,15 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.2.2 — Unreleased
+
+- Group maintained code under `src/application/`, `src/platform/` and `src/ui/`, and pinned dependencies under `vendor/`.
+- Synchronize CMake, build/check/package automation, dependency mappings and documentation with the new paths.
+- Preserve public include namespaces, CMake targets, generated fonts and dependency bytes, including all 99 official RTSA files.
+- Keep developer programs in `tools/` and automation in `scripts/` with explicit ownership.
+
+This source-layout candidate requires its own hardware regression.
+
 ## 0.2.1 — Unreleased
 
 - Manage MyBot, AOSL and LVGL as separate pinned source directories.

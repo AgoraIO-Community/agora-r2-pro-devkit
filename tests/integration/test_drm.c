@@ -26,7 +26,7 @@ int test_munmap(void *address, size_t length);
 #define drmModeAddFB2 test_add_fb
 #define drmModeRmFB test_rm_fb
 #define drmModeSetCrtc test_set_crtc
-#include "../../components/mybot_platform/src/drivers/display/drm.c"
+#include "../../src/platform/src/drivers/display/drm.c"
 #include "check.h"
 
 enum fault {

@@ -18,7 +18,7 @@ static int native_pipe2(int descriptors[2], int flags) {
     return 0;
 }
 #define pipe2 native_pipe2
-#include "../../components/mybot_platform/src/drivers/input/evdev_input.c"
+#include "../../src/platform/src/drivers/input/evdev_input.c"
 #include "check.h"
 
 static const rv1126b_platform_config_t config = {

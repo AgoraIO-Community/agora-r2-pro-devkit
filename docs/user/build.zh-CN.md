@@ -35,7 +35,7 @@ doctor 的目录直接包含 `drm.h`；CMake 的目录直接包含 `xf86drm.h` /
 
 - 产生 AArch64 Linux GNU ELF 的 C/C++、ar/ranlib 工具链。
 - 与设备兼容的开发 staging（ALSA、OpenSSL、libdrm，视频另需 MPP 头文件/库），必要时提供完整 libc sysroot。
-- 已内置于 `third_party/rtsa/` 的[完整固定 RTSA 包](../dependencies/RTSA_SOURCE.txt)；构建自动选择其公共头文件与 AArch64 动态库，校验 20 ms 配置及库哈希。
+- 已内置于 `vendor/rtsa/` 的[完整固定 RTSA 包](../dependencies/RTSA_SOURCE.txt)；构建自动选择其公共头文件与 AArch64 动态库，校验 20 ms 配置及库哈希。
 - 用于 ABI 闭包检查的目标运行库快照及 manifest。
 
 运行库快照仅用于验证目标依赖，不能代替完整开发 sysroot。设备不含编译环境，不应从设备运行库推断具有完整 SDK。依赖获取和许可见[依赖指南](../development/dependencies.zh-CN.md)。
@@ -50,7 +50,7 @@ python3 scripts/configure-local-sdk.py \
   --runtime-manifest /path/to/device-runtime/manifest.json
 ```
 
-完整 libc sysroot 使用 `--sysroot PATH`；也可用 `--zig PATH` 代替 `--cross-compile`。配置生成忽略的 `local/sdk/config.json` 和 `local/sdk/environment.sh`；不要提交个人路径。执行 `python3 scripts/doctor.py --target` 检查配置，视频另加 `--video`。RTSA 的固定路径为 `third_party/rtsa/agora_sdk/`，库为其中的 `lib/aarch64/libagora-rtc-sdk.so`；配置和 CMake 均绑定该快照。旧配置仍指向仓库外 RTSA 时，重新运行配置命令，不手工改哈希或混用头文件。
+完整 libc sysroot 使用 `--sysroot PATH`；也可用 `--zig PATH` 代替 `--cross-compile`。配置生成忽略的 `local/sdk/config.json` 和 `local/sdk/environment.sh`；不要提交个人路径。执行 `python3 scripts/doctor.py --target` 检查配置，视频另加 `--video`。RTSA 的固定路径为 `vendor/rtsa/agora_sdk/`，库为其中的 `lib/aarch64/libagora-rtc-sdk.so`；配置和 CMake 均绑定该快照。旧配置仍指向仓库外 RTSA 时，重新运行配置命令，不手工改哈希或混用头文件。
 
 ## 目标构建与打包
 
@@ -74,7 +74,7 @@ cmake --build --preset rv1126b-voice-zh
 
 英文使用独立目录并设置 `-DRV1126B_LANGUAGE=en-US`，打包设置 `--language en-US`。`--profile voice` 或 `--profile video` 只选择一个变体；`all` 必须两个均存在且配置一致，不能静默省略缺少的程序。可用 `--voice-build` / `--video-build` 指向其他构建目录。
 
-中文全配置候选包为 `dist/mybot-rv1126b-0.2.1-aarch64.tar.gz`；英文名附加 `-en-US`，单变体附加 `-voice` 或 `-video`。已有同名输出会被拒绝，先保留或移动旧候选结果。包内校验和、ABI 和 manifest 校验通过后，按[上手指南](getting-started.zh-CN.md)手动上板。
+中文全配置候选包为 `dist/mybot-rv1126b-0.2.2-aarch64.tar.gz`；英文名附加 `-en-US`，单变体附加 `-voice` 或 `-video`。已有同名输出会被拒绝，先保留或移动旧候选结果。包内校验和、ABI 和 manifest 校验通过后，按[上手指南](getting-started.zh-CN.md)手动上板。
 
 ## UI 预览
 

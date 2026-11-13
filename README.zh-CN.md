@@ -4,7 +4,7 @@
 
 面向 **RV1126B TEST2 RK805B V10** 的 MyBot 1.3.0 Linux 应用，提供 HTTPS 配对、双向语音、稳定设备身份与持久化、像素眼镜 UI，以及可选的 V4L2/MPP JPEG 上行。
 
-当前源码为 **0.2.1 依赖目录治理候选版**。0.1.0 的语音/UI业务流程和 0.1.1 的文字渲染优化已由用户真机验收；目录重组后的候选版需要重新进行设备回归。可选视频和长时间稳定性专项尚未完成。[验证状态](docs/validation/README.md)是结果的唯一现行入口。
+当前源码为 **0.2.2 源码目录重构候选版**。0.1.0 的语音/UI业务流程和 0.1.1 的文字渲染优化已由用户真机验收；目录重组后的候选版需要重新进行设备回归。可选视频和长时间稳定性专项尚未完成。[验证状态](docs/validation/README.md)是结果的唯一现行入口。
 
 ## 平台与行为
 
@@ -26,7 +26,7 @@ ctest --preset host-zh
 
 英文使用 `host-en`，未定义行为检查使用 `host-ubsan`。macOS 未安装原生 libdrm 开发包时，需显式提供头文件目录，见[构建指南](docs/user/build.zh-CN.md)。主机 CI 面向 Linux；实际已运行的环境以验证矩阵为准。
 
-完整的固定 Agora RTSA 1.10.1 包已内置于 `third_party/rtsa/`，目标构建自动使用其中的 AArch64 库。另需提供匹配的 AArch64 编译器、开发 staging/sysroot 及运行库清单，步骤见[独立构建指南](docs/user/build.zh-CN.md)。
+完整的固定 Agora RTSA 1.10.1 包已内置于 `vendor/rtsa/`，目标构建自动使用其中的 AArch64 库。另需提供匹配的 AArch64 编译器、开发 staging/sysroot 及运行库清单，步骤见[独立构建指南](docs/user/build.zh-CN.md)。
 
 ```sh
 sh scripts/build-rv1126b.sh
@@ -40,14 +40,19 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 
 | 目录 | 职责 |
 | --- | --- |
-| `app/` | 配置、身份、进程保护及应用生命周期 |
-| `components/mybot_platform/` | 板级默认值、Linux 服务与硬件驱动 |
-| `components/mybot_ui/` | 纯渲染、像素眼镜视图、表情和编译字库 |
+| `src/application/` | 配置、身份、进程保护及应用生命周期 |
+| `src/platform/` | 板级默认值、Linux 服务与硬件驱动 |
+| `src/ui/` | 纯渲染、像素眼镜视图、表情和编译字库 |
 | `cmake/` | 依赖集成与工具链配置 |
-| `third_party/mybot/`、`third_party/aosl/`、`third_party/lvgl/`、`third_party/rtsa/` | 分别固定的依赖快照，包含完整 RTSA 包；构建集成位于 `cmake/dependencies/` |
-| `tests/`、`tools/ui_preview/` | 主机检查与独立 UI 预览 |
-| `scripts/`、`packaging/` | 构建检查工具及交付模板 |
+| `vendor/mybot/`、`vendor/aosl/`、`vendor/lvgl/`、`vendor/rtsa/` | 分别固定的依赖快照，包含完整 RTSA 包；构建集成位于 `cmake/dependencies/` |
+| `tests/` | 单元、集成和自动化工具检查 |
+| `tools/` | 开发工具程序，包括独立的 `ui_preview/` |
+| `scripts/` | 构建、检查、代码生成和打包自动化 |
+| `packaging/` | 交付模板、启动脚本和示例配置 |
 | `docs/` | 用户/开发指南、验证状态与历史证据 |
+| `githooks/` | Conventional Commits 提交信息校验 |
+
+自维护模块集中于 `src/`，固定依赖集中于 `vendor/`。目录调整保留公共头文件命名空间（`mybot_platform/`、`mybot_ui/`）和 CMake target 名称；模块依赖边界见[架构指南](docs/development/architecture.zh-CN.md)。
 
 ## 文档与贡献
 

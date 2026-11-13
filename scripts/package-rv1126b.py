@@ -18,21 +18,21 @@ ROOT = Path(__file__).resolve().parents[1]
 LICENSES = [
     ("LICENSE", "project-APACHE-2.0.txt"),
     ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
-    ("third_party/mybot/LICENSE", "mybot-LICENSE.txt"),
-    ("third_party/mybot/THIRD_PARTY_NOTICES.md", "mybot-THIRD_PARTY_NOTICES.md"),
-    ("third_party/aosl/LICENSE", "aosl-LICENSE.txt"),
-    ("third_party/lvgl/LICENCE.txt", "lvgl-LICENSE.txt"),
-    ("third_party/lvgl/COPYRIGHTS.md", "lvgl-COPYRIGHTS.md"),
-    ("third_party/lvgl/scripts/built_in_font/font_license/Montserrat/OFL.txt", "Montserrat-OFL.txt"),
-    ("third_party/lvgl/scripts/built_in_font/font_license/FontAwesome5/LICENSE.txt", "FontAwesome-LICENSE.txt"),
-    ("components/mybot_ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt", "terminal-font-LICENSE.txt"),
-    ("components/mybot_ui/views/pixel_glasses/LICENSE.MIT.txt", "pixel-glasses-MIT.txt"),
-    ("components/mybot_ui/fonts/sources.json", "font-sources.json"),
-    ("components/mybot_ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt", "chinese-font-OFL.txt"),
+    ("vendor/mybot/LICENSE", "mybot-LICENSE.txt"),
+    ("vendor/mybot/THIRD_PARTY_NOTICES.md", "mybot-THIRD_PARTY_NOTICES.md"),
+    ("vendor/aosl/LICENSE", "aosl-LICENSE.txt"),
+    ("vendor/lvgl/LICENCE.txt", "lvgl-LICENSE.txt"),
+    ("vendor/lvgl/COPYRIGHTS.md", "lvgl-COPYRIGHTS.md"),
+    ("vendor/lvgl/scripts/built_in_font/font_license/Montserrat/OFL.txt", "Montserrat-OFL.txt"),
+    ("vendor/lvgl/scripts/built_in_font/font_license/FontAwesome5/LICENSE.txt", "FontAwesome-LICENSE.txt"),
+    ("src/ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt", "terminal-font-LICENSE.txt"),
+    ("src/ui/views/pixel_glasses/LICENSE.MIT.txt", "pixel-glasses-MIT.txt"),
+    ("src/ui/fonts/sources.json", "font-sources.json"),
+    ("src/ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt", "chinese-font-OFL.txt"),
     ("docs/dependencies/RTSA_SOURCE.txt", "RTSA_SOURCE.txt"),
-    ("third_party/rtsa/PACKAGE_INFO", "RTSA-PACKAGE_INFO.txt"),
-    ("third_party/rtsa/README.md", "RTSA-README.zh-CN.md"),
-    ("third_party/rtsa/README.en.md", "RTSA-README.en.md"),
+    ("vendor/rtsa/PACKAGE_INFO", "RTSA-PACKAGE_INFO.txt"),
+    ("vendor/rtsa/README.md", "RTSA-README.zh-CN.md"),
+    ("vendor/rtsa/README.en.md", "RTSA-README.en.md"),
     ("docs/dependencies/patches/lvgl-mask-callbacks.patch", "lvgl-mask-callbacks.patch"),
     ("dependencies.lock.json", "dependencies.lock.json"),
 ]
@@ -125,7 +125,7 @@ def package(root, args):
             public_build["abi_report_sha256"] = digest(report_file)
             write_json(staging / ("build-manifest-" + profile + ".json"), public_build)
         shutil.copyfile(baseline["config"]["sdk"]["rtsa_library"], staging / "lib/libagora-rtc-sdk.so")
-        shutil.copytree(root / "third_party/mybot/assets/locales", staging / "assets/locales")
+        shutil.copytree(root / "vendor/mybot/assets/locales", staging / "assets/locales")
         launcher = (root / "packaging/run.sh").read_text()
         if args.profile == "video":
             if "${RV1126B_VIDEO:-0}" not in launcher:

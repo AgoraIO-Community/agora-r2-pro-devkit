@@ -6,9 +6,11 @@ Keep contributions focused on an observable problem. Explain compatibility effec
 
 ## Code boundaries
 
-Application configuration and lifecycle belong in `app/`. Board defaults, Linux services and drivers belong in `components/mybot_platform/`. The renderer and views in `components/mybot_ui/` remain independent of DRM, ALSA, MPP and platform worker threads. Platform code consumes public MyBot headers, not SDK private interfaces.
+Application configuration and lifecycle belong in `src/application/`. Board defaults, Linux services and drivers belong in `src/platform/`. The renderer and views in `src/ui/` remain independent of DRM, ALSA, MPP and platform worker threads. Platform code consumes public MyBot headers, not SDK private interfaces.
 
-Treat `third_party/` as pinned dependency snapshots. The required RTSA snapshot retains the complete official package, including its binaries and documentation. Dependency updates must name an exact source/revision, retain notices, register local patches and update the lock/provenance records through the documented [dependency workflow](docs/development/dependencies.zh-CN.md). Do not bulk-format imported or generated files. Regenerate fonts from recorded inputs instead of editing their bitmap arrays.
+Keep the public `mybot_platform/` and `mybot_ui/` include namespaces and CMake targets stable when reorganizing internal paths. Developer programs belong in `tools/`; build, validation, generation and packaging automation belongs in `scripts/`.
+
+Treat `vendor/` as pinned dependency snapshots. The required RTSA snapshot retains the complete official package, including its binaries and documentation. Dependency updates must name an exact source/revision, retain notices, register local patches and update the lock/provenance records through the documented [dependency workflow](docs/development/dependencies.zh-CN.md). Do not bulk-format imported or generated files. Regenerate fonts from recorded inputs instead of editing their bitmap arrays.
 
 Never include tokens, private device identities, credentials, runtime data, personal SDK paths or unrelated build binaries in a contribution. Device operations and changes to other repositories require authorization from their owner.
 

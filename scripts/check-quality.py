@@ -8,7 +8,7 @@ import re
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-GENERATED = ('components/mybot_ui/fonts/generated/',)
+GENERATED = ('src/ui/fonts/generated/',)
 DATA_FILES = {'pixel_expression_masks.h', 'pixel_expression_shapes.h'}
 
 
@@ -17,7 +17,7 @@ def maintained_files():
         ['git', 'ls-files', '--cached', '--others', '--exclude-standard', '-z'], cwd=ROOT
     ).decode().split('\0')
     return sorted({ROOT / name for name in names if name and (ROOT / name).is_file()
-                   and not name.startswith(('third_party/', 'build', 'local/', 'dist/'))})
+                   and not name.startswith(('vendor/', 'build', 'local/', 'dist/'))})
 
 
 def main():

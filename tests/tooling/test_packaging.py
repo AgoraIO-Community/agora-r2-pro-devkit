@@ -42,7 +42,7 @@ class PackagingTests(unittest.TestCase):
         self.write(self.root / "packaging/run.sh", 'case "${RV1126B_VIDEO:-0}" in\n0) :;;\n1) :;;\nesac\n')
         self.write(self.root / "packaging/example.env", "# fixture\n")
         self.write(self.root / "packaging/README.zh-CN.md", "fixture guide\n")
-        self.write(self.root / "third_party/mybot/assets/locales/zh-CN/0.pcm", "pcm")
+        self.write(self.root / "vendor/mybot/assets/locales/zh-CN/0.pcm", "pcm")
         self.sdk = self.base / "sdk"
         self.rtsa = self.sdk / "lib/libagora-rtc-sdk.so"
         self.write(self.rtsa, "target RTSA")
@@ -189,7 +189,7 @@ class PackagingTests(unittest.TestCase):
         before = metadata.source_snapshot(self.root)
         self.write(self.root / "build-extra/unrelated", "build output")
         self.assertEqual(before, metadata.source_snapshot(self.root))
-        self.write(self.root / "app/new.c", "new governance implementation")
+        self.write(self.root / "src/application/new.c", "new governance implementation")
         after = metadata.source_snapshot(self.root)
         self.assertNotEqual(before["sha256"], after["sha256"])
         with self.assertRaisesRegex(ValueError, "Stale build manifest"):
@@ -203,7 +203,7 @@ class PackagingTests(unittest.TestCase):
             packager.package(self.root, self.args)
 
     def test_release_requires_clean_committed_source(self):
-        self.write(self.root / "app/new.c", "dirty source")
+        self.write(self.root / "src/application/new.c", "dirty source")
         self.refresh_source_marker(self.voice)
         self.refresh_source_marker(self.video)
         self.seal(self.voice)
@@ -282,7 +282,7 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(previous_time, source.stat().st_mtime_ns)
 
     def test_preparing_changed_source_cannot_reseal_old_binary_with_same_config(self):
-        self.write(self.root / "app/new.c", "new source, unchanged version and configuration")
+        self.write(self.root / "src/application/new.c", "new source, unchanged version and configuration")
         self.run_manifest("--prepare")
         error = io.StringIO()
         with redirect_stderr(error), self.assertRaises(SystemExit) as raised:
@@ -354,7 +354,7 @@ class PackagingTests(unittest.TestCase):
 
     def test_source_change_during_build_prevents_finalization(self):
         self.run_manifest("--prepare")
-        self.write(self.root / "app/new.c", "changed while compilation was running")
+        self.write(self.root / "src/application/new.c", "changed while compilation was running")
         error = io.StringIO()
         with redirect_stderr(error), self.assertRaises(SystemExit) as raised:
             self.run_manifest()

@@ -9,7 +9,9 @@ Each direct dependency owns one snapshot and an independent entry in the depende
 | `lvgl/` | LVGL 9.5.0 | Production subset and required headers/licenses |
 | `rtsa/` | Agora RTSA 1.10.1 | Complete official package: headers, binaries, examples and upstream documentation |
 
-MyBot links AOSL through `AOSL_DIR`; neither dependency is copied into the other. Target builds use the pinned AArch64 library at `rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so`. Project-owned integration stays in `../cmake/dependencies/`, and application UI/resources stay in `../components/`.
+MyBot links AOSL through `AOSL_DIR`; neither dependency is copied into the other. Target builds use the pinned AArch64 library at `rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so`. Project-owned integration stays in `../cmake/dependencies/`, and application UI/resources stay in `../src/ui/`.
+
+The maintained application, platform and UI modules are siblings under `../src/`. Directory names do not change the public include namespaces or CMake targets. This `vendor/` boundary owns dependency content only; developer programs and automation remain in `../tools/` and `../scripts/` respectively.
 
 - [Vendored source versions and import scope](../VENDORED_SOURCES.md)
 - [Applicable terms](../THIRD_PARTY_NOTICES.md), including AOSL's additional conditions

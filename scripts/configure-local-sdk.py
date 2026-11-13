@@ -188,7 +188,7 @@ def argument_parser():
     compiler.add_argument('--zig', type=Path, help='host Zig executable; create local AArch64 wrappers')
     parser.add_argument('--staging', type=Path, help='target development headers and verified runtime libraries')
     parser.add_argument('--rtsa-sdk', type=Path,
-                        help='compatibility option; must point to third_party/rtsa/agora_sdk')
+                        help='compatibility option; must point to vendor/rtsa/agora_sdk')
     parser.add_argument('--runtime-manifest', type=Path, help='existing offline target library manifest')
     parser.add_argument('--sysroot', type=Path, help='optional complete libc development sysroot')
     parser.add_argument('--reference', type=Path, help=argparse.SUPPRESS)
@@ -213,7 +213,7 @@ def main():
         lock = load_json(LOCK)
         _, sdk, library = vendored_rtsa(lock)
         if args.rtsa_sdk and args.rtsa_sdk.expanduser().resolve() != sdk:
-            raise ValueError('--rtsa-sdk must point to the repository snapshot third_party/rtsa/agora_sdk')
+            raise ValueError('--rtsa-sdk must point to the repository snapshot vendor/rtsa/agora_sdk')
         values = {'RV1126B_STAGING': str(args.staging.expanduser().resolve()),
                   'AGORA_SDK_DIR': str(sdk), 'AGORA_RTC_LIBRARY': str(library),
                   'RV1126B_RUNTIME_MANIFEST': str(args.runtime_manifest.expanduser().resolve())}

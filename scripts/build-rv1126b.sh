@@ -11,7 +11,7 @@ if [ -z "${CROSS_COMPILE:-}" ] && [ -f "$project_dir/local/sdk/environment.sh" ]
 fi
 : "${CROSS_COMPILE:?Configure an explicit SDK with scripts/configure-local-sdk.py}"
 : "${RV1126B_STAGING:?Set target dependency staging}"
-AGORA_SDK_DIR="$project_dir/third_party/rtsa/agora_sdk"
+AGORA_SDK_DIR="$project_dir/vendor/rtsa/agora_sdk"
 AGORA_RTC_LIBRARY="$AGORA_SDK_DIR/lib/aarch64/libagora-rtc-sdk.so"
 export AGORA_SDK_DIR AGORA_RTC_LIBRARY
 . "$project_dir/scripts/build-options.sh"

@@ -50,7 +50,7 @@ class OfflineTargetTests(unittest.TestCase):
         root_patch.start()
         self.addCleanup(root_patch.stop)
         self.staging = self.root / 'staging'
-        self.sdk_path = self.root / 'third_party/rtsa/agora_sdk'
+        self.sdk_path = self.root / 'vendor/rtsa/agora_sdk'
         self.library = self.sdk_path / 'lib/aarch64/libagora-rtc-sdk.so'
         self.write(self.library, elf())
         self.write(self.sdk_path / 'include/agora_rtc_api.h', b'public api')
@@ -63,7 +63,7 @@ class OfflineTargetTests(unittest.TestCase):
         self.manifest = self.root / 'runtime-manifest.json'
         self.entries = [{'path': '/' + self.runtime_name, 'sha256': digest(elf())}]
         self.save_manifest()
-        self.lock = {'snapshots': [{'name': 'rtsa', 'directory': 'third_party/rtsa',
+        self.lock = {'snapshots': [{'name': 'rtsa', 'directory': 'vendor/rtsa',
             'sdk_subdirectory': 'agora_sdk', 'library_subpath': 'lib/aarch64/libagora-rtc-sdk.so',
             'version': 'fixture', 'library_sha256': digest(elf()),
             'headers': {'include/agora_rtc_api.h': digest(b'public api')},
@@ -473,6 +473,126 @@ class ProvenanceTests(unittest.TestCase):
             updater.refresh(self.root, self.lock, prefix_mappings={'unknown': 'moved'},
                 prefix_reasons={'unknown': 'reviewed move'})
 
+    def relocate(self, prefixes=None, **options):
+        return updater.refresh(self.root, self.lock,
+            relocation_prefixes=prefixes or {'vendor': 'dependencies'},
+            relocation_reasons=options.pop('relocation_reasons', {'vendor': 'separate maintained code and dependency snapshots'}),
+            **options)
+
+    def test_current_path_relocation_preserves_history_patches_and_licenses(self):
+        history = (self.root / 'docs/imported.json').read_bytes()
+        before = copy.deepcopy(self.lock)
+        self.lock['required_inputs'] = {'vendor/source.c': self.hash('vendor/source.c')}
+        (self.root / 'vendor').rename(self.root / 'dependencies')
+        updated, delta = self.relocate()
+        self.assertTrue(delta)
+        self.assertEqual((self.root / 'docs/imported.json').read_bytes(), history)
+        self.assertEqual(updated['original_import'], before['original_import'])
+        self.assertEqual(set(updated['import_adaptations']), {'vendor/source.c', 'vendor/LICENSE', 'old/header.h'})
+        entry = updated['import_adaptations']['vendor/source.c']
+        self.assertEqual(entry['path'], 'dependencies/source.c')
+        self.assertEqual(entry['original_sha256'], before['import_adaptations']['vendor/source.c']['original_sha256'])
+        self.assertIn('typed callback wrapper', entry['reason'])
+        self.assertEqual(updated['local_patches'][0]['original_path'], 'vendor/source.c')
+        self.assertEqual(updated['local_patches'][0]['result_path'], 'dependencies/source.c')
+        self.assertIn('dependencies/source.c', updated['required_inputs'])
+        self.assertIn('dependencies/LICENSE', updated['retained_licenses'])
+        self.assertEqual(updated['snapshots'][0]['directory'], 'dependencies')
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+        again, delta = updater.refresh(self.root, updated)
+        self.assertEqual(again, updated)
+        self.assertEqual(delta, [])
+        repeated, delta = updater.refresh(self.root, updated,
+            relocation_prefixes={'vendor': 'dependencies'},
+            relocation_reasons={'vendor': 'separate maintained code and dependency snapshots'})
+        self.assertEqual(repeated, updated)
+        self.assertEqual(delta, [])
+
+    def test_relocation_updates_nonimported_assets_fonts_and_prior_destinations(self):
+        self.lock['managed_assets'] = [{'name': 'view', 'directory': 'component',
+            'source': 'project-maintained', 'files': {'component/header.h': self.hash('component/header.h')}}]
+        (self.root / 'src').mkdir()
+        (self.root / 'component').rename(self.root / 'src/core')
+        (self.root / 'fonts').rename(self.root / 'src/fonts')
+        updated, _ = self.relocate({'component': 'src/core', 'fonts': 'src/fonts'},
+            relocation_reasons={'component': 'group maintained sources', 'fonts': 'group UI assets'})
+        self.assertEqual(updated['managed_assets'][0]['directory'], 'src/core')
+        self.assertIn('src/core/header.h', updated['managed_assets'][0]['files'])
+        self.assertEqual(updated['generated_fonts']['manifest'], 'src/fonts/sources.json')
+        self.assertIn('src/fonts/font.c', updated['generated_fonts']['outputs'])
+        self.assertEqual(updated['import_adaptations']['old/header.h']['previous_paths'], ['component/header.h'])
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+
+    def test_relocation_preserves_omission_history_verbatim(self):
+        name = 'vendor/unused.txt'
+        self.add_historical(name, b'unused')
+        omitted, _ = updater.refresh(self.root, self.lock, omissions={name: 'outside production scope'})
+        self.lock = omitted
+        before = copy.deepcopy(omitted['import_omissions'])
+        (self.root / 'vendor').rename(self.root / 'dependencies')
+        updated, _ = self.relocate()
+        self.assertEqual(updated['import_omissions'], before)
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+
+    def test_relocation_refuses_snapshot_modification(self):
+        (self.root / 'vendor').rename(self.root / 'dependencies')
+        self.put('dependencies/source.c', b'changed during rename')
+        with self.assertRaisesRegex(ValueError, 'relocated snapshot bytes changed'):
+            self.relocate()
+
+    def test_relocation_refuses_snapshot_additions_and_removals(self):
+        (self.root / 'vendor').rename(self.root / 'dependencies')
+        self.put('dependencies/extra.txt', b'not part of the reviewed snapshot')
+        with self.assertRaisesRegex(ValueError, 'relocated snapshot bytes changed'):
+            self.relocate()
+        (self.root / 'dependencies/extra.txt').unlink()
+        (self.root / 'dependencies/source.c').unlink()
+        with self.assertRaisesRegex(ValueError, 'relocated snapshot bytes changed'):
+            self.relocate()
+
+    def test_relocation_rejects_residual_old_root_and_missing_destination(self):
+        (self.root / 'dependencies').mkdir()
+        with self.assertRaisesRegex(ValueError, 'obsolete layout root remains'):
+            self.relocate()
+        (self.root / 'dependencies').rmdir()
+        with self.assertRaisesRegex(ValueError, 'destination is missing'):
+            self.relocate({'absent': 'missing'}, relocation_reasons={'absent': 'reviewed move'})
+
+    def test_relocation_rejects_overlap_cycles_and_missing_reason(self):
+        with self.assertRaisesRegex(ValueError, 'requires --relocation-reason'):
+            self.relocate(relocation_reasons={})
+        for rules in ({'vendor': 'vendor/new'}, {'vendor': 'x', 'x': 'vendor'},
+                      {'vendor': 'x', 'vendor/sub': 'y'}):
+            with self.subTest(rules=rules), self.assertRaisesRegex(ValueError, 'overlap|cycle'):
+                updater.relocate_paths(self.root, copy.deepcopy(self.lock), {}, rules,
+                    {name: 'reviewed move' for name in rules})
+
+    def test_relocation_rejects_unmatched_and_ambiguous_mappings(self):
+        (self.root / 'target').mkdir()
+        with self.assertRaisesRegex(ValueError, 'matches no current lock paths'):
+            self.relocate({'unknown': 'target'}, relocation_reasons={'unknown': 'reviewed move'})
+        (self.root / 'vendor').rename(self.root / 'dependencies')
+        with self.assertRaisesRegex(ValueError, 'multiple migration rules'):
+            self.relocate(mappings={'vendor/source.c': 'dependencies/source.c'})
+
+    def test_checker_rejects_reintroduced_old_layout_roots(self):
+        (self.root / 'vendor').rename(self.root / 'dependencies')
+        updated, _ = self.relocate()
+        self.put('vendor/untracked.txt', b'legacy directory restored')
+        self.assertIn('obsolete layout root remains: vendor', dependencies.verify(self.root, updated))
+
+    def test_checker_rejects_invalid_migration_history(self):
+        for migrations, message in [
+            ([{'from': 'old', 'to': 'old/nested', 'reason': 'move'}], 'prefixes overlap'),
+            ([{'from': 'old', 'to': 'vendor', 'reason': ''}], 'has no explanation'),
+            ([{'from': '../old', 'to': 'vendor', 'reason': 'move'}], 'without traversal'),
+            ([{'from': 'old', 'to': 'vendor', 'reason': 'move'}] * 2, 'duplicate'),
+            ([{'from': 'a', 'to': 'b', 'reason': 'move'}, {'from': 'b', 'to': 'a', 'reason': 'move'}], 'cycle'),
+        ]:
+            with self.subTest(migrations=migrations), self.assertRaisesRegex(ValueError, message):
+                self.lock['path_migrations'] = migrations
+                self.verify()
+
     def test_explicit_omission_records_original_identity_and_is_idempotent(self):
         name = 'old/.gitmodules'
         self.add_historical(name, b'obsolete submodule metadata')
@@ -582,21 +702,21 @@ class ProvenanceTests(unittest.TestCase):
         self.assertIn('omitted dependency input remains: component/header.h', dependencies.verify(self.root, omitted))
 
     def test_cli_registers_snapshot_asset_and_required_input_with_idempotent_write(self):
-        self.put('third_party/README.md', b'dependency index')
-        self.put('third_party/extra/include/api.h', b'new snapshot header')
+        self.put('snapshots/README.md', b'dependency index')
+        self.put('snapshots/extra/include/api.h', b'new snapshot header')
         self.put('assets/view.c', b'maintained view')
         self.lock['snapshots'] = []
         path = self.root / 'dependencies.lock.json'
         path.write_text(json.dumps(self.lock))
         command = [sys.executable, str(ROOT / 'scripts/update-dependencies-lock.py'),
-            '--root', str(self.root), '--write', '--json', '--add-snapshot', 'extra=third_party/extra',
+            '--root', str(self.root), '--write', '--json', '--add-snapshot', 'extra=snapshots/extra',
             '--revision', 'extra=fixed-revision', '--source', 'extra=https://example.invalid/extra',
-            '--managed-asset', 'view=assets', '--required-input', 'component/header.h', '--vendor-root', 'third_party']
+            '--managed-asset', 'view=assets', '--required-input', 'component/header.h', '--vendor-root', 'snapshots']
         first = subprocess.run(command, text=True, capture_output=True)
         self.assertEqual(first.returncode, 0, first.stderr)
         self.assertTrue(json.loads(first.stdout)['written'])
         updated = json.loads(path.read_text())
-        self.assertEqual(updated['vendor_root'], 'third_party')
+        self.assertEqual(updated['vendor_root'], 'snapshots')
         self.assertIn('component/header.h', updated['required_inputs'])
         self.assertEqual(updated['managed_assets'][0]['name'], 'view')
         self.assertEqual(dependencies.verify(self.root, updated), [])

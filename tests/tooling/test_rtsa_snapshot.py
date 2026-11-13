@@ -3,6 +3,7 @@
 """Offline coverage for complete, immutable RTSA release snapshots."""
 
 import hashlib
+import copy
 import importlib.util
 import json
 from pathlib import Path
@@ -41,7 +42,7 @@ class RtsaSnapshotTests(unittest.TestCase):
         temporary = tempfile.TemporaryDirectory(prefix='mybot-rtsa-snapshot-')
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.put('third_party/README.md', b'Vendored dependencies\n')
+        self.put('vendor/README.md', b'Vendored dependencies\n')
         self.contents = {
             'README.md': b'Official package documentation\n',
             'agora_sdk/.config': b'CONFIG_RTM=y\nCONFIG_MINIMAL_TIMER_INTERVAL_MS=20\nCONFIG_PACKAGE_INFO=x86_64\n',
@@ -52,26 +53,26 @@ class RtsaSnapshotTests(unittest.TestCase):
             'example/test_data/send_audio.pcm': b'\x00\x01\x02\x03',
         }
         for name, content in self.contents.items():
-            self.put('third_party/rtsa/' + name, content)
+            self.put('vendor/rtsa/' + name, content)
         self.snapshot = {
             'name': 'rtsa', 'version': 'fixture', 'package': 'official-fixture',
             'revision': 'official-fixture', 'source': 'https://example.invalid/rtsa.tgz',
             'archive_sha256': digest(b'official archive'),
             'scope': 'Complete official release package (unmodified)',
-            'directory': 'third_party/rtsa', 'sdk_subdirectory': 'agora_sdk',
+            'directory': 'vendor/rtsa', 'sdk_subdirectory': 'agora_sdk',
             'library_subpath': 'lib/aarch64/libagora-rtc-sdk.so', 'architecture': 'aarch64',
             'library_sha256': digest(elf()),
             'headers': {'include/agora_rtc_api.h': digest(b'public API\n')},
             'required_config': {'CONFIG_RTM': 'y', 'CONFIG_MINIMAL_TIMER_INTERVAL_MS': '20'},
             'archive_files': {name: digest(content) for name, content in self.contents.items()},
-            'files': {'third_party/rtsa/' + name: digest(content) for name, content in self.contents.items()},
+            'files': {'vendor/rtsa/' + name: digest(content) for name, content in self.contents.items()},
         }
         self.put('docs/imported.json', json.dumps({'imported_files': {}}).encode())
         fonts = {'generator': 'tools/font.py', 'fonts': {}}
         self.put('fonts/sources.json', json.dumps(fonts).encode())
         self.put('tools/font.py', b'# fixture\n')
         self.lock = {
-            'schema_version': 1, 'vendor_root': 'third_party',
+            'schema_version': 1, 'vendor_root': 'vendor',
             'original_import': {'manifest': 'docs/imported.json', 'sha256': self.hash('docs/imported.json')},
             'snapshots': [self.snapshot], 'import_adaptations': {}, 'local_patches': [],
             'import_omissions': {}, 'managed_assets': [], 'required_inputs': {}, 'retained_licenses': {},
@@ -99,24 +100,24 @@ class RtsaSnapshotTests(unittest.TestCase):
     def test_every_official_member_is_required_including_samples_and_test_data(self):
         for name, content in self.contents.items():
             with self.subTest(name=name):
-                path = self.root / 'third_party/rtsa' / name
+                path = self.root / 'vendor/rtsa' / name
                 path.unlink()
                 self.assertTrue(any('missing' in error for error in self.verify()))
                 path.write_bytes(content)
 
     def test_extra_package_file_is_rejected(self):
-        self.put('third_party/rtsa/unreviewed.txt', b'extra')
-        self.assertIn('unlocked dependency file: third_party/rtsa/unreviewed.txt', self.verify())
+        self.put('vendor/rtsa/unreviewed.txt', b'extra')
+        self.assertIn('unlocked dependency file: vendor/rtsa/unreviewed.txt', self.verify())
 
     def test_modified_sample_is_rejected(self):
-        self.put('third_party/rtsa/example/test_data/send_audio.pcm', b'changed')
-        self.assertIn('SHA256 mismatch: third_party/rtsa/example/test_data/send_audio.pcm', self.verify())
+        self.put('vendor/rtsa/example/test_data/send_audio.pcm', b'changed')
+        self.assertIn('SHA256 mismatch: vendor/rtsa/example/test_data/send_audio.pcm', self.verify())
 
     def test_pruning_snapshot_manifest_does_not_prune_archive_proof(self):
         name = 'example/test_data/send_audio.pcm'
-        (self.root / 'third_party/rtsa' / name).unlink()
-        del self.snapshot['files']['third_party/rtsa/' + name]
-        self.assertIn('complete archive inventory differs from snapshot: third_party/rtsa', self.verify())
+        (self.root / 'vendor/rtsa' / name).unlink()
+        del self.snapshot['files']['vendor/rtsa/' + name]
+        self.assertIn('complete archive inventory differs from snapshot: vendor/rtsa', self.verify())
 
     def test_complete_archive_proof_is_mandatory(self):
         del self.snapshot['archive_files']
@@ -142,8 +143,8 @@ class RtsaSnapshotTests(unittest.TestCase):
         for content in (elf(bits=1), elf(byte_order=2), elf(kind=2), b'\x7fELF\x02\x01'):
             with self.subTest(content=content):
                 name = 'agora_sdk/lib/aarch64/libagora-rtc-sdk.so'
-                self.put('third_party/rtsa/' + name, content)
-                self.snapshot['files']['third_party/rtsa/' + name] = digest(content)
+                self.put('vendor/rtsa/' + name, content)
+                self.snapshot['files']['vendor/rtsa/' + name] = digest(content)
                 self.snapshot['archive_files'][name] = digest(content)
                 self.snapshot['library_sha256'] = digest(content)
                 self.assertTrue(any('AArch64 shared object' in error for error in self.verify()))
@@ -160,8 +161,8 @@ class RtsaSnapshotTests(unittest.TestCase):
     def test_required_rtsa_configuration_is_checked_after_repinning_files(self):
         name = 'agora_sdk/.config'
         content = b'CONFIG_RTM=n\nCONFIG_MINIMAL_TIMER_INTERVAL_MS=10\n'
-        self.put('third_party/rtsa/' + name, content)
-        self.snapshot['files']['third_party/rtsa/' + name] = digest(content)
+        self.put('vendor/rtsa/' + name, content)
+        self.snapshot['files']['vendor/rtsa/' + name] = digest(content)
         self.snapshot['archive_files'][name] = digest(content)
         self.assertIn('RTSA required configuration differs: CONFIG_RTM', self.verify())
         self.assertIn('RTSA required configuration differs: CONFIG_MINIMAL_TIMER_INTERVAL_MS', self.verify())
@@ -175,25 +176,53 @@ class RtsaSnapshotTests(unittest.TestCase):
 
     def test_refresh_refuses_to_accept_missing_extra_or_modified_archive_files(self):
         name = 'example/test_data/send_audio.pcm'
-        path = self.root / 'third_party/rtsa' / name
+        path = self.root / 'vendor/rtsa' / name
         path.unlink()
         with self.assertRaisesRegex(ValueError, 'complete release snapshot changed'):
             updater.refresh(self.root, self.lock)
         path.write_bytes(self.contents[name])
-        self.put('third_party/rtsa/extra.txt', b'extra')
+        self.put('vendor/rtsa/extra.txt', b'extra')
         with self.assertRaisesRegex(ValueError, 'complete release snapshot changed'):
             updater.refresh(self.root, self.lock)
-        (self.root / 'third_party/rtsa/extra.txt').unlink()
+        (self.root / 'vendor/rtsa/extra.txt').unlink()
         path.write_bytes(b'changed')
         with self.assertRaisesRegex(ValueError, 'complete release snapshot changed'):
             updater.refresh(self.root, self.lock)
 
     def test_refresh_refuses_rewritten_snapshot_hashes(self):
-        name = 'third_party/rtsa/README.md'
+        name = 'vendor/rtsa/README.md'
         self.put(name, b'rewritten')
         self.snapshot['files'][name] = self.hash(name)
         with self.assertRaisesRegex(ValueError, 'complete release snapshot changed'):
             updater.refresh(self.root, self.lock)
+
+    def test_complete_package_relocation_preserves_every_archive_identity(self):
+        original = copy.deepcopy(self.snapshot)
+        (self.root / 'vendor').rename(self.root / 'dependencies')
+        updated, delta = updater.refresh(self.root, self.lock,
+            relocation_prefixes={'vendor': 'dependencies'},
+            relocation_reasons={'vendor': 'rename dependency boundary'})
+        self.assertTrue(delta)
+        current = updated['snapshots'][0]
+        self.assertEqual(updated['vendor_root'], 'dependencies')
+        for key in original.keys() - {'directory', 'files'}:
+            self.assertEqual(current[key], original[key], key)
+        self.assertEqual(current['files'], {'dependencies/rtsa/' + name: value
+            for name, value in original['archive_files'].items()})
+        self.assertEqual(check.verify(self.root, updated), [])
+        again, changes = updater.refresh(self.root, updated)
+        self.assertEqual(again, updated)
+        self.assertEqual(changes, [])
+
+    def test_relocation_cannot_repin_or_trim_complete_release(self):
+        (self.root / 'vendor').rename(self.root / 'dependencies')
+        name = 'example/test_data/send_audio.pcm'
+        self.put('dependencies/rtsa/' + name, b'rewritten during migration')
+        self.snapshot['files']['vendor/rtsa/' + name] = digest(b'rewritten during migration')
+        with self.assertRaisesRegex(ValueError, 'complete release snapshot changed'):
+            updater.refresh(self.root, self.lock,
+                relocation_prefixes={'vendor': 'dependencies'},
+                relocation_reasons={'vendor': 'rename dependency boundary'})
 
 
 if __name__ == '__main__':

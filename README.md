@@ -4,7 +4,7 @@
 
 A Linux application for running MyBot 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides HTTPS pairing, bidirectional voice, persistent device identity, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
 
-The current source is the **0.2.1 dependency-layout candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. The reorganized candidate needs a new device regression; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
+The current source is the **0.2.2 source-layout candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. The reorganized candidate needs a new device regression; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
 
 ## Platform and behavior
 
@@ -26,7 +26,7 @@ ctest --preset host-zh
 
 Use `host-en` for English and `host-ubsan` for undefined-behavior checks. On macOS, explicitly provide the libdrm header directory when it is not installed as a native development package; see [build instructions](docs/user/build.zh-CN.md). Host CI runs on Linux; only the environment recorded in the validation matrix has been tested locally.
 
-The complete pinned Agora RTSA 1.10.1 package is included in `third_party/rtsa/`; target builds automatically use its AArch64 library. Supply a matching AArch64 compiler, development staging/sysroot and a runtime-library manifest as described in [independent target setup](docs/user/build.zh-CN.md).
+The complete pinned Agora RTSA 1.10.1 package is included in `vendor/rtsa/`; target builds automatically use its AArch64 library. Supply a matching AArch64 compiler, development staging/sysroot and a runtime-library manifest as described in [independent target setup](docs/user/build.zh-CN.md).
 
 ```sh
 sh scripts/build-rv1126b.sh
@@ -40,14 +40,19 @@ Build and packaging commands run locally and do not deploy to a device. [Getting
 
 | Directory | Responsibility |
 | --- | --- |
-| `app/` | Configuration, identity, process guards and application lifecycle |
-| `components/mybot_platform/` | Board defaults, Linux services and hardware drivers |
-| `components/mybot_ui/` | Pure renderer, pixel-glasses view, expressions and compiled fonts |
+| `src/application/` | Configuration, identity, process guards and application lifecycle |
+| `src/platform/` | Board defaults, Linux services and hardware drivers |
+| `src/ui/` | Pure renderer, pixel-glasses view, expressions and compiled fonts |
 | `cmake/` | Dependency integration and toolchain configuration |
-| `third_party/mybot/`, `third_party/aosl/`, `third_party/lvgl/`, `third_party/rtsa/` | Independently pinned dependencies, including the complete RTSA package; build integration stays in `cmake/dependencies/` |
-| `tests/`, `tools/ui_preview/` | Host verification and standalone UI preview |
-| `scripts/`, `packaging/` | Build/check tools and delivery templates |
+| `vendor/mybot/`, `vendor/aosl/`, `vendor/lvgl/`, `vendor/rtsa/` | Independently pinned dependencies, including the complete RTSA package; build integration stays in `cmake/dependencies/` |
+| `tests/` | Unit, integration and automation-tool verification |
+| `tools/` | Developer programs, including the standalone `ui_preview/` |
+| `scripts/` | Build, check, code-generation and packaging automation |
+| `packaging/` | Delivery templates, startup script and example configuration |
 | `docs/` | User/developer guides, validation and historical evidence |
+| `githooks/` | Conventional Commit message validation |
+
+Project-maintained modules live under `src/`; pinned dependency snapshots live under `vendor/`. Public include namespaces (`mybot_platform/`, `mybot_ui/`) and CMake target names remain stable when directories move. See the [architecture guide](docs/development/architecture.zh-CN.md) for the dependency boundaries.
 
 ## Documentation and contribution
 

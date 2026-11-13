@@ -1,2 +1,2 @@
 # Preserve vendored snapshots exactly for source provenance checks.
-third_party/** -text
+vendor/** -text

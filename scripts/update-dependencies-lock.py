@@ -73,6 +73,96 @@ def expand_prefixes(root, imported, adaptations, mappings, reasons, prefix_mappi
     return expanded, explanations
 
 
+def relocate_paths(root, lock, imported, prefixes, reasons):
+    """Relocate current lock paths while preserving immutable import and archive identities.
+
+    Unlike --map-prefix, this covers independently added snapshots and non-imported
+    build inputs too. Physical moves happen first; snapshot bytes must remain intact.
+    """
+    if set(reasons) - set(prefixes):
+        raise ValueError('--relocation-reason requires a corresponding --relocate-prefix')
+    rules = []
+    for source, destination in prefixes.items():
+        check.local_path(root, source)
+        check.local_path(root, destination)
+        if any(first == second or first.startswith(second + '/') or second.startswith(first + '/')
+               for first, second in [(source, destination)] +
+               [(value, previous) for value in (source, destination) for pair in rules for previous in pair]):
+            raise ValueError('relocation prefixes overlap or form a cycle')
+        if not reasons.get(source, '').strip():
+            raise ValueError('relocation requires --relocation-reason ' + source + '=EXPLANATION')
+        rules.append((source, destination))
+    for source, destination in rules:
+        if check.local_path(root, source).exists():
+            raise ValueError('obsolete layout root remains: ' + source)
+        if not check.local_path(root, destination).is_dir():
+            raise ValueError('relocation destination is missing: ' + destination)
+
+    records = lock.setdefault('path_migrations', []) if rules else lock.get('path_migrations', [])
+    active = []
+    for source, destination in rules:
+        record = {'from': source, 'to': destination, 'reason': reasons[source]}
+        previous = [entry for entry in records if entry['from'] == source]
+        if previous:
+            if previous != [record]:
+                raise ValueError('relocation is already recorded with a different identity: ' + source)
+            continue
+        active.append((source, destination))
+
+    matches = set()
+
+    def moved(value):
+        for source, destination in active:
+            if value == source or value.startswith(source + '/'):
+                matches.add(source)
+                return destination + value[len(source):]
+        return value
+
+    def keyed(values):
+        result = {moved(name): value for name, value in values.items()}
+        if len(result) != len(values):
+            raise ValueError('relocation produces duplicate current paths')
+        return result
+
+    mappings, explanations = {}, {}
+    for name in imported:
+        if name in lock.get('import_omissions', {}):
+            continue
+        current = lock['import_adaptations'].get(name, {}).get('path', name)
+        destination = moved(current)
+        if destination != current:
+            mappings[name] = destination
+            reason = next(reasons[source] for source, _ in active
+                          if current == source or current.startswith(source + '/'))
+            existing = lock['import_adaptations'].get(name, {}).get('reason')
+            explanations[name] = (existing + ' ' if existing else '') + reason
+    for entry in lock['snapshots'] + lock.get('managed_assets', []):
+        previous = entry['directory']
+        entry['directory'] = moved(previous)
+        entry['files'] = keyed(entry['files'])
+        if previous != entry['directory'] and entry in lock['snapshots']:
+            actual = files_in(root, entry['directory'])
+            if actual != entry['files']:
+                raise ValueError('relocated snapshot bytes changed: ' + entry['directory'])
+    for field in ('required_inputs', 'retained_licenses'):
+        if field in lock:
+            lock[field] = keyed(lock[field])
+    generated = lock['generated_fonts']
+    for field in ('manifest', 'generator'):
+        generated[field] = moved(generated[field])
+    generated['outputs'] = keyed(generated['outputs'])
+    for patch in lock['local_patches']:
+        for field in ('path', 'result_path'):
+            patch[field] = moved(patch[field])
+    if 'vendor_root' in lock:
+        lock['vendor_root'] = moved(lock['vendor_root'])
+    for source, destination in active:
+        if source not in matches:
+            raise ValueError('relocation matches no current lock paths: ' + source)
+        records.append({'from': source, 'to': destination, 'reason': reasons[source]})
+    return mappings, explanations
+
+
 def changes(before, after, prefix=''):
     if isinstance(before, dict) and isinstance(after, dict):
         result = []
@@ -101,7 +191,8 @@ def changes(before, after, prefix=''):
 
 def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, licenses=(), *,
             prefix_mappings=None, prefix_reasons=None, omissions=None, add_snapshots=(),
-            managed_assets=(), required_inputs=(), vendor_root=None):
+            managed_assets=(), required_inputs=(), vendor_root=None,
+            relocation_prefixes=None, relocation_reasons=None):
     if lock.get('schema_version') != 1:
         raise ValueError('unsupported dependency lock schema')
     mappings, reasons = mappings or {}, reasons or {}
@@ -118,6 +209,11 @@ def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, lice
         raise ValueError('historical import revisions were rewritten')
     if set(mappings) & set(omissions):
         raise ValueError('historical input cannot be both mapped and omitted')
+    relocated, explanations = relocate_paths(root, current, imported,
+                                             relocation_prefixes or {}, relocation_reasons or {})
+    if set(relocated) & set(mappings):
+        raise ValueError('historical input has multiple migration rules')
+    mappings, reasons = {**relocated, **mappings}, {**explanations, **reasons}
     mappings, reasons = expand_prefixes(root, imported, current['import_adaptations'], mappings, reasons,
                                         prefix_mappings or {}, prefix_reasons or {})
     for name in set(mappings) | set(reasons) | set(omissions):
@@ -195,16 +291,16 @@ def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, lice
             assets.append(entry)
             current['snapshots'].remove(entry)
     if include_ui_view:
-        directory = 'components/mybot_ui/views/pixel_glasses'
+        directory = 'src/ui/views/pixel_glasses'
         if not any(item['directory'] == directory for item in assets):
             assets.append({'name': 'pixel-glasses', 'version': 'native-640x480',
                 'source': 'project-maintained',
                 'scope': 'pixel-glasses view, geometry, expressions and retained licenses',
                 'directory': directory, 'files': {}})
         licenses = tuple(licenses) + (
-            'components/mybot_ui/views/pixel_glasses/LICENSE.MIT.txt',
-            'components/mybot_ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt',
-            'components/mybot_ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt')
+            'src/ui/views/pixel_glasses/LICENSE.MIT.txt',
+            'src/ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt',
+            'src/ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt')
     for entry in add_snapshots:
         if not all(entry.get(field) for field in ('name', 'directory', 'revision', 'source')):
             raise ValueError('new snapshot requires name, directory, revision and source')
@@ -273,6 +369,9 @@ def main():
     parser.add_argument('--reason', action='append', default=[], metavar='ORIGINAL_PATH=EXPLANATION', help='required for each new adaptation or changed mapping')
     parser.add_argument('--map-prefix', action='append', default=[], metavar='OLD_DIRECTORY=NEW_DIRECTORY', help='expand a reviewed directory move into per-file mappings')
     parser.add_argument('--reason-prefix', action='append', default=[], metavar='OLD_DIRECTORY=EXPLANATION')
+    parser.add_argument('--relocate-prefix', action='append', default=[], metavar='OLD_DIRECTORY=NEW_DIRECTORY',
+                        help='relocate current snapshot, asset, font, license and build-input paths without changing snapshot bytes')
+    parser.add_argument('--relocation-reason', action='append', default=[], metavar='OLD_DIRECTORY=EXPLANATION')
     parser.add_argument('--omit', action='append', default=[], metavar='ORIGINAL_PATH=EXPLANATION', help='record an explicitly removed historical file; notices and required inputs are protected')
     parser.add_argument('--add-snapshot', action='append', default=[], metavar='NAME=DIRECTORY')
     parser.add_argument('--revision', action='append', default=[], metavar='NAME=REVISION', help='required with --add-snapshot')
@@ -304,7 +403,9 @@ def main():
                                     prefix_mappings=assignments(args.map_prefix, '--map-prefix'),
                                     prefix_reasons=assignments(args.reason_prefix, '--reason-prefix'),
                                     omissions=assignments(args.omit, '--omit'), add_snapshots=snapshots,
-                                    managed_assets=assets, required_inputs=args.required_input, vendor_root=args.vendor_root)
+                                    managed_assets=assets, required_inputs=args.required_input, vendor_root=args.vendor_root,
+                                    relocation_prefixes=assignments(args.relocate_prefix, '--relocate-prefix'),
+                                    relocation_reasons=assignments(args.relocation_reason, '--relocation-reason'))
         if args.write and modified:
             write_lock(path, updated)
     except (OSError, ValueError, KeyError, TypeError) as error:

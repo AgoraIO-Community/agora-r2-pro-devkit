@@ -76,7 +76,7 @@ class BuildScriptDependenciesTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         calls = [json.loads(line) for line in result.stdout.splitlines()]
         self.assertEqual(len(calls), 2)
-        sdk = str(self.root / 'third_party/rtsa/agora_sdk')
+        sdk = str(self.root / 'vendor/rtsa/agora_sdk')
         library = sdk + '/lib/aarch64/libagora-rtc-sdk.so'
         self.assertIn('-DAGORA_SDK_DIR=' + sdk, calls[0]['args'])
         self.assertIn('-DAGORA_RTC_LIBRARY=' + library, calls[0]['args'])

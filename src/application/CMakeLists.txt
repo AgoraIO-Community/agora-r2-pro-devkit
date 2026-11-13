@@ -41,4 +41,4 @@ add_custom_target(mybot-artifacts ALL
     DEPENDS mybot-rv1126b VERBATIM)
 install(TARGETS mybot-rv1126b RUNTIME DESTINATION bin)
 install(FILES "${AGORA_RTC_LIBRARY}" DESTINATION lib)
-install(DIRECTORY "${PROJECT_SOURCE_DIR}/third_party/mybot/assets/locales" DESTINATION assets)
+install(DIRECTORY "${PROJECT_SOURCE_DIR}/vendor/mybot/assets/locales" DESTINATION assets)

@@ -70,6 +70,34 @@ def archive_inventory(root, entry):
     return result
 
 
+def verify_migrations(root, lock, errors):
+    """Keep reviewed layout history explicit and reject restored obsolete roots."""
+    migrations = {}
+    for entry in lock.get('path_migrations', []):
+        source, destination = entry['from'], entry['to']
+        previous = local_path(root, source)
+        local_path(root, destination)
+        if source in migrations:
+            raise ValueError('duplicate layout migration source: ' + source)
+        if (source == destination or source.startswith(destination + '/')
+                or destination.startswith(source + '/')):
+            raise ValueError('layout migration prefixes overlap: ' + source)
+        if not entry.get('reason', '').strip():
+            raise ValueError('layout migration has no explanation: ' + source)
+        if previous.exists():
+            errors.append('obsolete layout root remains: ' + source)
+        migrations[source] = destination
+    for source, destination in migrations.items():
+        seen = {source}
+        while destination in migrations:
+            if destination in seen:
+                raise ValueError('layout migrations form a cycle')
+            seen.add(destination)
+            destination = migrations[destination]
+        if not local_path(root, destination).is_dir():
+            errors.append('layout migration destination is missing: ' + destination)
+
+
 def verify_rtsa(root, entry, checked_hash, errors):
     """Validate the selected target SDK independently of the package's display metadata."""
     directory = local_path(root, entry['directory'])
@@ -179,6 +207,7 @@ def verify(root, lock):
     revisions = {name: value for name, value in original.items() if name not in ('imported_files', 'local_patches')}
     if history.get('revisions', {}) != revisions:
         errors.append('historical import revisions differ from the original manifest')
+    verify_migrations(root, lock, errors)
     verify_groups(root, lock, checked_hash, errors)
     adaptations = lock['import_adaptations']
     omissions = lock.get('import_omissions', {})

@@ -1,12 +1,12 @@
 # 候选制品与发布
 
-项目版本以根 `CMakeLists.txt` 为单一来源。当前为 **0.2.1 工程治理候选版**，尚未继承旧包的真机验收。[验证矩阵](../validation/README.md)区分本地检查、CI 和硬件状态。
+项目版本以根 `CMakeLists.txt` 为单一来源。当前为 **0.2.2 源码目录重构候选版**，尚未继承旧包的真机验收。[验证矩阵](../validation/README.md)区分本地检查、CI 和硬件状态。
 
 ## 构建身份
 
 每个构建目录保留 `build-config.json`（CMake 配置）、`build-inputs.json`（编译前输入快照）与 `build-manifest.json`（最终二进制、ABI 与输入身份）。manifest 绑定版本、源码 revision/dirty、语言、voice/video、板型、SDK/RTSA、音频时长、工具链、运行库和资源。不能手工修改这些文件来给旧程序改版本。
 
-工程治理完成后的开发候选允许脏源码，但必须如实标注。正式发布使用已提交的源码重新构建，再加 `--release`；仅提交已构建的源码不会让旧 manifest 自动成为干净发布身份。
+开发候选允许脏源码，但必须如实标注。`src/` / `vendor/` 路径迁移会改变输入身份，必须重新生成目标二进制、ABI 报告和 manifest。正式发布使用已提交的源码重新构建，再加 `--release`；仅提交已构建的源码不会让旧 manifest 自动成为干净发布身份。
 
 ## 生成候选包
 

@@ -1,6 +1,6 @@
 # 上手、升级与回退
 
-当前候选版为 0.2.1，目标为 RV1126B TEST2 RK805B V10 的现有 AArch64 Buildroot 系统。已验收版本和候选版的检查范围见[验证状态](../validation/README.md)。源码构建见[构建指南](build.zh-CN.md)。
+当前候选版为 0.2.2，目标为 RV1126B TEST2 RK805B V10 的现有 AArch64 Buildroot 系统。已验收版本和候选版的检查范围见[验证状态](../validation/README.md)。源码构建见[构建指南](build.zh-CN.md)。
 
 ## 设备条件
 
@@ -15,7 +15,7 @@
 在主机仓库根目录执行：
 
 ```sh
-adb push dist/mybot-rv1126b-0.2.1-aarch64.tar.gz /userdata/
+adb push dist/mybot-rv1126b-0.2.2-aarch64.tar.gz /userdata/
 adb shell
 ```
 
@@ -23,13 +23,13 @@ adb shell
 
 ```sh
 cd /userdata
-tar -xzf mybot-rv1126b-0.2.1-aarch64.tar.gz
-cd mybot-rv1126b-0.2.1-aarch64
+tar -xzf mybot-rv1126b-0.2.2-aarch64.tar.gz
+cd mybot-rv1126b-0.2.2-aarch64
 sha256sum -c SHA256SUMS
 ./run.sh --version
 ```
 
-校验应全部为 `OK`，版本为 0.2.1，语言和视频标志与所选程序一致。英文包、单配置包的名称不同，以实际交付文件名为准。包内包括程序、RTSA、提示音、来源/许可、构建 manifest、ABI 报告和校验清单。无需覆盖 `/usr/bin`、`/usr/lib`、ALSA 配置或开机脚本。
+校验应全部为 `OK`，版本为 0.2.2，语言和视频标志与所选程序一致。英文包、单配置包的名称不同，以实际交付文件名为准。包内包括程序、RTSA、提示音、来源/许可、构建 manifest、ABI 报告和校验清单。无需覆盖 `/usr/bin`、`/usr/lib`、ALSA 配置或开机脚本。
 
 如果原厂服务仍在运行，由操作者停止它：
 

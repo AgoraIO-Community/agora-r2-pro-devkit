@@ -3,10 +3,10 @@ Source URL: https://download.agora.io/rtsasdk/release/Agora-RTSALite-RmRdRcAuAcA
 Archive SHA256: 850834b5b925ffb7fb447e97cf9ec5dc33fe0a0f68108e1a4954ee7590870fbe
 Original source record: 2026-10-12
 Vendored: 2026-11-13
-Vendored location: third_party/rtsa
+Vendored location: vendor/rtsa
 Import scope: all 99 official files, 38,268,142 bytes, unmodified
-Target SDK root: third_party/rtsa/agora_sdk
-Target library: third_party/rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so
+Target SDK root: vendor/rtsa/agora_sdk
+Target library: vendor/rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so
 Library SHA256: 0e878752644d94227c2aa5f3a9d2259c4098850297c867a2460cbbf8c66d3d98
 
 Observed ELF: little-endian ELF64, AArch64 (183), DYN (3).

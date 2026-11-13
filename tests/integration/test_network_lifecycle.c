@@ -93,7 +93,7 @@ static int fixture_ferror(FILE *file);
 #define fopen fixture_fopen
 #define fclose fixture_fclose
 #define ferror fixture_ferror
-#include "../../components/mybot_platform/src/services/network_monitor.c"
+#include "../../src/platform/src/services/network_monitor.c"
 #undef calloc
 #undef free
 #undef pipe2

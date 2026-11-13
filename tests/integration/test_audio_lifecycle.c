@@ -92,7 +92,7 @@ static int audio_nanosleep(const struct timespec *requested, struct timespec *re
 #define pthread_mutex_destroy audio_mutex_destroy
 #define clock_gettime audio_clock_gettime
 #define nanosleep audio_nanosleep
-#include "../../components/mybot_platform/src/drivers/audio/alsa_audio.c"
+#include "../../src/platform/src/drivers/audio/alsa_audio.c"
 #undef calloc
 #undef realloc
 #undef free

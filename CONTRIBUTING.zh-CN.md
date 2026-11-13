@@ -6,9 +6,11 @@
 
 ## 代码边界
 
-应用配置与生命周期放在 `app/`；板级默认值、Linux 服务和驱动放在 `components/mybot_platform/`。`components/mybot_ui/` 的 renderer 与视图保持独立，不依赖 DRM、ALSA、MPP 或平台 worker 线程。平台仅使用 MyBot 公共头文件，不引用 SDK 私有接口。
+应用配置与生命周期放在 `src/application/`；板级默认值、Linux 服务和驱动放在 `src/platform/`。`src/ui/` 的 renderer 与视图保持独立，不依赖 DRM、ALSA、MPP 或平台 worker 线程。平台仅使用 MyBot 公共头文件，不引用 SDK 私有接口。
 
-`third_party/` 为固定依赖快照，必需的 RTSA 快照完整保留官方包中的二进制和文档。更新时记录准确来源/revision、保留声明、登记本地补丁，并按[依赖流程](docs/development/dependencies.zh-CN.md)同步锁文件与来源。不要批量格式化导入文件或生成文件；字体位图通过固定输入再生成。
+内部路径调整保留 `mybot_platform/`、`mybot_ui/` 公共头文件命名空间和 CMake target。开发工具程序放在 `tools/`；构建、检查、生成与打包自动化放在 `scripts/`。
+
+`vendor/` 为固定依赖快照，必需的 RTSA 快照完整保留官方包中的二进制和文档。更新时记录准确来源/revision、保留声明、登记本地补丁，并按[依赖流程](docs/development/dependencies.zh-CN.md)同步锁文件与来源。不要批量格式化导入文件或生成文件；字体位图通过固定输入再生成。
 
 不要提交 token、私有设备身份、凭据、运行数据、个人 SDK 路径或无关构建产物。设备操作及其他仓库修改遵循所有者授权。
 
