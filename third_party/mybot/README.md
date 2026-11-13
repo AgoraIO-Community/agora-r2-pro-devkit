@@ -1,6 +1,5 @@
 # mybot
 
-[![CI](https://github.com/junlon2006/mybot/actions/workflows/ci.yml/badge.svg)](https://github.com/junlon2006/mybot/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/junlon2006/mybot)](LICENSE)
 
 **[English](README.md) | [简体中文](README.zh-CN.md)**
@@ -18,8 +17,8 @@ requires an [Agora RTSA SDK](https://doc.shengwang.cn/doc/rtsa/c/landing-page) b
 ABI. With those dependencies, it can be ported to platforms such as Linux, an RTOS, or a bare-metal
 MCU.
 
-> Current version: **1.3.0**. The bundled Agora RTSA
-> binary and AOSL have separate licensing and usage terms; read
+> Current SDK version: **1.3.0**. This is a pinned Linux production subset;
+> AOSL lives at `../aosl`, and Agora RTSA is supplied externally. They have separate terms; read
 > [License and third-party dependencies](#license-and-third-party-dependencies) before using the
 > SDK in a product.
 
@@ -34,8 +33,6 @@ MCU.
 - [Architecture](#architecture)
 - [Repository layout](#repository-layout)
 - [Documentation](#documentation)
-- [Development and verification](#development-and-verification)
-- [Contributing and support](#contributing-and-support)
 - [License and third-party dependencies](#license-and-third-party-dependencies)
 
 ## Features
@@ -109,85 +106,32 @@ session and is not part of this repository.
 
 ## Quick start
 
-The Linux reference platform lets you run the full workflow on a development machine. Requirements:
-Linux x86_64, CMake 3.16+, a C99 compiler, and ALSA and OpenSSL development packages. The bundled
-Agora RTSA shared library is also the x86_64 Linux build. AOSL is pulled in as a pinned git
-submodule: initialize it before the first build (or clone with `--recurse-submodules`).
-
-```bash
-git submodule update --init --recursive
-sudo apt-get update
-sudo apt-get install -y build-essential cmake libasound2-dev libssl-dev
-cmake -S . -B build -DCONFIG_PLATFORM=linux -DMYBOT_ENABLE_ASAN=OFF
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-```
-
-### Device-service configuration
-
-The deployment supplies the device-service base URL through `--server` in the Linux example or
-`mybot_config_t.server_base` in a product integration. The SDK validates the URL and appends the
-device-service paths; the server implementation is outside this repository. See
-[Device-service compatibility](docs/PORTING.md#device-service-compatibility) for the fields consumed
-by the SDK.
-
-`device_id` is the globally unique, stable identity of one physical device. Product and device
-registration systems must ensure that each ID belongs to exactly one device.
-Each chip platform uses a distinct, fixed chip prefix to isolate its ID namespace, so identical
-digest suffixes on different platforms still produce different complete IDs.
-The product generates it as `<chip>-<24 uppercase hex characters>`: use the first
-12 bytes of HMAC-SHA256 over its stable MAC address, with a fixed platform derivation key.
-The chip prefix is at most 7 ASCII characters, so the complete ID is at most 32 characters,
-excluding the terminating NUL. See [Device ID generation](docs/PORTING.md#device-id-generation)
-for the input and key rules. The SDK receives this ID; it does not generate it.
-
-After setting `MYBOT_SERVER_BASE` to the base URL supplied by the deployment, run:
-
-```bash
-./build/examples/linux/mybot \
-  --server "$MYBOT_SERVER_BASE" \
-  --device-id ESP32-BF0C5C8DD323ED321F928C79 \
-  --fw-ver 1.3.0 \
-  --hw-model linux-reference
-```
-
-Replace the sample ID with the ID generated for your device.
-
-The example also plays an optional pairing-code voice prompt ("Please enter the pairing code in the console...") from
-`./assets/locales/<locale>/` (raw 16 kHz mono s16 PCM: `prompt.pcm`, `0.pcm`..`9.pcm`).
-The default locale is `zh-CN`; set `MYBOT_LOCALE` and `MYBOT_ASSETS_DIR` to override.
-
-Once ready, press `s` to start a conversation, `q` to stop it, `p` to re-pair, `u` / `d` to raise /
-lower the volume, `e` to exit.
-
-The Linux reference implementation is a **development stand-in**: it reuses the host network and
-reports STA as connected immediately; it does not implement real APSTA provisioning. Audio uses the
-ALSA `default` device and registers an ALSA mixer volume implementation when a supported mixer
-control is available; otherwise playback uses software gain. KV data is written to
-`.mybot-kv-store/` in the current directory by default; override the location with the
-`MYBOT_KV_STORE_DIR` environment variable.
+Build and run this application from its [project entry point](../../README.md).
+This SDK snapshot retains the core, public headers, Linux adapters and prompt assets.
+Upstream examples, tests and repository/release tooling are omitted. The parent
+integration fixes `MYBOT_BUILD_EXAMPLES=OFF` and `MYBOT_BUILD_TESTS=OFF`.
 
 ## Integrating into a host project
 
-We recommend vendoring the repository as a source submodule, and mybot itself depends on AOSL
-through a nested submodule — initialize submodules after adding it with
-`git submodule update --init --recursive`.
-The host must provide an Agora RTSA header and shared or static library matching the target
-architecture and ensure AOSL supports the target platform.
+The parent application provides the pinned sibling AOSL source tree through `AOSL_DIR`;
+there are no nested submodules. Its [SDK integration](../../cmake/dependencies/sdk.cmake)
+creates one `aosl` target through MyBot. The host supplies Agora RTSA headers and a
+shared or static library matching the target architecture. This snapshot retains Linux only.
 
 An installed package is also supported: `cmake --install` exports `mybot::sdk` (and the bundled
 `mybot::aosl`), and a consumer project can use `find_package(mybot CONFIG REQUIRED)` after pointing
 `MYBOT_AGORA_SDK_DIR` / `MYBOT_AGORA_RTC_LIBRARY` at a target-architecture Agora RTSA package.
 
 ```cmake
-set(CONFIG_PLATFORM my_mcu CACHE STRING "" FORCE)
+set(CONFIG_PLATFORM linux CACHE STRING "" FORCE)
+set(AOSL_DIR "${PROJECT_SOURCE_DIR}/third_party/aosl" CACHE PATH "" FORCE)
 set(AGORA_SDK_DIR /opt/agora-rtsa CACHE PATH "" FORCE)
 set(AGORA_RTC_LIBRARY /opt/agora-rtsa/lib/libagora-rtc-sdk.so CACHE FILEPATH "" FORCE)
 
 set(MYBOT_BUILD_LINUX_PLATFORM OFF CACHE BOOL "" FORCE)
 set(MYBOT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(MYBOT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(MYBOT_AUDIO_PTIME_MS 60 CACHE STRING "" FORCE)
+set(MYBOT_AUDIO_PTIME_MS 20 CACHE STRING "" FORCE)
 set(MYBOT_WAKE_WORDS OFF CACHE BOOL "" FORCE)
 set(MYBOT_ENABLE_HTTPS ON CACHE BOOL "" FORCE)
 
@@ -209,10 +153,9 @@ provisioning again. The SDK owns device-service pairing and conversations, indep
 network setup. See [PORTING: start and stop](docs/PORTING.md#step-6-start-and-stop) for the
 integration sequence and example, and [mybot.h](include/mybot/mybot.h) for the API contract.
 
-The bundled Linux RTSA package is a shared library. CMake supplies a build-tree runtime path for the
-reference executable and tests. Installed-package consumers must deploy `libagora-rtc-sdk.so` and
-make it discoverable through their install RPATH or runtime loader configuration; the mybot CMake
-install target does not install or redistribute that dependency.
+Agora RTSA is external to this source snapshot. Shared-library consumers must deploy
+`libagora-rtc-sdk.so` through the application packaging flow and make it discoverable through
+RPATH or the runtime loader; the MyBot CMake install target does not install that dependency.
 
 ## Build configuration
 
@@ -232,40 +175,23 @@ The following options can be set via the CMake command line or cache variables b
 | `MYBOT_ALLOW_INSECURE_HTTP` | `OFF` | Local development only: explicitly allow plaintext HTTP |
 | `MYBOT_ENABLE_ASAN` | `OFF` | GCC/Clang AddressSanitizer; recommended for host tests |
 | `MYBOT_ENABLE_UBSAN` | `OFF` | GCC/Clang UndefinedBehaviorSanitizer; recommended for host tests |
-| `MYBOT_ENABLE_COVERAGE` | `OFF` | Instrument mybot targets for gcov; used by the CI coverage job |
+| `MYBOT_ENABLE_COVERAGE` | `OFF` | Instrument mybot targets for gcov |
 
 Two independent variables select platform code: `CONFIG_PLATFORM` chooses the AOSL HAL port
-consumed by `third_party/aosl` (e.g. `linux`, `esp32`), while `MYBOT_BUILD_LINUX_PLATFORM` builds
-the bundled Linux reference implementations (`platforms/linux/`: ALSA, stdin, file KV, console LCD,
-OpenSSL) and requires `CONFIG_PLATFORM=linux`. An MCU port sets `CONFIG_PLATFORM=my_mcu` and keeps
-`MYBOT_BUILD_LINUX_PLATFORM=OFF`.
-
-For example:
-
-```bash
-cmake -S . -B build-wake \
-  -DCONFIG_PLATFORM=linux \
-  -DMYBOT_AUDIO_PTIME_MS=60 \
-  -DMYBOT_WAKE_WORDS=ON
-```
+consumed by [AOSL](../aosl) (only `linux` is retained here), while `MYBOT_BUILD_LINUX_PLATFORM`
+builds the complete Linux adapters (`platforms/linux/`: ALSA, stdin, file KV, console LCD, OpenSSL).
+The parent keeps that option OFF and builds only its required Linux services.
 
 `MYBOT_AUDIO_PTIME_MS` must match the RTSA package's
-`CONFIG_MINIMAL_TIMER_INTERVAL_MS` setting. The bundled x86_64 Linux package is fixed at 60 ms;
-for 20 or 40 ms, provide a matching external package with `AGORA_SDK_DIR` and
-`AGORA_RTC_LIBRARY`. CMake checks the package's `.config` or `include/global_config.cmake` and
+`CONFIG_MINIMAL_TIMER_INTERVAL_MS` setting. Supply a matching external package with
+`AGORA_SDK_DIR` and `AGORA_RTC_LIBRARY`. The application fixes 20 ms in its integration;
+60 ms in the table above remains the unmodified SDK default. CMake checks the package's `.config` or `include/global_config.cmake` and
 rejects a mismatch; packages without this build metadata are rejected. When a parent project
 predefines the Agora imported target, set `AGORA_SDK_DIR` to that same package so the check still
 has a verifiable source of truth. CMake cannot inspect an imported target's ABI; the parent project
 must ensure its include and library paths refer to this same package.
 
-For a 20 ms build, add the paths to the matching RTSA package, for example:
-
-```bash
-cmake -S . -B build-20 \
-  -DMYBOT_AUDIO_PTIME_MS=20 \
-  -DAGORA_SDK_DIR=/opt/agora-rtsa-20 \
-  -DAGORA_RTC_LIBRARY=/opt/agora-rtsa-20/lib/libagora-rtc-sdk.so
-```
+Use the application build scripts to configure the external target package and pinned dependencies.
 
 The Linux reference platform has no local ASR implementation, so enabling `MYBOT_WAKE_WORDS`
 requires the host to register an additional implementation; otherwise the app fails to start with a
@@ -398,21 +324,17 @@ shutdown ordering, and acceptance requirements are defined in
 
 ```text
 mybot/
-├── include/mybot/          # public headers and platform interface specifications
-├── src/                    # cross-platform implementation; internal/ is not public API
-├── platforms/linux/        # Linux reference implementations (ALSA/stdin/file/console)
-├── examples/linux/         # Linux example application entry
-├── tests/                  # unit, platform, and host integration tests
-├── docs/                   # porting and release guides
-├── cmake/                  # toolchain helpers
-└── third_party/            # AOSL submodule and the Agora RTSA SDK
+├── include/mybot/          # public API and platform contracts
+├── src/                    # core; internal/ is private
+├── platforms/linux/        # complete Linux adapter sources
+├── assets/locales/         # pairing-code PCM prompts
+├── docs/                   # API porting/resource guidance and Doxygen template
+└── cmake/                  # SDK package and RTSA packet-time templates
 ```
 
-Key CMake targets:
-
-- `mybot::sdk` — the cross-platform SDK core (AOSL + Agora RTSA).
-- `mybot::platform_linux` — the Linux reference implementation; not part of the cross-platform core.
-- `mybot::linux_example` — the Linux CLI example application.
+`mybot::sdk` links the sibling `aosl` target and externally configured Agora RTSA.
+The application compiles the four Linux services it uses separately; other adapters remain
+available as SDK integration reference material.
 
 ## Documentation
 
@@ -424,55 +346,17 @@ supply their platform adapters, board configuration, and firmware builds.
   integration sequence and acceptance checklist
 - [docs/EMBEDDED.md](docs/EMBEDDED.md) ([简体中文](docs/EMBEDDED.zh-CN.md)) — footprint, memory,
   thread/stack, timing, power and logging guidance for MCU integrators
-- [docs/RELEASING.md](docs/RELEASING.md) ([简体中文](docs/RELEASING.zh-CN.md)) — release process
-- [CHANGELOG.md](CHANGELOG.md) — version history
 - API reference — generated by Doxygen from the public headers with
-  `doxygen build/docs/Doxyfile`; CI builds it on every push / PR and publishes it as an artifact
-
-## Development and verification
-
-Unit tests exercise malformed service responses, allocation and startup failures, callback
-buffer ownership, and control/service queue failure paths. Video tests run with the feature both
-enabled and disabled. The internal JSON helper rejects non-finite numbers and floating-point
-values outside `[-2^63, 2^63)`, and preserves parsed signed 64-bit integers when printing.
-
-```bash
-cmake -S . -B build -DCONFIG_PLATFORM=linux -DMYBOT_ENABLE_ASAN=ON
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-find include src platforms/linux examples/linux tests -type f \
-  \( -name '*.c' -o -name '*.h' \) \
-  -exec clang-format --dry-run --Werror {} +
-```
-
-- Self-maintained C code follows the root `.clang-format`; `third_party/` keeps upstream content.
-- CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs the build, tests, and format check
-  on every push / PR; make sure your local commands match CI before merging.
-- CI builds with both GCC and Clang under ASan and UBSan, runs cppcheck and clang-tidy static
-  analysis, and publishes gcov/lcov coverage to Codecov.
-- Feature configurations cover disabled cloud AEC, enabled wake words, and enabled video. Unit
-  tests and CMake source/install consumers use the selected SDK feature values; video CI uses
-  mock platform encoders and does not replace device validation.
-- Commit messages follow Conventional Commits (see `CONTRIBUTING.md`). Install the local
-  `commit-msg` hook once per clone with `./scripts/setup-githooks.sh`; CI validates every pushed /
-  PR commit subject.
-
-## Contributing and support
-
-We welcome issues, discussions, and pull requests. Before you start, please read (each document is
-available in English and Simplified Chinese):
-
-- [CONTRIBUTING](CONTRIBUTING.md) ([简体中文](CONTRIBUTING.zh-CN.md)) — development workflow and contribution guidelines
-- [SUPPORT](SUPPORT.md) ([简体中文](SUPPORT.zh-CN.md)) — how to get help
+  `doxygen build/docs/Doxyfile` after configuring the SDK
 
 ## License and third-party dependencies
 
 Our own code is released under the Apache License 2.0 in the root [LICENSE](LICENSE). This does not
 change the licensing of third-party components:
 
-- AOSL carries additional conditions listed in `third_party/aosl/LICENSE`.
-- The bundled x86_64 Linux Agora RTSA binary is for development/demo use only. No standalone
-  license was found in the package; confirm authorization before commercial use or redistribution.
+- AOSL carries additional conditions listed in [AOSL LICENSE](../aosl/LICENSE).
+- Agora RTSA is supplied externally and requires its applicable vendor authorization; the
+  upstream package audit record remains in the notices, but that x86_64 binary is not included here.
 - `mybot_json` is derived from cJSON and retains the MIT license notice.
 
 Verify these terms independently before shipping or redistributing a product. See

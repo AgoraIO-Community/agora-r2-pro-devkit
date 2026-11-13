@@ -15,10 +15,9 @@ mybot 设计为可移植到几乎任意平台——Linux、RTOS 或裸机——�
 ## 第 1 步：核实前置条件
 
 提供 C99 编译器、CMake 3.16+、AOSL `CONFIG_PLATFORM` 移植，以及为目标精确 ABI 构建的
-Agora RTSA 头文件与库。从 git 检出构建时，先执行 `git submodule update --init --recursive`
-初始化 AOSL submodule。设备还需要到兼容设备服务端的 TLS 连接能力、持久化凭据存储，以及
-16 kHz 单声道有符号 16-bit PCM 输入输出。随仓库附带的 Agora 库仅用于 x86_64 Linux，不能
-复用于其他架构。
+Agora RTSA 头文件与库。此应用固定快照的 Linux AOSL 位于 `../../aosl`，父工程通过
+`AOSL_DIR` 指定其位置；Agora RTSA 由外部提供。设备还需要到兼容设备服务端的 TLS
+连接能力、持久化凭据存储，以及 16 kHz 单声道有符号 16-bit PCM 输入输出。
 
 ## 第 2 步：创建平台目录布局
 
@@ -243,7 +242,8 @@ int my_mcu_platform_register(void) {
 ## 第 5 步：与 CMake 集成
 
 ```cmake
-set(CONFIG_PLATFORM my_mcu CACHE STRING "" FORCE)
+set(CONFIG_PLATFORM linux CACHE STRING "" FORCE)
+set(AOSL_DIR "${PROJECT_SOURCE_DIR}/third_party/aosl" CACHE PATH "" FORCE)
 set(AGORA_SDK_DIR /opt/agora-rtsa-target CACHE PATH "" FORCE)
 set(AGORA_RTC_LIBRARY /opt/agora-rtsa-target/lib/libagora-rtc-sdk.so CACHE FILEPATH "" FORCE)
 set(MYBOT_BUILD_LINUX_PLATFORM OFF CACHE BOOL "" FORCE)
@@ -257,14 +257,13 @@ target_link_libraries(my_mcu_platform PUBLIC mybot::sdk)
 target_link_libraries(device_firmware PRIVATE mybot::sdk my_mcu_platform)
 ```
 
-两个相互独立的变量选择平台代码：`CONFIG_PLATFORM` 选择 `third_party/aosl` 消费的 AOSL HAL
-端口（如 `linux`、`esp32`）；`MYBOT_BUILD_LINUX_PLATFORM` 构建随附的 Linux 参考实现
+两个相互独立的变量选择平台代码：`CONFIG_PLATFORM` 选择 [AOSL](../../aosl) 消费的 HAL
+端口（此快照仅保留 `linux`）；`MYBOT_BUILD_LINUX_PLATFORM` 构建随附的 Linux 参考实现
 （`platforms/linux/`）并要求 `CONFIG_PLATFORM=linux`。MCU 移植保持
 `MYBOT_BUILD_LINUX_PLATFORM=OFF`。宿主可预定义名为 `agora-rtc-sdk` 的导入目标。本版本支持
-`add_subdirectory()` 源码集成，也支持通过 `find_package(mybot)` 消费已安装包。源码集成需先
-初始化 mybot 的嵌套 AOSL submodule（在 mybot 检出目录执行
-`git submodule update --init --recursive`）。安装包只提供 CMake package 文件，不安装
-pkg-config 元数据。
+`add_subdirectory()` 源码集成，也支持通过 `find_package(mybot)` 消费已安装包。源码集成通过
+`AOSL_DIR` 指定平级的固定 AOSL 源码；本应用无需初始化嵌套 submodule。
+安装包只提供 CMake package 文件，不安装 pkg-config 元数据。
 
 ## 第 6 步：启动与停止
 
@@ -447,8 +446,8 @@ cmake --build build-target -j
 libc、编译器与浮点 ABI；若使用共享目标包，还需部署该库并配置固件或操作系统的运行时加载器。
 
 所选 `MYBOT_AUDIO_PTIME_MS` 必须与 RTSA 软件包中的 `CONFIG_MINIMAL_TIMER_INTERVAL_MS`
-一致。仓库附带的 x86_64 Linux 软件包固定为 60 ms；使用 20 或 40 ms 时，请通过
-`AGORA_SDK_DIR` 和 `AGORA_RTC_LIBRARY` 指向匹配的软件包。CMake 会读取 `.config` 或
+一致。通过 `AGORA_SDK_DIR` 和 `AGORA_RTC_LIBRARY` 指向匹配的目标软件包；
+本应用固定为 20 ms。CMake 会读取 `.config` 或
 `include/global_config.cmake`；配置不一致或缺少元数据时直接失败。若宿主预先定义了
 `agora-rtc-sdk` 目标，`AGORA_SDK_DIR` 仍必须指向同一个软件包以进行校验。
 CMake 无法检查宿主导入目标的 ABI，宿主必须确保其头文件和库路径来自该软件包。
@@ -462,8 +461,7 @@ CMake 无法检查宿主导入目标的 ABI，宿主必须确保其头文件和�
 - SDK 注册监听时能收到已有可用连接，运行期断开、重连和失败事件无死锁完成。
 - 进入配网前等待 `mybot_stop()` 完成，产品仅在网络重新可用后启动 MyBot。
 - KV 在重置后存活，处理缺失与溢出，并保护凭据。
-- 使用对应 RTSA 软件包时，采集/播放通过所选 ptime 的 16 kHz 单声道 S16 测试（仓库附带
-  Linux 软件包覆盖 60 ms）。
+- 使用对应 RTSA 软件包时，采集/播放通过所选 ptime 的 16 kHz 单声道 S16 测试。
 - 短 I/O 有进展，stop 能在设备丢失时解除阻塞。
 - `destroy` 返回后没有按键或唤醒词回调运行；LCD 不保留借用的内容。
 - 部分启动失败与重复 start/stop 会在 worker 可 join 后释放全部资源；若 worker join 失败，SDK

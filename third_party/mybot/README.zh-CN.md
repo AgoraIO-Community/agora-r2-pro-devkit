@@ -1,6 +1,5 @@
 # mybot
 
-[![CI](https://github.com/junlon2006/mybot/actions/workflows/ci.yml/badge.svg)](https://github.com/junlon2006/mybot/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/junlon2006/mybot)](LICENSE)
 
 **[English](README.md) | 简体中文**
@@ -14,8 +13,8 @@
 ABI 对应的 [Agora RTSA SDK](https://doc.shengwang.cn/doc/rtsa/c/landing-page)。在这些依赖
 就绪时，可移植到 Linux、RTOS 或裸机 MCU 等平台。
 
-> 当前版本为 **1.3.0**。仓库内置的 Agora RTSA 二进制与
-> AOSL 有独立的许可及使用条件；用于产品前请阅读[许可证与第三方依赖](#许可证与第三方依赖)。
+> 当前 SDK 版本为 **1.3.0**。此处为固定的 Linux 生产子集；AOSL 位于平级 `../aosl`，
+> Agora RTSA 由外部提供，均有独立许可及使用条件；用于产品前请阅读[许可证与第三方依赖](#许可证与第三方依赖)。
 
 ## 目录
 
@@ -28,8 +27,6 @@ ABI 对应的 [Agora RTSA SDK](https://doc.shengwang.cn/doc/rtsa/c/landing-page)
 - [系统架构](#系统架构)
 - [仓库结构](#仓库结构)
 - [文档](#文档)
-- [开发与验证](#开发与验证)
-- [贡献与支持](#贡献与支持)
 - [许可证与第三方依赖](#许可证与第三方依赖)
 
 ## 功能特性
@@ -87,77 +84,30 @@ ABI 对应的 [Agora RTSA SDK](https://doc.shengwang.cn/doc/rtsa/c/landing-page)
 
 ## 快速开始
 
-Linux 参考平台用于在开发机上快速跑通完整工作流。环境要求：Linux x86_64、CMake 3.16+、
-C99 编译器、ALSA 与 OpenSSL 开发包。仓库附带的 Agora RTSA 共享库为 x86_64 Linux 版本。
-AOSL 以固定 commit 的 git submodule 引入：首次构建前需初始化（或克隆时加
-`--recurse-submodules`）。
-
-```bash
-git submodule update --init --recursive
-sudo apt-get update
-sudo apt-get install -y build-essential cmake libasound2-dev libssl-dev
-cmake -S . -B build -DCONFIG_PLATFORM=linux -DMYBOT_ENABLE_ASAN=OFF
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-```
-
-### 设备服务配置
-
-部署方通过 Linux 示例的 `--server` 或产品集成中的 `mybot_config_t.server_base` 提供设备服务
-基础地址。SDK 会校验 URL 并拼接设备服务路径；服务端实现不属于本仓库。SDK 消费的字段见
-[设备服务兼容性](docs/PORTING.zh-CN.md#设备服务兼容性)。
-
-`device_id` 是物理设备的全局唯一、稳定的设备唯一码。产品和设备注册系统须保证一个 ID
-仅对应一台设备。不同芯片平台使用不同且固定的型号前缀，完全隔离 ID 命名空间；即使摘要
-后缀相同，跨平台的完整 ID 也不同。
-产品层按 `<芯片型号>-<24 个大写十六进制字符>` 生成该 ID：使用固定的平台派生 key，
-对设备稳定 MAC 地址计算 HMAC-SHA256，取摘要前 12 字节。芯片型号前缀最多 7 个 ASCII 字符，
-完整 ID 最多 32 字符，不含结尾 NUL。输入与 key 的约定见
-[设备 ID 生成](docs/PORTING.zh-CN.md#设备-id-生成)。SDK 接收该 ID，不负责生成。
-
-将 `MYBOT_SERVER_BASE` 设置为部署方提供的基础地址后运行：
-
-```bash
-./build/examples/linux/mybot \
-  --server "$MYBOT_SERVER_BASE" \
-  --device-id ESP32-BF0C5C8DD323ED321F928C79 \
-  --fw-ver 1.3.0 \
-  --hw-model linux-reference
-```
-
-请将示例 ID 替换为当前设备实际生成的 ID。
-
-示例程序还会在拿到配对码时可选地播报语音提示（“请在控制台输入配对码…”），音频来自
-`./assets/locales/<locale>/`（原始 16 kHz 单声道 16-bit PCM：`prompt.pcm`、`0.pcm`~`9.pcm`）。
-默认语言为 `zh-CN`，可用 `MYBOT_LOCALE` 与 `MYBOT_ASSETS_DIR` 覆盖。
-
-就绪后输入 `s` 开始会话、`q` 停止会话、`p` 重新配对、`u` / `d` 增大 / 减小播放音量、
-`e` 退出。
-
-Linux 参考实现是**开发替身**：它直接使用宿主机现有网络并立即报告网络可用，不实现真实
-APSTA 配网；音频使用 ALSA `default` 设备，并注册 ALSA mixer 音量实现，在存在受支持的混音器
-控件时直接调整硬件音量，否则回退到软件增益；KV 数据默认写入当前目录的 `.mybot-kv-store/`，
-可用环境变量 `MYBOT_KV_STORE_DIR` 修改。
+通过[项目入口](../../README.zh-CN.md)构建、运行应用。此 SDK 快照保留核心、公共头文件、
+完整 Linux adapter 和提示音资源，省略上游示例、测试及仓库/发布工具。父工程固定
+`MYBOT_BUILD_EXAMPLES=OFF`、`MYBOT_BUILD_TESTS=OFF`。
 
 ## 集成到宿主工程
 
-推荐将仓库作为源码子模块引入。mybot 自身通过嵌套 submodule 依赖 AOSL，引入后先执行
-`git submodule update --init --recursive` 初始化。宿主需要为目标架构准备匹配的 Agora RTSA
-头文件及共享库或静态库，并确保 AOSL 已支持目标平台。
+父工程通过 `AOSL_DIR` 指定平级的固定 AOSL 源码，无嵌套 submodule。
+[SDK 集成](../../cmake/dependencies/sdk.cmake)继续由 MyBot 创建唯一的 `aosl` target。
+宿主为目标架构准备匹配的 Agora RTSA 头文件及共享库或静态库；此快照仅保留 Linux。
 
 也支持已安装包：`cmake --install` 会导出 `mybot::sdk`（及随附的 `mybot::aosl`），消费工程将
 `MYBOT_AGORA_SDK_DIR` / `MYBOT_AGORA_RTC_LIBRARY` 指向目标架构的 Agora RTSA 包后，即可用
 `find_package(mybot CONFIG REQUIRED)` 引入。
 
 ```cmake
-set(CONFIG_PLATFORM my_mcu CACHE STRING "" FORCE)
+set(CONFIG_PLATFORM linux CACHE STRING "" FORCE)
+set(AOSL_DIR "${PROJECT_SOURCE_DIR}/third_party/aosl" CACHE PATH "" FORCE)
 set(AGORA_SDK_DIR /opt/agora-rtsa CACHE PATH "" FORCE)
 set(AGORA_RTC_LIBRARY /opt/agora-rtsa/lib/libagora-rtc-sdk.so CACHE FILEPATH "" FORCE)
 
 set(MYBOT_BUILD_LINUX_PLATFORM OFF CACHE BOOL "" FORCE)
 set(MYBOT_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(MYBOT_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-set(MYBOT_AUDIO_PTIME_MS 60 CACHE STRING "" FORCE)
+set(MYBOT_AUDIO_PTIME_MS 20 CACHE STRING "" FORCE)
 set(MYBOT_WAKE_WORDS OFF CACHE BOOL "" FORCE)
 set(MYBOT_ENABLE_HTTPS ON CACHE BOOL "" FORCE)
 
@@ -177,9 +127,8 @@ target_link_libraries(device_firmware PRIVATE mybot::sdk)
 [PORTING：启动与停止](docs/PORTING.zh-CN.md#第-6-步启动与停止)，
 API 契约以 [mybot.h](include/mybot/mybot.h) 为准。
 
-仓库附带的 Linux RTSA 包是共享库。CMake 会为参考程序和测试设置构建目录运行路径；通过
-安装包集成的消费者必须自行部署 `libagora-rtc-sdk.so`，并通过安装 RPATH 或运行时加载器配置
-确保系统能够找到它。mybot 的 CMake 安装目标不会安装或再分发该依赖。
+Agora RTSA 位于源码快照之外。共享库使用方通过应用打包流程部署 `libagora-rtc-sdk.so`，
+并通过 RPATH 或运行时加载器确保系统能够找到它；MyBot 的 CMake 安装目标不会安装该依赖。
 
 ## 构建配置
 
@@ -198,39 +147,22 @@ API 契约以 [mybot.h](include/mybot/mybot.h) 为准。
 | `MYBOT_ALLOW_INSECURE_HTTP` | `OFF` | 仅本地开发：显式允许明文 HTTP |
 | `MYBOT_ENABLE_ASAN` | `OFF` | GCC/Clang 地址消毒器，建议在宿主测试中开启 |
 | `MYBOT_ENABLE_UBSAN` | `OFF` | GCC/Clang 未定义行为消毒器，建议在宿主测试中开启 |
-| `MYBOT_ENABLE_COVERAGE` | `OFF` | 为 gcov 代码覆盖率插桩；CI 覆盖率任务使用 |
+| `MYBOT_ENABLE_COVERAGE` | `OFF` | 为 gcov 代码覆盖率插桩 |
 
-两个相互独立的变量选择平台代码：`CONFIG_PLATFORM` 选择 `third_party/aosl` 消费的 AOSL HAL
-端口（如 `linux`、`esp32`）；`MYBOT_BUILD_LINUX_PLATFORM` 构建随附的 Linux 参考实现
-（`platforms/linux/`：ALSA、stdin、文件 KV、控制台 LCD、OpenSSL），并要求
-`CONFIG_PLATFORM=linux`。MCU 移植设置 `CONFIG_PLATFORM=my_mcu` 并保持
-`MYBOT_BUILD_LINUX_PLATFORM=OFF`。
-
-例如：
-
-```bash
-cmake -S . -B build-wake \
-  -DCONFIG_PLATFORM=linux \
-  -DMYBOT_AUDIO_PTIME_MS=60 \
-  -DMYBOT_WAKE_WORDS=ON
-```
+两个相互独立的变量选择平台代码：`CONFIG_PLATFORM` 选择 [AOSL](../aosl) 消费的 AOSL HAL
+端口（此快照仅保留 `linux`）；`MYBOT_BUILD_LINUX_PLATFORM` 构建完整 Linux adapter
+（`platforms/linux/`：ALSA、stdin、文件 KV、控制台 LCD、OpenSSL）。父工程保持该选项 OFF，
+单独编译所需的 Linux service。
 
 `MYBOT_AUDIO_PTIME_MS` 必须与 RTSA 软件包中的
-`CONFIG_MINIMAL_TIMER_INTERVAL_MS` 一致。仓库附带的 x86_64 Linux 软件包固定为 60 ms；使用
-20 或 40 ms 时，必须通过 `AGORA_SDK_DIR` 和 `AGORA_RTC_LIBRARY` 提供对应版本的软件包。
+`CONFIG_MINIMAL_TIMER_INTERVAL_MS` 一致。通过 `AGORA_SDK_DIR` 和 `AGORA_RTC_LIBRARY`
+提供匹配的外部软件包；应用集成固定为 20 ms，上表 60 ms 为未修改的 SDK 默认值。
 CMake 会读取软件包的 `.config` 或 `include/global_config.cmake` 并拒绝不匹配的配置；缺少这些
 构建元数据的软件包也会被拒绝。若宿主工程预先定义了 Agora 导入目标，仍需将
 `AGORA_SDK_DIR` 设置为同一个软件包，以便校验有明确依据。
 CMake 无法检查宿主预定义导入目标的 ABI；宿主必须确保该目标的头文件与库路径确实来自同一软件包。
 
-构建 20 ms 版本时，请指向匹配的 RTSA 软件包，例如：
-
-```bash
-cmake -S . -B build-20 \
-  -DMYBOT_AUDIO_PTIME_MS=20 \
-  -DAGORA_SDK_DIR=/opt/agora-rtsa-20 \
-  -DAGORA_RTC_LIBRARY=/opt/agora-rtsa-20/lib/libagora-rtc-sdk.so
-```
+通过应用构建脚本配置外部目标软件包与固定依赖。
 
 Linux 参考平台没有本地 ASR 实现，开启 `MYBOT_WAKE_WORDS` 后需要由宿主额外注册实现，
 否则应用会明确启动失败。
@@ -352,21 +284,16 @@ flowchart LR
 
 ```text
 mybot/
-├── include/mybot/          # SDK 公共头文件和平台接口规范
-├── src/                    # 跨平台实现；internal/ 不属于公共 API
-├── platforms/linux/        # Linux 参考实现（ALSA/stdin/file/console）
-├── examples/linux/         # Linux 示例应用入口
-├── tests/                  # 单元、平台和宿主集成测试
-├── docs/                   # 移植与发布指南
-├── cmake/                  # 工具链辅助文件
-└── third_party/            # AOSL submodule 与 Agora RTSA SDK
+├── include/mybot/          # SDK 公共 API 与平台契约
+├── src/                    # 核心；internal/ 为私有实现
+├── platforms/linux/        # 完整 Linux adapter 源码
+├── assets/locales/         # 配对码 PCM 提示音
+├── docs/                   # API 移植/资源说明与 Doxygen 模板
+└── cmake/                  # SDK package 与 RTSA 包时长模板
 ```
 
-主要 CMake 目标：
-
-- `mybot::sdk`：跨平台 SDK 核心（AOSL + Agora RTSA）。
-- `mybot::platform_linux`：Linux 参考实现，不属于跨平台核心。
-- `mybot::linux_example`：Linux CLI 示例应用。
+`mybot::sdk` 链接平级的 `aosl` target 和外部 Agora RTSA。
+应用单独编译所需的四项 Linux service；其余 adapter 保留为 SDK 集成参考。
 
 ## 文档
 
@@ -377,52 +304,16 @@ mybot/
   的集成流程与验收清单
 - [docs/EMBEDDED.md](docs/EMBEDDED.md)（[简体中文](docs/EMBEDDED.zh-CN.md)）— 面向 MCU
   集成者的体积、内存、线程/栈、时序、功耗与日志说明
-- [docs/RELEASING.md](docs/RELEASING.md)（[简体中文](docs/RELEASING.zh-CN.md)）— 版本发布流程
-- [CHANGELOG.md](CHANGELOG.md) — 版本变更记录
-- API 参考 — 由 Doxygen 从公共头文件生成，命令为 `doxygen build/docs/Doxyfile`；CI 在每个
-  push / PR 构建并以工件形式发布
-
-## 开发与验证
-
-单元测试覆盖服务响应格式错误、内存分配及启动失败、回调缓冲区所有权，以及控制/service
-队列失败路径。视频测试分别验证功能开启和关闭时的行为。内部 JSON 模块拒绝非有限数值和
-`[-2^63, 2^63)` 范围外的浮点数，并在打印时保留解析得到的有符号 64 位整数精度。
-
-```bash
-cmake -S . -B build -DCONFIG_PLATFORM=linux -DMYBOT_ENABLE_ASAN=ON
-cmake --build build -j
-ctest --test-dir build --output-on-failure
-find include src platforms/linux examples/linux tests -type f \
-  \( -name '*.c' -o -name '*.h' \) \
-  -exec clang-format --dry-run --Werror {} +
-```
-
-- 自维护的 C 代码遵循根目录 `.clang-format`；`third_party/` 保持上游内容。
-- CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)）在每个 push / PR 上执行
-  构建、测试与格式检查，提交前请确保本地命令与 CI 一致。
-- CI 使用 GCC 与 Clang 双编译器分别在 ASan、UBSan 下构建，运行 cppcheck 与 clang-tidy
-  静态分析，并向 Codecov 发布 gcov/lcov 覆盖率。
-- 功能配置覆盖关闭云端 AEC、开启唤醒词和开启视频。单测及 CMake 源码/安装消费测试使用
-  当前选定的 SDK 功能参数；视频 CI 使用模拟平台编码器，硬件验证仍需在设备工程完成。
-- 提交信息遵循 Conventional Commits（见 `CONTRIBUTING.md`）。每个克隆执行一次
-  `./scripts/setup-githooks.sh` 安装本地 `commit-msg` hook；CI 会校验每个 push / PR 的
-  提交主题行。
-
-## 贡献与支持
-
-欢迎提交 issue、讨论与 PR。开始之前请阅读（以下文档均提供中英双语）：
-
-- [CONTRIBUTING](CONTRIBUTING.md)（[简体中文](CONTRIBUTING.zh-CN.md)）— 开发流程与提交规范
-- [SUPPORT](SUPPORT.md)（[简体中文](SUPPORT.zh-CN.md)）— 获取支持的方式
+- API 参考 — 由 Doxygen 从公共头文件生成，配置 SDK 后执行 `doxygen build/docs/Doxyfile`
 
 ## 许可证与第三方依赖
 
 仓库自研代码按根目录 [LICENSE](LICENSE) 中的 Apache License 2.0 发布，但这不改变第三方
 组件的许可：
 
-- AOSL 带有其 `third_party/aosl/LICENSE` 中列出的附加条件。
-- 仓库内置的 x86_64 Linux Agora RTSA 二进制仅用于开发/演示。软件包中未找到独立许可证；
-  在商业使用或再分发前必须确认授权。
+- AOSL 带有其 [AOSL LICENSE](../aosl/LICENSE) 中列出的附加条件。
+- Agora RTSA 由外部提供，使用和分发须遵循供应方授权；上游软件包审计记录保留在许可说明中，
+  该 x86_64 二进制不包含在此快照内。
 - `mybot_json` 派生自 cJSON，保留 MIT 许可声明。
 
 发布产品或重新分发前必须单独核实这些条款。详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

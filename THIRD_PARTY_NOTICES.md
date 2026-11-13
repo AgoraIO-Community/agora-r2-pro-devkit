@@ -6,7 +6,7 @@ Project-maintained application and Linux integration code uses [Apache-2.0](LICE
 | --- | --- | --- |
 | MyBot SDK 1.3.0 | `junlon2006/mybot@4c36cbee4fe8908b37ccee12dcebc0b17bc436f1`; Apache-2.0 except file-level notices | [LICENSE](third_party/mybot/LICENSE), [upstream notices](third_party/mybot/THIRD_PARTY_NOTICES.md) |
 | cJSON-derived code | Namespaced implementation retains Dave Gamble copyright and MIT terms | `third_party/mybot/src/support/mybot_json.c` and `src/internal/mybot_json.h` |
-| AOSL | Recorded `84e086084ebcd0ae2455a0ce5721950c5fe2e656`; Apache-2.0-based license **with additional restrictive conditions** | [complete AOSL license](third_party/mybot/third_party/aosl/LICENSE) |
+| AOSL | Recorded `84e086084ebcd0ae2455a0ce5721950c5fe2e656`; Apache-2.0-based license **with additional restrictive conditions** | [complete AOSL license](third_party/aosl/LICENSE) |
 | LVGL 9.5.0 production subset | MIT and source-specific notices | [LICENCE.txt](third_party/lvgl/LICENCE.txt), [COPYRIGHTS.md](third_party/lvgl/COPYRIGHTS.md) |
 | DejaVu terminal and signature fonts | Renamed 18/20 px subsets; DejaVu/Bitstream Vera terms and notices | [terminal font license](components/mybot_ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt), [inputs](components/mybot_ui/fonts/sources.json) |
 | Source Han Sans Chinese subset | SIL OFL 1.1 | [Chinese font license](components/mybot_ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt) |

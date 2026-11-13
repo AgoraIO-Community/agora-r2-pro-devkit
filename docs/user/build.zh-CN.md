@@ -75,7 +75,7 @@ cmake --build --preset rv1126b-voice-zh
 
 英文使用独立目录并设置 `-DRV1126B_LANGUAGE=en-US`，打包设置 `--language en-US`。`--profile voice` 或 `--profile video` 只选择一个变体；`all` 必须两个均存在且配置一致，不能静默省略缺少的程序。可用 `--voice-build` / `--video-build` 指向其他构建目录。
 
-中文全配置候选包为 `dist/mybot-rv1126b-0.2.0-aarch64.tar.gz`；英文名附加 `-en-US`，单变体附加 `-voice` 或 `-video`。已有同名输出会被拒绝，先保留或移动旧候选结果。包内校验和、ABI 和 manifest 校验通过后，按[上手指南](getting-started.zh-CN.md)手动上板。
+中文全配置候选包为 `dist/mybot-rv1126b-0.2.1-aarch64.tar.gz`；英文名附加 `-en-US`，单变体附加 `-voice` 或 `-video`。已有同名输出会被拒绝，先保留或移动旧候选结果。包内校验和、ABI 和 manifest 校验通过后，按[上手指南](getting-started.zh-CN.md)手动上板。
 
 ## UI 预览
 

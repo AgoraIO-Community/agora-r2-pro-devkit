@@ -19,7 +19,7 @@ RTSA package alongside the results:
 Feature flags directly change the code footprint — `MYBOT_CLOUD_AEC`, `MYBOT_WAKE_WORDS`,
 `MYBOT_ENABLE_VIDEO`, and `MYBOT_ENABLE_HTTPS` are the main ones; disable what the product does not
 need. Measure the final linked firmware and its map file to attribute flash use; archive file size
-is not linked flash consumption. The bundled RTSA shared library is x86_64 Linux only.
+is not linked flash consumption. The target RTSA library is supplied externally and must match the target ABI.
 
 ## Memory model
 
@@ -44,7 +44,7 @@ Preallocated PCM arrays do **not** make the end-to-end audio path allocation-fre
 
 - **RTC downlink, per frame:** [the RTC adapter](../src/rtc/mybot_agora_rtc.c) allocates an
   `rtc_event_t` and a PCM payload copy, then queues the event for `rtc_mpq`.
-  [AOSL](../third_party/aosl)'s `kernel/mpq.c` allocates a queued function object and copies its
+  [AOSL](../../aosl)'s `kernel/mpq.c` allocates a queued function object and copies its
   name. The callback copies PCM into the playback ring before these temporary objects are freed.
 - **RTC uplink, per frame:** the send worker reuses its PCM arrays, but its synchronous call to
   `rtc_mpq` still allocates an AOSL function object and name and initializes a mutex/condition pair

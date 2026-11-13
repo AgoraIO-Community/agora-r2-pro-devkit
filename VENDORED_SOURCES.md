@@ -5,7 +5,7 @@ This document describes the inputs actually used by this project. The machine-re
 | Input | Fixed source | Current location and adaptation |
 | --- | --- | --- |
 | MyBot SDK 1.3.0 | [junlon2006/mybot](https://github.com/junlon2006/mybot), `4c36cbee4fe8908b37ccee12dcebc0b17bc436f1` | `third_party/mybot/`; fixed source snapshot, external integration in `cmake/dependencies/` |
-| AOSL | [AgoraIO-Community/aosl](https://github.com/AgoraIO-Community/aosl), recorded commit `84e086084ebcd0ae2455a0ce5721950c5fe2e656` | `third_party/mybot/third_party/aosl/`; populated source snapshot |
+| AOSL | [AgoraIO-Community/aosl](https://github.com/AgoraIO-Community/aosl), recorded commit `84e086084ebcd0ae2455a0ce5721950c5fe2e656` | `third_party/aosl/`; independent fixed snapshot of common implementation and Linux HAL |
 | LVGL 9.5.0 production subset | [lvgl/lvgl](https://github.com/lvgl/lvgl), `85aa60d18b3d5e5588d7b247abf90198f07c8a63` | `third_party/lvgl/`; correctly typed mask callback wrappers; Linux allocator/config outside snapshot |
 | Terminal font | DejaVu Sans Mono Bold from Matplotlib 3.8.2 | `components/mybot_ui/fonts/generated/pixel_fonts.c`; 18/20 px renamed subsets; fixed source hash in fonts manifest |
 | Chinese UI font | Source Han Sans SC Normal, pinned input hash | `components/mybot_ui/fonts/generated/lvgl_fonts.c`; 40 px subset |
@@ -16,9 +16,11 @@ This document describes the inputs actually used by this project. The machine-re
 
 [imported-sources.json](docs/dependencies/imported-sources.json) preserves the **original import** paths and hashes. Those paths predate the component migration and some native font changes. The current lock records mappings and expected results rather than rewriting history or pretending that adapted files still equal their original hash.
 
+MyBot, AOSL and LVGL have separate snapshot entries and non-overlapping directory ownership. AOSL was moved out of MyBot's nested dependency directory without changing the moved file contents; intentional omissions are recorded separately with the original path/hash, prior target and reason. The AOSL revision is the already recorded fixed identity, not a claim that upstream was independently reverified during this layout change. The retained snapshot scope and pruning rules are described in the [layout guide](docs/development/third-party-layout.zh-CN.md).
+
 The LVGL fix is retained as [lvgl-mask-callbacks.patch](docs/dependencies/patches/lvgl-mask-callbacks.patch). Generated-font sources and tool identity live in [fonts/sources.json](components/mybot_ui/fonts/sources.json); original font binaries remain external under ignored local storage. The pixel-glasses [source record](components/mybot_ui/views/pixel_glasses/PIXEL_GLASSES_SOURCES.md) describes the project-maintained view and its file-level terms. For current Linux layout and resources, use the [architecture](docs/development/architecture.zh-CN.md) and [dependency guide](docs/development/dependencies.zh-CN.md).
 
-`third_party/lvgl/README.integration.md` and nested MyBot documentation describe their upstream projects. In particular, MyBot's upstream RTSA notice refers to its own x86_64 reference package; that binary is absent from this snapshot. This application uses only the explicitly configured AArch64 external package.
+Project-managed view files belong to the lock's `managed_assets` group; generated fonts and their inputs use `generated_fonts`. Both are checked independently of the three third-party source snapshots. Their file-level licenses still apply. Project-specific [LVGL integration](docs/dependencies/lvgl.md) lives outside the snapshot. Retained MyBot documentation describes the SDK; its upstream RTSA notice refers to an x86_64 development package absent from this tree. This application uses only the explicitly configured AArch64 external package.
 
 ## Verification and updates
 

@@ -2,6 +2,14 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.2.1 — Unreleased
+
+- Manage MyBot, AOSL and LVGL as separate pinned source directories.
+- Record directory migrations, explicit omissions, unique ownership and required build inputs in the dependency lock.
+- Keep the Linux production subset, move integration documentation outside dependency sources, and preserve runtime sources and licenses.
+
+This dependency-layout candidate requires its own hardware regression.
+
 ## 0.2.0 — Unreleased
 
 - Organize application configuration, process guards, board defaults, Linux drivers/services and pure UI into explicit components.

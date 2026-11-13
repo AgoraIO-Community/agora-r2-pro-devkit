@@ -4,7 +4,7 @@
 
 面向 **RV1126B TEST2 RK805B V10** 的 MyBot 1.3.0 Linux 应用，提供 HTTPS 配对、双向语音、稳定设备身份与持久化、像素眼镜 UI，以及可选的 V4L2/MPP JPEG 上行。
 
-当前源码为 **0.2.0 工程治理候选版**。0.1.0 的语音/UI业务流程和 0.1.1 的文字渲染优化已由用户真机验收；目录重组后的候选版需要重新进行设备回归。可选视频和长时间稳定性专项尚未完成。[验证状态](docs/validation/README.md)是结果的唯一现行入口。
+当前源码为 **0.2.1 依赖目录治理候选版**。0.1.0 的语音/UI业务流程和 0.1.1 的文字渲染优化已由用户真机验收；目录重组后的候选版需要重新进行设备回归。可选视频和长时间稳定性专项尚未完成。[验证状态](docs/validation/README.md)是结果的唯一现行入口。
 
 ## 平台与行为
 
@@ -44,7 +44,7 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 | `components/mybot_platform/` | 板级默认值、Linux 服务与硬件驱动 |
 | `components/mybot_ui/` | 纯渲染、像素眼镜视图、表情和编译字库 |
 | `cmake/` | 依赖集成与工具链配置 |
-| `third_party/` | 固定的上游源码快照 |
+| `third_party/mybot/`、`third_party/aosl/`、`third_party/lvgl/` | 分别固定的源码快照；构建集成位于 `cmake/dependencies/` |
 | `tests/`、`tools/ui_preview/` | 主机检查与独立 UI 预览 |
 | `scripts/`、`packaging/` | 构建检查工具及交付模板 |
 | `docs/` | 用户/开发指南、验证状态与历史证据 |
@@ -53,6 +53,7 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 
 - [文档索引](docs/README.md)、[配置](docs/user/configuration.zh-CN.md)、[故障排查](docs/user/troubleshooting.zh-CN.md)
 - [架构](docs/development/architecture.zh-CN.md)、[测试](docs/development/testing.zh-CN.md)、[发布流程](docs/development/releasing.zh-CN.md)
+- [依赖目录规则](docs/development/third-party-layout.zh-CN.md)、[源码来源](VENDORED_SOURCES.md)
 - [贡献指南](CONTRIBUTING.zh-CN.md)、[支持](SUPPORT.zh-CN.md)、[变更记录](CHANGELOG.md)
 
 自维护代码默认采用 [Apache-2.0](LICENSE)，具体文件声明优先。MyBot/AOSL、LVGL 和字体分别保留原许可，像素眼镜视图遵循文件级许可声明；外部获取的 RTSA 不受本项目许可证覆盖。再分发源码或交付包前，请阅读[第三方声明](THIRD_PARTY_NOTICES.md)和[依赖来源](VENDORED_SOURCES.md)。

@@ -5,30 +5,28 @@ not replace third-party terms. This file is informational, not legal advice.
 
 ## AOSL
 
-Location: `third_party/aosl` — a git submodule pinned to upstream commit
+Location in this application: [../aosl](../aosl) — a committed source snapshot recorded at upstream commit
 `84e086084ebcd0ae2455a0ce5721950c5fe2e656` of https://github.com/AgoraIO-Community/aosl.
 
-AOSL includes `third_party/aosl/LICENSE`, which is based on Apache-2.0 and adds restrictive
+AOSL includes [../aosl/LICENSE](../aosl/LICENSE), which is based on Apache-2.0 and adds restrictive
 conditions. Read that file before using, modifying, deploying, or redistributing AOSL. Do not label
 the combined repository or binary as uniformly Apache-2.0.
 
-GitHub's automatic source archives omit AOSL. After a Git clone, initialize it with
-`git submodule update --init --recursive`; this command cannot populate an archive without `.git`.
-The source asset produced by `scripts/release.sh package TAG` includes the tag's pinned AOSL
-contents and license. See [the release guide](docs/RELEASING.md) for archive usage.
+The application commits the required Linux AOSL sources and complete license alongside MyBot;
+there is no nested Git submodule or dependency download during a build. Current scope and
+original import provenance are recorded by the application's dependency lock.
 
 ## Agora RTSA SDK
 
-Location: `third_party/agora_rtsa_sdk`. The bundled shared-library package identifies itself as
-`Agora-RTSALite-RmRcAcAj-x86_64-linux-gnu-v1.10.1-20260828_180234-1270765`. It is provided for
-Linux **development and demo** use only and is intentionally retained in this repository for the
-Linux reference demo (it is not removed).
+Agora RTSA is not vendored in this application. Target headers, metadata and the authorized
+AArch64 library are supplied explicitly through `AGORA_SDK_DIR` and `AGORA_RTC_LIBRARY`;
+see the application's [RTSA provenance](../../docs/dependencies/RTSA_SOURCE.txt).
 
-The vendored package retains only `PACKAGE_INFO`, the public API header, `.config`, and the
-shared library. Vendor examples, skills, demo/test assets, and helper binaries are not part of this
-repository.
-
-Package provenance recorded for this update:
+The upstream SDK audit recorded the package
+`Agora-RTSALite-RmRcAcAj-x86_64-linux-gnu-v1.10.1-20260828_180234-1270765`, provided for Linux
+**development and demo** use only. Its retained audit scope was `PACKAGE_INFO`, the public API
+header, `.config`, and the shared library, excluding examples, skills, demo/test assets and helper
+binaries. That x86_64 package is absent here. Its historical provenance is preserved below:
 
 - Source archive: `Agora-RTSALite-RmRcAcAj-x86_64-linux-gnu-v1.10.1-20260828_180234-1270765.tgz`
 - Archive SHA-256: `739901d09a4161a33f36e06281fe30dc11629f1f3271e55a5662501593985fbf`

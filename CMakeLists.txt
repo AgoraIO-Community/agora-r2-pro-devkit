@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 cmake_minimum_required(VERSION 3.25)
-project(mybot_rv1126b VERSION 0.2.0 LANGUAGES C CXX)
+project(mybot_rv1126b VERSION 0.2.1 LANGUAGES C CXX)
 
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)

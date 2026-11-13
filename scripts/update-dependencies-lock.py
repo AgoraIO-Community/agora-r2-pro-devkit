@@ -32,16 +32,45 @@ def assignments(values, description):
 
 
 def files_in(root, directory):
-    folder = check.local_path(root, directory)
-    if not folder.is_dir():
-        raise ValueError('snapshot directory is missing: ' + directory)
-    files = {}
-    for path in sorted(folder.rglob('*')):
-        name = path.relative_to(root).as_posix()
-        check.local_path(root, name)
-        if path.is_file():
-            files[name] = check.sha256(path)
-    return files
+    return {name: check.sha256(check.local_path(root, name))
+            for name in sorted(check.inventory(root, directory))}
+
+
+def expand_prefixes(root, imported, adaptations, mappings, reasons, prefix_mappings, prefix_reasons):
+    """Expand reviewed directory migrations into the existing per-file lock format."""
+    if set(prefix_reasons) - set(prefix_mappings):
+        raise ValueError('--reason-prefix requires a corresponding --map-prefix')
+    expanded, explanations = dict(mappings), dict(reasons)
+    prefixes = []
+    for source, destination in prefix_mappings.items():
+        check.local_path(root, source)
+        check.local_path(root, destination)
+        if source == destination or destination.startswith(source + '/') or source.startswith(destination + '/'):
+            raise ValueError('prefix migration must not overlap or map into itself: ' + source)
+        if not prefix_reasons.get(source, '').strip():
+            raise ValueError('prefix migration requires --reason-prefix ' + source + '=EXPLANATION')
+        for previous, target in prefixes:
+            if any(first == second or first.startswith(second + '/') or second.startswith(first + '/')
+                   for first, second in ((source, previous), (destination, target), (source, target), (destination, previous))):
+                raise ValueError('prefix migrations overlap or form a cycle')
+        prefixes.append((source, destination))
+        matched = False
+        for name in imported:
+            current = adaptations.get(name, {}).get('path', name)
+            candidates = {value for value in (name, current) if value.startswith(source + '/')}
+            if not candidates:
+                continue
+            if len(candidates) != 1:
+                raise ValueError('ambiguous historical prefix migration: ' + name)
+            if name in expanded:
+                raise ValueError('historical input has multiple migration rules: ' + name)
+            candidate = candidates.pop()
+            expanded[name] = destination + candidate[len(source):]
+            explanations.setdefault(name, prefix_reasons[source])
+            matched = True
+        if not matched:
+            raise ValueError('prefix migration matches no historical inputs: ' + source)
+    return expanded, explanations
 
 
 def changes(before, after, prefix=''):
@@ -70,10 +99,13 @@ def changes(before, after, prefix=''):
     return ['updated ' + prefix] if before != after else []
 
 
-def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, licenses=()):
+def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, licenses=(), *,
+            prefix_mappings=None, prefix_reasons=None, omissions=None, add_snapshots=(),
+            managed_assets=(), required_inputs=(), vendor_root=None):
     if lock.get('schema_version') != 1:
         raise ValueError('unsupported dependency lock schema')
     mappings, reasons = mappings or {}, reasons or {}
+    omissions = omissions or {}
     current = copy.deepcopy(lock)
     history = lock['original_import']
     manifest = check.local_path(root, history['manifest'])
@@ -84,16 +116,54 @@ def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, lice
     revisions = {name: value for name, value in original.items() if name not in ('imported_files', 'local_patches')}
     if history.get('revisions', {}) != revisions:
         raise ValueError('historical import revisions were rewritten')
-    for name in set(mappings) | set(reasons):
+    if set(mappings) & set(omissions):
+        raise ValueError('historical input cannot be both mapped and omitted')
+    mappings, reasons = expand_prefixes(root, imported, current['import_adaptations'], mappings, reasons,
+                                        prefix_mappings or {}, prefix_reasons or {})
+    for name in set(mappings) | set(reasons) | set(omissions):
         if name not in imported:
             raise ValueError('adaptation is not in the historical import: ' + name)
     adaptations = current['import_adaptations']
     for name, entry in adaptations.items():
-        if entry['original_sha256'] != imported.get(name):
+        if name not in imported or entry['original_sha256'] != imported[name]:
             raise ValueError('adaptation original hash was rewritten: ' + name)
         if not entry.get('reason', '').strip():
             raise ValueError('existing adaptation has no explanation: ' + name)
+    omitted = current.setdefault('import_omissions', {})
+    required = current.setdefault('required_inputs', {})
+    for name in required_inputs:
+        required[name] = check.sha256(check.local_path(root, name))
+    for name, entry in omitted.items():
+        if name not in imported or entry['original_sha256'] != imported[name]:
+            raise ValueError('omission original hash was rewritten: ' + name)
+        if not entry.get('reason', '').strip():
+            raise ValueError('existing omission has no explanation: ' + name)
+    if set(adaptations) & set(omitted):
+        raise ValueError('historical input cannot be both mapped and omitted')
+    if (set(mappings) & set(omitted)) - set(omissions):
+        raise ValueError('omitted historical input cannot also be mapped')
+    for name, reason in omissions.items():
+        previous = mappings.get(name, adaptations.get(name, {}).get('path', name))
+        if name in omitted:
+            previous = omitted[name]['previous_path']
+        if not reason.strip():
+            raise ValueError('omission requires an explanation: ' + name)
+        if check.protected_omission(name, previous, current):
+            raise ValueError('protected dependency input cannot be omitted: ' + name)
+        for old in {name, previous, *adaptations.get(name, {}).get('previous_paths', [])}:
+            if check.local_path(root, old).exists():
+                raise ValueError('omitted dependency input remains: ' + old)
+        previous_paths = set(adaptations.get(name, {}).get('previous_paths', []))
+        previous_paths.update(omitted.get(name, {}).get('previous_paths', []))
+        if name in adaptations and adaptations[name]['path'] not in (name, previous):
+            previous_paths.add(adaptations[name]['path'])
+        omitted[name] = {'original_sha256': imported[name], 'previous_path': previous, 'reason': reason}
+        if previous_paths:
+            omitted[name]['previous_paths'] = sorted(previous_paths - {name, previous})
+        adaptations.pop(name, None)
     for name, original_hash in imported.items():
+        if name in omitted:
+            continue
         existing = adaptations.get(name)
         destination = mappings.get(name, existing['path'] if existing else name)
         result = check.sha256(check.local_path(root, destination))
@@ -101,19 +171,33 @@ def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, lice
             if (not existing or destination != existing['path']) and not reasons.get(name):
                 raise ValueError('new adaptation requires --reason ' + name + '=EXPLANATION')
             reason = reasons.get(name, existing['reason'] if existing else None)
-            adaptations[name] = {'path': destination, 'original_sha256': original_hash,
-                                 'result_sha256': result, 'reason': reason}
+            entry = {'path': destination, 'original_sha256': original_hash,
+                     'result_sha256': result, 'reason': reason}
+            previous_paths = set(existing.get('previous_paths', [])) if existing else set()
+            if existing and existing['path'] != destination and existing['path'] != name:
+                previous_paths.add(existing['path'])
+            if previous_paths:
+                entry['previous_paths'] = sorted(previous_paths)
+            adaptations[name] = entry
     for patch in current['local_patches']:
         source = patch['original_path']
+        if source in omitted:
+            raise ValueError('patched dependency input cannot be omitted: ' + source)
         if patch['original_sha256'] != imported.get(source):
             raise ValueError('patch original hash was rewritten: ' + source)
         patch['sha256'] = check.sha256(check.local_path(root, patch['path']))
         patch['result_path'] = adaptations[source]['path']
         patch['result_sha256'] = adaptations[source]['result_sha256']
+    # A project-maintained view is an application asset, not an upstream snapshot.
+    assets = current.setdefault('managed_assets', [])
+    for entry in list(current['snapshots']):
+        if entry.get('source') == 'project-maintained':
+            assets.append(entry)
+            current['snapshots'].remove(entry)
     if include_ui_view:
         directory = 'components/mybot_ui/views/pixel_glasses'
-        if not any(item['directory'] == directory for item in current['snapshots']):
-            current['snapshots'].append({'name': 'pixel-glasses', 'version': 'native-640x480',
+        if not any(item['directory'] == directory for item in assets):
+            assets.append({'name': 'pixel-glasses', 'version': 'native-640x480',
                 'source': 'project-maintained',
                 'scope': 'pixel-glasses view, geometry, expressions and retained licenses',
                 'directory': directory, 'files': {}})
@@ -121,7 +205,25 @@ def refresh(root, lock, mappings=None, reasons=None, include_ui_view=False, lice
             'components/mybot_ui/views/pixel_glasses/LICENSE.MIT.txt',
             'components/mybot_ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt',
             'components/mybot_ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt')
-    for snapshot in current['snapshots']:
+    for entry in add_snapshots:
+        if not all(entry.get(field) for field in ('name', 'directory', 'revision', 'source')):
+            raise ValueError('new snapshot requires name, directory, revision and source')
+        matching = [item for item in current['snapshots'] if item.get('name') == entry['name'] or item['directory'] == entry['directory']]
+        if matching:
+            if len(matching) != 1 or any(matching[0].get(field) != entry[field] for field in entry if field != 'files'):
+                raise ValueError('snapshot is already registered with a different identity: ' + entry['name'])
+            continue
+        current['snapshots'].append(copy.deepcopy(entry))
+    for entry in managed_assets:
+        matching = [item for item in assets if item.get('name') == entry.get('name') or item['directory'] == entry['directory']]
+        if matching:
+            if len(matching) != 1 or any(matching[0].get(field) != entry[field] for field in entry if field != 'files'):
+                raise ValueError('managed asset is already registered with a different identity: ' + entry['name'])
+            continue
+        assets.append(copy.deepcopy(entry))
+    if vendor_root is not None:
+        current['vendor_root'] = vendor_root
+    for snapshot in current['snapshots'] + assets:
         snapshot['files'] = files_in(root, snapshot['directory'])
     generated = current['generated_fonts']
     generated['manifest_sha256'] = check.sha256(check.local_path(root, generated['manifest']))
@@ -163,6 +265,15 @@ def main():
     parser.add_argument('--write', action='store_true', help='write changes; inspect the resulting diff before committing')
     parser.add_argument('--map', action='append', default=[], metavar='ORIGINAL_PATH=CURRENT_PATH', help='register a reviewed path migration')
     parser.add_argument('--reason', action='append', default=[], metavar='ORIGINAL_PATH=EXPLANATION', help='required for each new adaptation or changed mapping')
+    parser.add_argument('--map-prefix', action='append', default=[], metavar='OLD_DIRECTORY=NEW_DIRECTORY', help='expand a reviewed directory move into per-file mappings')
+    parser.add_argument('--reason-prefix', action='append', default=[], metavar='OLD_DIRECTORY=EXPLANATION')
+    parser.add_argument('--omit', action='append', default=[], metavar='ORIGINAL_PATH=EXPLANATION', help='record an explicitly removed historical file; notices and required inputs are protected')
+    parser.add_argument('--add-snapshot', action='append', default=[], metavar='NAME=DIRECTORY')
+    parser.add_argument('--revision', action='append', default=[], metavar='NAME=REVISION', help='required with --add-snapshot')
+    parser.add_argument('--source', action='append', default=[], metavar='NAME=URL', help='required with --add-snapshot')
+    parser.add_argument('--managed-asset', action='append', default=[], metavar='NAME=DIRECTORY', help='register a project-maintained asset group')
+    parser.add_argument('--required-input', action='append', default=[], metavar='PATH', help='pin and protect a current build input against omission')
+    parser.add_argument('--vendor-root', metavar='DIRECTORY', help='require direct snapshot directories and a single README.md entry')
     parser.add_argument('--include-ui-view', action='store_true', help='register the UI files and retained licenses once')
     parser.add_argument('--include-cores3-view', dest='include_ui_view', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--license', action='append', default=[], metavar='PATH', help='record a retained repository-relative license')
@@ -172,8 +283,22 @@ def main():
     path = args.lock or root / 'dependencies.lock.json'
     try:
         lock = json.loads(path.read_text(encoding='utf-8'))
+        snapshot_directories = assignments(args.add_snapshot, '--add-snapshot')
+        revisions = assignments(args.revision, '--revision')
+        sources = assignments(args.source, '--source')
+        if set(revisions) != set(snapshot_directories) or set(sources) != set(snapshot_directories):
+            raise ValueError('--add-snapshot requires matching --revision and --source names')
+        snapshots = [{'name': name, 'directory': directory, 'revision': revisions[name], 'source': sources[name],
+                      'scope': 'reviewed vendored source snapshot', 'files': {}}
+                     for name, directory in snapshot_directories.items()]
+        assets = [{'name': name, 'directory': directory, 'source': 'project-maintained', 'files': {}}
+                  for name, directory in assignments(args.managed_asset, '--managed-asset').items()]
         updated, modified = refresh(root, lock, assignments(args.map, '--map'), assignments(args.reason, '--reason'),
-                                    args.include_ui_view, args.license)
+                                    args.include_ui_view, args.license,
+                                    prefix_mappings=assignments(args.map_prefix, '--map-prefix'),
+                                    prefix_reasons=assignments(args.reason_prefix, '--reason-prefix'),
+                                    omissions=assignments(args.omit, '--omit'), add_snapshots=snapshots,
+                                    managed_assets=assets, required_inputs=args.required_input, vendor_root=args.vendor_root)
         if args.write and modified:
             write_lock(path, updated)
     except (OSError, ValueError, KeyError, TypeError) as error:

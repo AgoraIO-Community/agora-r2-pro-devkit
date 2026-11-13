@@ -300,8 +300,247 @@ class ProvenanceTests(unittest.TestCase):
         mapping = {'old/header.h': 'moved/header.h'}
         with self.assertRaisesRegex(ValueError, 'new adaptation requires --reason'):
             updater.refresh(self.root, self.lock, mappings=mapping)
+        (self.root / 'component/header.h').unlink()
         updated, _ = updater.refresh(self.root, self.lock, mappings=mapping, reasons={'old/header.h': 'public include migration'})
         self.assertEqual(updated['import_adaptations']['old/header.h']['path'], 'moved/header.h')
+
+    def add_historical(self, name, content):
+        history = json.loads((self.root / 'docs/imported.json').read_text())
+        history['imported_files'][name] = digest(content)
+        self.put_json('docs/imported.json', history)
+        self.lock['original_import']['sha256'] = self.hash('docs/imported.json')
+
+    def register_extra_snapshot(self, **options):
+        self.put('vendor-extra/include/api.h', b'independent public header')
+        return updater.refresh(self.root, self.lock, add_snapshots=[{
+            'name': 'extra', 'directory': 'vendor-extra', 'revision': 'fixed-revision',
+            'source': 'https://example.invalid/extra'}], **options)
+
+    def test_independent_snapshot_registration_preserves_import_history(self):
+        before = (self.root / 'docs/imported.json').read_bytes()
+        updated, modified = self.register_extra_snapshot()
+        self.assertTrue(modified)
+        self.assertEqual(updated['snapshots'][1]['revision'], 'fixed-revision')
+        self.assertIn('vendor-extra/include/api.h', updated['snapshots'][1]['files'])
+        self.assertEqual((self.root / 'docs/imported.json').read_bytes(), before)
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+        again, delta = updater.refresh(self.root, updated, add_snapshots=[{
+            'name': 'extra', 'directory': 'vendor-extra', 'revision': 'fixed-revision',
+            'source': 'https://example.invalid/extra'}])
+        self.assertEqual(again, updated)
+        self.assertEqual(delta, [])
+
+    def test_independent_snapshot_requires_fixed_identity(self):
+        with self.assertRaisesRegex(ValueError, 'requires name, directory, revision and source'):
+            updater.refresh(self.root, self.lock, add_snapshots=[{'name': 'extra', 'directory': 'vendor-extra'}])
+
+    def test_snapshot_directories_cannot_overlap(self):
+        self.lock['snapshots'].append({'directory': 'vendor/subdir', 'files': {}})
+        with self.assertRaisesRegex(ValueError, 'directories overlap'):
+            self.verify()
+
+    def test_snapshot_file_cannot_claim_another_group(self):
+        self.lock['snapshots'][0]['files']['component/header.h'] = self.hash('component/header.h')
+        with self.assertRaisesRegex(ValueError, 'outside its declared directory'):
+            self.verify()
+
+    def test_vendor_root_rejects_unregistered_entries(self):
+        self.put('dependencies/README.md', b'vendor index')
+        self.put('dependencies/unregistered/source.c', b'unknown source')
+        self.lock['vendor_root'] = 'dependencies'
+        self.lock['snapshots'] = []
+        self.assertIn('unregistered vendor entry: dependencies/unregistered', self.verify())
+        self.put('dependencies/extra.md', b'undocumented root entry')
+        self.assertIn('unregistered vendor entry: dependencies/extra.md', self.verify())
+
+    def test_vendor_root_rejects_missing_readme(self):
+        (self.root / 'dependencies').mkdir()
+        self.lock['vendor_root'] = 'dependencies'
+        self.lock['snapshots'] = []
+        self.assertIn('missing vendor entry: dependencies/README.md', self.verify())
+
+    def test_project_assets_are_hashed_separately_from_snapshots(self):
+        self.put('assets/geometry.c', b'project geometry')
+        self.lock['snapshots'].append({'name': 'view', 'source': 'project-maintained',
+            'directory': 'assets', 'files': {}})
+        updated, _ = updater.refresh(self.root, self.lock)
+        self.assertEqual(len(updated['snapshots']), 1)
+        self.assertEqual(updated['managed_assets'][0]['name'], 'view')
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+        self.put('assets/geometry.c', b'unreviewed project geometry')
+        self.assertIn('SHA256 mismatch: assets/geometry.c', dependencies.verify(self.root, updated))
+
+    def test_prefix_mapping_expands_each_file_and_removes_old_paths(self):
+        self.put('moved/header.h', b'public header')
+        (self.root / 'component/header.h').unlink()
+        updated, _ = updater.refresh(self.root, self.lock, prefix_mappings={'component': 'moved'},
+            prefix_reasons={'component': 'public include migration'})
+        entry = updated['import_adaptations']['old/header.h']
+        self.assertEqual(entry['path'], 'moved/header.h')
+        self.assertEqual(entry['previous_paths'], ['component/header.h'])
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+
+    def test_prefix_mapping_rejects_residual_old_target(self):
+        self.put('moved/header.h', b'public header')
+        with self.assertRaisesRegex(ValueError, 'obsolete mapped input remains: component/header.h'):
+            updater.refresh(self.root, self.lock, prefix_mappings={'component': 'moved'},
+                prefix_reasons={'component': 'public include migration'})
+
+    def test_explicit_file_reason_takes_priority_over_prefix_migration_reason(self):
+        self.put('moved/header.h', b'public header with documented adaptation')
+        (self.root / 'component/header.h').unlink()
+        updated, _ = updater.refresh(self.root, self.lock, prefix_mappings={'component': 'moved'},
+            prefix_reasons={'component': 'public include migration'},
+            reasons={'old/header.h': 'relocated header and documented its public contract'})
+        self.assertEqual(updated['import_adaptations']['old/header.h']['reason'],
+            'relocated header and documented its public contract')
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+
+    def test_prefix_mapping_rejects_overlapping_or_cyclic_rules(self):
+        for mappings in ({'vendor': 'vendor/new'}, {'vendor': 'x', 'x': 'vendor'},
+                         {'vendor': 'x', 'vendor/sub': 'y'}):
+            with self.subTest(mappings=mappings), self.assertRaisesRegex(ValueError, 'overlap|cycle'):
+                updater.refresh(self.root, self.lock, prefix_mappings=mappings,
+                    prefix_reasons={name: 'reviewed move' for name in mappings})
+
+    def test_prefix_mapping_requires_reason_and_rejects_unknown_prefix(self):
+        with self.assertRaisesRegex(ValueError, 'requires --reason-prefix'):
+            updater.refresh(self.root, self.lock, prefix_mappings={'component': 'moved'})
+        with self.assertRaisesRegex(ValueError, 'matches no historical inputs'):
+            updater.refresh(self.root, self.lock, prefix_mappings={'unknown': 'moved'},
+                prefix_reasons={'unknown': 'reviewed move'})
+
+    def test_explicit_omission_records_original_identity_and_is_idempotent(self):
+        name = 'old/.gitmodules'
+        self.add_historical(name, b'obsolete submodule metadata')
+        updated, _ = updater.refresh(self.root, self.lock, omissions={name: 'source snapshot is committed directly'})
+        self.assertEqual(updated['import_omissions'][name], {'original_sha256': digest(b'obsolete submodule metadata'),
+            'previous_path': name, 'reason': 'source snapshot is committed directly'})
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+        again, delta = updater.refresh(self.root, updated, omissions={name: 'source snapshot is committed directly'})
+        self.assertEqual(again, updated)
+        self.assertEqual(delta, [])
+
+    def test_prefix_move_then_omission_keeps_new_previous_path_without_hashing_it(self):
+        name = 'old/sdk/.gitmodules'
+        self.add_historical(name, b'obsolete submodule metadata')
+        updated, _ = updater.refresh(self.root, self.lock, prefix_mappings={'old/sdk': 'new-sdk'},
+            prefix_reasons={'old/sdk': 'flatten snapshot'}, omissions={name: 'repository metadata is not a build input'})
+        self.assertEqual(updated['import_omissions'][name]['previous_path'], 'new-sdk/.gitmodules')
+        self.assertNotIn(name, updated['import_adaptations'])
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+
+    def test_unrecorded_removal_still_fails_refresh(self):
+        self.add_historical('old/.gitmodules', b'obsolete metadata')
+        with self.assertRaises(FileNotFoundError):
+            updater.refresh(self.root, self.lock)
+
+    def test_omission_rejects_unknown_or_still_present_files(self):
+        with self.assertRaisesRegex(ValueError, 'not in the historical import'):
+            updater.refresh(self.root, self.lock, omissions={'unknown': 'remove unknown'})
+        with self.assertRaisesRegex(ValueError, 'omitted dependency input remains'):
+            updater.refresh(self.root, self.lock, omissions={'vendor/source.c': 'remove live source'})
+
+    def test_mapped_omission_rejects_either_original_or_previous_target(self):
+        (self.root / 'component/header.h').unlink()
+        updated, _ = updater.refresh(self.root, self.lock, omissions={'old/header.h': 'unused header'})
+        self.assertEqual(updated['import_omissions']['old/header.h']['previous_path'], 'component/header.h')
+        for name in ('old/header.h', 'component/header.h'):
+            with self.subTest(name=name):
+                self.put(name, b'public header')
+                self.assertIn('omitted dependency input remains: ' + name, dependencies.verify(self.root, updated))
+                (self.root / name).unlink()
+
+    def test_omission_cannot_hide_notices_or_required_build_inputs(self):
+        for name in ('old/LICENSE', 'old/NOTICE.txt', 'old/COPYRIGHT', 'old/THIRD_PARTY_NOTICES.md'):
+            with self.subTest(name=name):
+                self.add_historical(name, b'legal terms')
+                with self.assertRaisesRegex(ValueError, 'protected dependency input'):
+                    updater.refresh(self.root, self.lock, omissions={name: 'not permitted'})
+                history = json.loads((self.root / 'docs/imported.json').read_text())
+                del history['imported_files'][name]
+                self.put_json('docs/imported.json', history)
+                self.lock['original_import']['sha256'] = self.hash('docs/imported.json')
+        self.lock['required_inputs'] = {'component/header.h': self.hash('component/header.h')}
+        (self.root / 'component/header.h').unlink()
+        with self.assertRaisesRegex(ValueError, 'protected dependency input'):
+            updater.refresh(self.root, self.lock, omissions={'old/header.h': 'compiled input'})
+
+    def test_required_input_hash_is_not_silently_refreshed(self):
+        self.lock['required_inputs'] = {'component/header.h': self.hash('component/header.h')}
+        self.put('component/header.h', b'unreviewed required header')
+        with self.assertRaisesRegex(ValueError, 'SHA256 mismatch: component/header.h'):
+            updater.refresh(self.root, self.lock)
+
+    def test_explicit_map_and_omission_are_mutually_exclusive(self):
+        with self.assertRaisesRegex(ValueError, 'both mapped and omitted'):
+            updater.refresh(self.root, self.lock, mappings={'old/header.h': 'gone/header.h'},
+                omissions={'old/header.h': 'unused header'})
+
+    def test_multiple_historical_inputs_cannot_share_a_destination(self):
+        self.lock['import_adaptations']['vendor/source.c']['path'] = 'component/header.h'
+        with self.assertRaisesRegex(ValueError, 'share a mapped destination'):
+            self.verify()
+
+    def test_parent_symlinks_and_ambiguous_paths_are_rejected(self):
+        (self.root / 'linked').symlink_to(self.root / 'component', target_is_directory=True)
+        for name in ('linked/header.h', 'vendor/../component/header.h', 'vendor//source.c', 'vendor\\source.c'):
+            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'symlinks|without traversal'):
+                dependencies.local_path(self.root, name)
+
+    def test_failed_cli_write_preserves_existing_lock_bytes(self):
+        self.add_historical('old/.gitmodules', b'obsolete metadata')
+        path = self.root / 'dependencies.lock.json'
+        path.write_text(json.dumps(self.lock))
+        before = path.read_bytes()
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/update-dependencies-lock.py'),
+            '--root', str(self.root), '--write', '--omit', 'vendor/LICENSE=not permitted'], text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('protected dependency input', result.stderr)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list(self.root.glob('.dependency-lock-*')), [])
+
+    def test_checker_rejects_forged_omission_for_notice_or_unknown_input(self):
+        self.lock['import_omissions'] = {'vendor/LICENSE': {
+            'original_sha256': digest(b'license'), 'previous_path': 'vendor/LICENSE', 'reason': 'invalid omission'}}
+        self.assertIn('protected dependency input cannot be omitted: vendor/LICENSE', self.verify())
+        self.lock['import_omissions'] = {'not-imported': {
+            'original_sha256': None, 'previous_path': 'not-imported', 'reason': 'invalid omission'}}
+        self.assertIn('omission original hash is not the historical import: not-imported', self.verify())
+
+    def test_omission_retains_all_prior_mapping_destinations(self):
+        self.put('moved/header.h', b'public header')
+        (self.root / 'component/header.h').unlink()
+        moved, _ = updater.refresh(self.root, self.lock, mappings={'old/header.h': 'moved/header.h'},
+            reasons={'old/header.h': 'reviewed second move'})
+        (self.root / 'moved/header.h').unlink()
+        omitted, _ = updater.refresh(self.root, moved, omissions={'old/header.h': 'unused header'})
+        self.put('component/header.h', b'public header')
+        self.assertIn('omitted dependency input remains: component/header.h', dependencies.verify(self.root, omitted))
+
+    def test_cli_registers_snapshot_asset_and_required_input_with_idempotent_write(self):
+        self.put('third_party/README.md', b'dependency index')
+        self.put('third_party/extra/include/api.h', b'new snapshot header')
+        self.put('assets/view.c', b'maintained view')
+        self.lock['snapshots'] = []
+        path = self.root / 'dependencies.lock.json'
+        path.write_text(json.dumps(self.lock))
+        command = [sys.executable, str(ROOT / 'scripts/update-dependencies-lock.py'),
+            '--root', str(self.root), '--write', '--json', '--add-snapshot', 'extra=third_party/extra',
+            '--revision', 'extra=fixed-revision', '--source', 'extra=https://example.invalid/extra',
+            '--managed-asset', 'view=assets', '--required-input', 'component/header.h', '--vendor-root', 'third_party']
+        first = subprocess.run(command, text=True, capture_output=True)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertTrue(json.loads(first.stdout)['written'])
+        updated = json.loads(path.read_text())
+        self.assertEqual(updated['vendor_root'], 'third_party')
+        self.assertIn('component/header.h', updated['required_inputs'])
+        self.assertEqual(updated['managed_assets'][0]['name'], 'view')
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+        second = subprocess.run(command, text=True, capture_output=True)
+        self.assertEqual(second.returncode, 0, second.stderr)
+        self.assertFalse(json.loads(second.stdout)['written'])
+        self.assertEqual(json.loads(second.stdout)['changes'], [])
 
     def test_refresh_rejects_unknown_adaptation_name(self):
         with self.assertRaisesRegex(ValueError, 'not in the historical import'):

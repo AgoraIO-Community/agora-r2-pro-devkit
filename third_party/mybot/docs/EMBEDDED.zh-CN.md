@@ -16,7 +16,7 @@
 
 特性开关直接影响代码体积——`MYBOT_CLOUD_AEC`、`MYBOT_WAKE_WORDS`、`MYBOT_ENABLE_VIDEO`、
 `MYBOT_ENABLE_HTTPS` 是主要项；产品用不到的功能请关闭。通过最终链接的固件及 map 文件
-归因 Flash 占用；静态库文件大小不等于链接后的 Flash 消耗。随附 RTSA 共享库仅限 x86_64 Linux。
+归因 Flash 占用；静态库文件大小不等于链接后的 Flash 消耗。目标 RTSA 库由外部提供，必须匹配目标 ABI。
 
 ## 内存模型
 
@@ -39,7 +39,7 @@
 PCM 数组预分配**不代表端到端音频链路没有逐帧堆分配**：
 
 - **RTC 下行，每帧**：[RTC 适配层](../src/rtc/mybot_agora_rtc.c)申请一个 `rtc_event_t`
-  和一份 PCM 数据副本，再投递到 `rtc_mpq`。[AOSL](../third_party/aosl) 的 `kernel/mpq.c`
+  和一份 PCM 数据副本，再投递到 `rtc_mpq`。[AOSL](../../aosl) 的 `kernel/mpq.c`
   还会申请排队函数对象及函数名副本。回调将 PCM 复制到播放 ring 后才释放这些临时对象。
 - **RTC 上行，每帧**：发送 worker 复用 PCM 数组，但同步调用 `rtc_mpq` 仍会申请 AOSL
   函数对象及函数名副本，并初始化用于等待的 mutex/condition，后者的资源开销取决于 HAL。

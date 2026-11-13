@@ -4,7 +4,7 @@
 
 A Linux application for running MyBot 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides HTTPS pairing, bidirectional voice, persistent device identity, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
 
-The current source is the **0.2.0 engineering-governance candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. The reorganized candidate needs a new device regression; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
+The current source is the **0.2.1 dependency-layout candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. The reorganized candidate needs a new device regression; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
 
 ## Platform and behavior
 
@@ -44,7 +44,7 @@ Build and packaging commands run locally and do not deploy to a device. [Getting
 | `components/mybot_platform/` | Board defaults, Linux services and hardware drivers |
 | `components/mybot_ui/` | Pure renderer, pixel-glasses view, expressions and compiled fonts |
 | `cmake/` | Dependency integration and toolchain configuration |
-| `third_party/` | Pinned upstream source snapshots |
+| `third_party/mybot/`, `third_party/aosl/`, `third_party/lvgl/` | Independently pinned source snapshots; build integration stays in `cmake/dependencies/` |
 | `tests/`, `tools/ui_preview/` | Host verification and standalone UI preview |
 | `scripts/`, `packaging/` | Build/check tools and delivery templates |
 | `docs/` | User/developer guides, validation and historical evidence |
@@ -53,6 +53,7 @@ Build and packaging commands run locally and do not deploy to a device. [Getting
 
 - [Documentation index](docs/README.md), [configuration](docs/user/configuration.zh-CN.md), [troubleshooting](docs/user/troubleshooting.zh-CN.md)
 - [Architecture](docs/development/architecture.zh-CN.md), [testing](docs/development/testing.zh-CN.md), [release process](docs/development/releasing.zh-CN.md)
+- [Dependency layout](docs/development/third-party-layout.zh-CN.md), [source provenance](VENDORED_SOURCES.md)
 - [Contributing](CONTRIBUTING.md), [support](SUPPORT.md), [changelog](CHANGELOG.md)
 
 Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. MyBot/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. RTSA is externally obtained and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.

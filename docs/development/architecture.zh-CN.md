@@ -30,6 +30,7 @@ flowchart TD
 | `components/mybot_ui/views/pixel_glasses/` | 视图、图形、遮罩及对应来源声明 |
 | `components/mybot_ui/fonts/` | 字体输入身份、已生成 C 字库及许可 |
 | `cmake/dependencies/` | SDK、Linux adapters、LVGL 与系统库的构建包装 |
+| `third_party/mybot/`、`third_party/aosl/`、`third_party/lvgl/` | 平级、分别锁定的第三方源码快照 |
 | `tools/ui_preview/` | 不启动设备栈的真实 LVGL 预览 |
 
 跨组件接口放入 `include/mybot_platform/` / `include/mybot_ui/`。驱动 ops、DRM 实现和 worker 细节保持私有。平台通过 MyBot 公共头文件接入 SDK，不能直接引用 SDK 私有实现。
@@ -48,4 +49,4 @@ UI 通过 present 回调交付画布，不依赖 DRM、ALSA、MPP 或 pthread。
 
 工程治理保留 0.1.1 的命令行/环境名及优先级、server、身份算法、KV 路径、16 kHz mono S16/20 ms/Cloud AEC、显式开聊、原生 UI、默认旋转及表情行为。目标候选版仍需独立真机回归，旧验收结果不能覆盖新的二进制。
 
-SDK/LVGL 快照与包装分离；字体作为生成源码编译进程序，不新增设备运行时字体依赖。依赖变更见[依赖指南](dependencies.zh-CN.md)，实际检查见[测试指南](testing.zh-CN.md)。
+SDK、AOSL、LVGL 快照与包装分离。父工程通过 `AOSL_DIR` 指定平级源码，由 MyBot 创建唯一的 `aosl` target；源码布局不改变 SDK → AOSL/RTSA 的链接依赖。UI 视图与字库属于项目管理资源，不登记为第三方源码快照；字体作为生成源码编译进程序，不新增设备运行时字体依赖。依赖变更见[依赖指南](dependencies.zh-CN.md)和[目录规则](third-party-layout.zh-CN.md)，实际检查见[测试指南](testing.zh-CN.md)。

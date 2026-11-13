@@ -25,6 +25,11 @@ find_library(RV1126B_ALSA_LIBRARY asound REQUIRED)
 find_path(RV1126B_DRM_INCLUDE xf86drm.h REQUIRED)
 find_path(RV1126B_DRM_UAPI drm.h PATH_SUFFIXES libdrm REQUIRED)
 find_library(RV1126B_DRM_LIBRARY drm REQUIRED)
+set(AOSL_DIR "${PROJECT_SOURCE_DIR}/third_party/aosl"
+    CACHE PATH "Pinned AOSL source snapshot" FORCE)
+if(NOT EXISTS "${AOSL_DIR}/CMakeLists.txt")
+    message(FATAL_ERROR "Pinned AOSL source snapshot is missing")
+endif()
 add_subdirectory("${PROJECT_SOURCE_DIR}/third_party/mybot" "${PROJECT_BINARY_DIR}/third_party/mybot" EXCLUDE_FROM_ALL)
 
 # Upstream Linux reference services stay in the immutable SDK snapshot.

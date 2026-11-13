@@ -18,11 +18,10 @@ ABI. The integration flow below applies regardless of the host operating system 
 ## Step 1: Verify prerequisites
 
 Provide a C99 compiler, CMake 3.16+, an AOSL `CONFIG_PLATFORM` port, and an Agora RTSA header and
-library built for the exact target ABI. When building from a git checkout, initialize the AOSL
-submodule first with `git submodule update --init --recursive`. The device also needs
-TLS-capable connectivity to the compatible device service, persistent credential storage, and
-16 kHz mono signed 16-bit PCM I/O. The bundled
-Agora library is x86_64 Linux only and cannot be reused for another architecture.
+library built for the exact target ABI. This application's pinned snapshot keeps Linux AOSL
+at `../../aosl`; the parent specifies that path through `AOSL_DIR`. Agora RTSA is external.
+The device also needs TLS-capable connectivity to the compatible device service, persistent
+credential storage, and 16 kHz mono signed 16-bit PCM I/O.
 
 ## Step 2: Create the platform layout
 
@@ -283,7 +282,8 @@ callback) when enabled.
 ## Step 5: Integrate with CMake
 
 ```cmake
-set(CONFIG_PLATFORM my_mcu CACHE STRING "" FORCE)
+set(CONFIG_PLATFORM linux CACHE STRING "" FORCE)
+set(AOSL_DIR "${PROJECT_SOURCE_DIR}/third_party/aosl" CACHE PATH "" FORCE)
 set(AGORA_SDK_DIR /opt/agora-rtsa-target CACHE PATH "" FORCE)
 set(AGORA_RTC_LIBRARY /opt/agora-rtsa-target/lib/libagora-rtc-sdk.so CACHE FILEPATH "" FORCE)
 set(MYBOT_BUILD_LINUX_PLATFORM OFF CACHE BOOL "" FORCE)
@@ -298,12 +298,12 @@ target_link_libraries(device_firmware PRIVATE mybot::sdk my_mcu_platform)
 ```
 
 Two independent variables select platform code: `CONFIG_PLATFORM` chooses the AOSL HAL port
-consumed by `third_party/aosl` (e.g. `linux`, `esp32`); `MYBOT_BUILD_LINUX_PLATFORM` builds the
+consumed by [AOSL](../../aosl) (only `linux` is retained here); `MYBOT_BUILD_LINUX_PLATFORM` builds the
 bundled Linux reference implementations (`platforms/linux/`) and requires `CONFIG_PLATFORM=linux`. An MCU
 port keeps `MYBOT_BUILD_LINUX_PLATFORM=OFF`. A host may predefine an imported target named
 `agora-rtc-sdk`. Both source integration with `add_subdirectory()` and installed-package
-consumption via `find_package(mybot)` are supported. Source integration must initialize mybot's
-nested AOSL submodule (`git submodule update --init --recursive` in the mybot checkout).
+consumption via `find_package(mybot)` are supported. Source integration supplies the pinned sibling
+AOSL source through `AOSL_DIR`; this application has no nested submodule initialization step.
 The installed package provides CMake package files only; pkg-config metadata is not installed.
 
 ## Step 6: Start and stop
@@ -520,8 +520,8 @@ compiler and floating-point ABI against the selected Agora library. For a shared
 also deploy the library and configure the firmware or OS runtime loader to find it.
 
 The selected `MYBOT_AUDIO_PTIME_MS` must match the RTSA package's
-`CONFIG_MINIMAL_TIMER_INTERVAL_MS`. The bundled x86_64 Linux package is fixed at 60 ms; for 20 or
-40 ms, provide a matching package through `AGORA_SDK_DIR` and `AGORA_RTC_LIBRARY`. CMake reads
+`CONFIG_MINIMAL_TIMER_INTERVAL_MS`. Provide a matching target package through `AGORA_SDK_DIR`
+and `AGORA_RTC_LIBRARY`; this application fixes 20 ms. CMake reads
 `.config` or `include/global_config.cmake` and fails configuration when the values differ or the
 metadata is absent. If the host predefines the `agora-rtc-sdk` target, `AGORA_SDK_DIR` must still
 identify that same package for validation. CMake cannot inspect the imported target's ABI, so the
@@ -538,8 +538,7 @@ host must ensure its include and library paths refer to that package.
 - Entering provisioning waits for `mybot_stop()` to finish; the product restarts MyBot only after
   network connectivity is usable again.
 - KV survives reset, handles not-found and overflow, and protects credentials.
-- Capture/playback pass 16 kHz mono S16 tests at each selected ptime with its matching RTSA package
-  (the bundled Linux package covers 60 ms).
+- Capture/playback pass 16 kHz mono S16 tests at each selected ptime with its matching RTSA package.
 - Short I/O makes progress and stop unblocks device loss.
 - No key or wake-word callback runs after destroy returns; LCD does not retain borrowed content.
 - Partial startup failure and repeated start/stop release all resources after workers can be joined;
