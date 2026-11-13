@@ -1,0 +1,2 @@
+# Preserve vendored snapshots exactly for source provenance checks.
+vendor/** -text

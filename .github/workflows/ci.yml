@@ -1,12 +1,16 @@
 name: CI
-
 on:
   push:
+    branches: [main, dev]
   pull_request:
-
+  workflow_dispatch:
+    inputs:
+      target_build:
+        description: Run target builds on an authorized rv1126b-sdk runner
+        type: boolean
+        default: false
 permissions:
   contents: read
-
 jobs:
   quality:
     runs-on: ubuntu-24.04
@@ -14,33 +18,85 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Install formatting tools
-        run: sudo apt-get update && sudo apt-get install -y clang-format
-
-      - name: Repository layout
-        run: ./scripts/check-layout.sh
-
-      - name: Shell syntax
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python scripts/check-quality.py
+      - run: python scripts/check-dependencies.py
+      - name: Validate commit messages
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
         run: |
-          for script in scripts/*.sh boards/rv1126b-r2pro/config/S99botstation-device; do
-            sh -n "$script"
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request ]; then
+            range="$BASE_SHA..$HEAD_SHA"
+          elif [ "$EVENT_NAME" = push ] && [ -n "$BEFORE_SHA" ] && [ "$BEFORE_SHA" != 0000000000000000000000000000000000000000 ]; then
+            range="$BEFORE_SHA..$HEAD_SHA"
+          else
+            range="$HEAD_SHA^!"
+          fi
+          git log --no-merges --format='%s' "$range" | while IFS= read -r subject; do
+            printf '%s\n' "$subject" | ./githooks/commit-msg --subject-only
           done
-
-      - name: Format
+  host:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        preset: [host-zh, host-en, host-ubsan]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y build-essential cmake pkg-config libssl-dev libdrm-dev
+      - run: python scripts/doctor.py --host
+      - run: cmake --preset ${{ matrix.preset }}
+      - run: cmake --build --preset ${{ matrix.preset }}
+      - run: ctest --preset ${{ matrix.preset }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ matrix.preset }}-test-log
+          path: build/${{ matrix.preset }}/Testing/Temporary/LastTest.log
+  target:
+    if: github.event_name == 'workflow_dispatch' && inputs.target_build
+    runs-on: [self-hosted, rv1126b-sdk]
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [zh, en]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure runner tools and runtime inputs
+        shell: bash
         run: |
-          find src tests -type f \( -name '*.c' -o -name '*.h' \) \
-            -exec clang-format --dry-run --Werror {} +
-
-      - name: SPDX
+          sysroot_args=()
+          if [ -n "${RV1126B_SYSROOT:-}" ]; then sysroot_args=(--sysroot "$RV1126B_SYSROOT"); fi
+          python3 scripts/configure-local-sdk.py \
+            --cross-compile "${CROSS_COMPILE:?}" --staging "${RV1126B_STAGING:?}" \
+            --runtime-manifest "${RV1126B_RUNTIME_MANIFEST:?}" "${sysroot_args[@]}"
+          python3 scripts/doctor.py --target --video
+          python3 scripts/check-dependencies.py
+      - name: Build voice and video, validate and package
+        shell: bash
         run: |
-          find src tests -type f \( -name '*.c' -o -name '*.h' \) -print0 |
-            while IFS= read -r -d '' file; do
-              head -n 5 "$file" | grep -q 'SPDX-License-Identifier:' || {
-                echo "missing SPDX header: $file" >&2
-                exit 1
-              }
-            done
-
-      - name: Whitespace
-        run: git diff-tree --check HEAD^ HEAD
+          . local/sdk/environment.sh
+          cmake --preset rv1126b-voice-${{ matrix.language }}
+          cmake --build --preset rv1126b-voice-${{ matrix.language }}
+          cmake --preset rv1126b-video-${{ matrix.language }}
+          cmake --build --preset rv1126b-video-${{ matrix.language }}
+          locale=zh-CN
+          if [ '${{ matrix.language }}' = en ]; then locale=en-US; fi
+          python3 scripts/package-rv1126b.py --profile all --language "$locale" --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rv1126b-${{ matrix.language }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256

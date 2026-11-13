@@ -1,0 +1,2 @@
+# Formatting baseline shared with CI; runtime/build tooling uses the standard library.
+clang-format==11.0.1.1

@@ -1,0 +1,46 @@
+--- a/src/draw/sw/lv_draw_sw_mask.c
++++ b/src/draw/sw/lv_draw_sw_mask.c
+@@ -80,0 +81,28 @@
++/* Local portability patch: callbacks must match lv_draw_sw_mask_xcb_t exactly.
++ * Casting a function with a typed final parameter to a void* callback and then
++ * invoking it is undefined behavior, even when both pointer ABIs coincide. */
++static lv_draw_sw_mask_res_t line_callback(lv_opa_t * buf, int32_t x, int32_t y, int32_t len, void * param)
++{
++    return lv_draw_mask_line(buf, x, y, len, param);
++}
++
++static lv_draw_sw_mask_res_t radius_callback(lv_opa_t * buf, int32_t x, int32_t y, int32_t len, void * param)
++{
++    return lv_draw_mask_radius(buf, x, y, len, param);
++}
++
++static lv_draw_sw_mask_res_t angle_callback(lv_opa_t * buf, int32_t x, int32_t y, int32_t len, void * param)
++{
++    return lv_draw_mask_angle(buf, x, y, len, param);
++}
++
++static lv_draw_sw_mask_res_t fade_callback(lv_opa_t * buf, int32_t x, int32_t y, int32_t len, void * param)
++{
++    return lv_draw_mask_fade(buf, x, y, len, param);
++}
++
++static lv_draw_sw_mask_res_t map_callback(lv_opa_t * buf, int32_t x, int32_t y, int32_t len, void * param)
++{
++    return lv_draw_mask_map(buf, x, y, len, param);
++}
++
+@@ -171 +199 @@
+-    param->dsc.cb = (lv_draw_sw_mask_xcb_t)lv_draw_mask_line;
++    param->dsc.cb = line_callback;
+@@ -268 +296 @@
+-    param->dsc.cb = (lv_draw_sw_mask_xcb_t)lv_draw_mask_angle;
++    param->dsc.cb = angle_callback;
+@@ -306 +334 @@
+-    param->dsc.cb = (lv_draw_sw_mask_xcb_t)lv_draw_mask_radius;
++    param->dsc.cb = radius_callback;
+@@ -366 +394 @@
+-    param->dsc.cb = (lv_draw_sw_mask_xcb_t)lv_draw_mask_fade;
++    param->dsc.cb = fade_callback;
+@@ -374 +402 @@
+-    param->dsc.cb = (lv_draw_sw_mask_xcb_t)lv_draw_mask_map;
++    param->dsc.cb = map_callback;

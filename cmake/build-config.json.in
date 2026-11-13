@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "version": "@PROJECT_VERSION@",
+  "language": "@RV1126B_LANGUAGE@",
+  "video": @RV1126B_VIDEO_JSON@,
+  "ptime_ms": 20,
+  "board": "@RV1126B_BOARD@",
+  "sdk": {
+    "rtsa_library": "@AGORA_RTC_LIBRARY@",
+    "sdk_dir": "@AGORA_SDK_DIR@",
+    "staging_dir": "@RV1126B_STAGING@",
+    "sysroot": "@RV1126B_SYSROOT@",
+    "runtime_manifest": "@RV1126B_RUNTIME_MANIFEST@"
+  },
+  "toolchain": {
+    "file": "@CMAKE_TOOLCHAIN_FILE@",
+    "c_compiler": "@CMAKE_C_COMPILER@",
+    "c_compiler_id": "@CMAKE_C_COMPILER_ID@",
+    "c_compiler_version": "@CMAKE_C_COMPILER_VERSION@",
+    "cxx_compiler": "@CMAKE_CXX_COMPILER@",
+    "cxx_compiler_id": "@CMAKE_CXX_COMPILER_ID@",
+    "cxx_compiler_version": "@CMAKE_CXX_COMPILER_VERSION@",
+    "target": "aarch64-linux-gnu"
+  },
+  "flags": {
+    "c": "@RV1126B_EFFECTIVE_C_FLAGS@",
+    "cxx": "@RV1126B_EFFECTIVE_CXX_FLAGS@",
+    "exe_link": "@RV1126B_EFFECTIVE_LINK_FLAGS@",
+    "build_type": "@CMAKE_BUILD_TYPE@"
+  }
+}
