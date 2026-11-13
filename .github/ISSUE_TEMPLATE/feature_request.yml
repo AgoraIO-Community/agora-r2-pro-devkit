@@ -1,0 +1,22 @@
+name: Feature request / 功能建议
+description: Propose a concrete user or developer improvement.
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / 问题
+      description: Describe the affected workflow and current limitation.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired result / 期望结果
+      description: Include compatibility needs, target hardware and a way to verify the result.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives / 备选方案

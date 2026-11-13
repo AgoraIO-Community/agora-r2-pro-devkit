@@ -1,0 +1,10 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#ifndef RV1126B_UI_CONFIG_H
+#define RV1126B_UI_CONFIG_H
+#ifndef CONFIG_MYBOT_LANGUAGE_ZH_CN
+#define CONFIG_MYBOT_LANGUAGE_ZH_CN 1
+#endif
+#ifndef CONFIG_MYBOT_LVGL_UI_ANIMATIONS
+#define CONFIG_MYBOT_LVGL_UI_ANIMATIONS 1
+#endif
+#endif

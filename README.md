@@ -1,98 +1,64 @@
 # agora-r2-pro-devkit
 
-[![License](https://img.shields.io/github/license/AgoraIO-Community/agora-r2-pro-devkit)](LICENSE)
-[![Upstream](https://img.shields.io/badge/upstream-agent--studio--device--firmware-0969da)](https://github.com/AgoraIO-Community/agent-studio-device-firmware)
-[![Status](https://img.shields.io/badge/status-bootstrap-yellow)](README.md)
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-**agora-r2-pro-devkit** is the firmware, hardware-integration, and documentation workspace for
-the R2 Pro AI development kit. The project is intended to run real-time AI voice conversations
-with [agent-studio-device-firmware](https://github.com/AgoraIO-Community/agent-studio-device-firmware)
-and Agora RTSA while keeping board-specific hardware behind a clear platform adapter boundary.
+A Linux application for running agent-studio-device-firmware 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides HTTPS pairing, bidirectional voice, persistent device identity, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
 
-> **Project status:** an initial RV1126B Linux device service is available in
-> [`app/botstation-device`](app/botstation-device/README.md). It is an exploratory port, not a
-> confirmed R2 Pro board profile; the official SoC selection, pin map, partition layout, and
-> hardware validation remain pending. The capabilities below are integration requirements, not
-> claims that the R2 Pro has been implemented or hardware-validated.
+The current source is the **0.2.2 source-layout candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. The reorganized candidate needs a new device regression; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
 
-## Goals
+## Platform and behavior
 
-- Provide a reproducible reference firmware baseline for R2 Pro hardware.
-- Support low-latency, full-duplex AI conversations over Agora RTSA.
-- Keep Wi-Fi provisioning, network recovery, credentials, and device settings persistent.
-- Isolate board initialization, audio, input, display, storage, and networking behind platform
-  interfaces so SDK code remains portable.
-- Ship Chinese (`zh-CN`) and English (`en-US`) user flows from one maintained codebase.
-- Validate builds separately from real-device behavior and publish clear release artifacts.
+The recorded device baseline is AArch64 Buildroot 2024.02, Linux 6.1, glibc 2.41, ALSA, DRM/KMS and a physical 480×640 DSI screen. The UI renders at 640×480 with a default 270° rotation and statically linked LVGL 9.5. Audio uses 16 kHz mono signed-16 PCM, 20 ms frames and Cloud AEC.
 
-## Reference specifications
+The application uses the system's existing network and ALSA configuration. It does not install firmware, provisioning, autostart, OTA, wakeword/NPU, video downlink or a local camera preview. A short touch or Menu key starts/stops a conversation. Runtime data defaults to `/userdata/mybot-rv1126b`; upgrades preserve pairing when server and identity configuration stay the same.
 
-The following table captures the initial software contract. Hardware-dependent values must be
-replaced with values verified against the R2 Pro schematic and bring-up tests.
+## Build and test
 
-| Area | Initial target |
-| --- | --- |
-| Product | Agora R2 Pro development kit |
-| AI runtime | `agent-studio-device-firmware` |
-| Real-time transport | Agora RTSA full-duplex audio |
-| SoC and board SDK | To be selected during board bring-up |
-| Network | Wi-Fi station mode, reconnect, and first-boot provisioning |
-| Audio boundary | 16 kHz, mono, signed 16-bit PCM, frame-based APIs |
-| RTSA packet cadence | 20 ms baseline; change only with a matching RTSA build |
-| Persistence | Wi-Fi credentials, volume, and required device identity |
-| Input and display | Board dependent; exposed through the platform adapter |
-| UI languages | Simplified Chinese and English |
-| Repository code license | Apache-2.0 unless a file states otherwise |
-
-## Intended capabilities
-
-- First-boot access-point provisioning followed by station-mode operation.
-- HTTPS communication with hostname verification.
-- Independent audio capture and playback paths with bounded shutdown and retry behavior.
-- Physical-button and optional touchscreen conversation controls.
-- Optional display status for provisioning, pairing, network, and conversation state.
-- A board profile that owns clocks, pins, power sequencing, storage layout, and peripheral
-  initialization.
-- Bilingual provisioning prompts, pairing-code announcements, and device-service selection.
-- Scripted multi-language builds and documented recovery/flashing procedures.
-
-## Getting started
-
-The first usable milestone requires:
-
-- Git and Python 3 for repository tooling.
-- The toolchain and board SDK selected for the R2 Pro SoC.
-- R2 Pro hardware, a data-capable USB connection, and recovery/flashing instructions.
-- Access to a compatible device service and valid Agora service configuration.
-
-Clone the repository:
+Use **Python 3.10+**, **CMake 3.25+**, a C/C++ compiler, OpenSSL development files and libdrm development headers. Host UI/tests do not load the target RTSA library or require a target SDK. On Debian/Ubuntu, the development packages include `build-essential`, `pkg-config`, `libssl-dev` and `libdrm-dev`.
 
 ```sh
-git clone --branch main https://github.com/AgoraIO-Community/agora-r2-pro-devkit.git
-cd agora-r2-pro-devkit
+python3 scripts/doctor.py --host
+python3 scripts/check-dependencies.py
+cmake --preset host-zh
+cmake --build --preset host-zh
+ctest --preset host-zh
 ```
 
-The device-service README describes its Buildroot integration and external SDK requirements.
-Repository-wide build and flash scripts will follow hardware and board-SDK confirmation.
+Use `host-en` for English and `host-ubsan` for undefined-behavior checks. On macOS, explicitly provide the libdrm header directory when it is not installed as a native development package; see [build instructions](docs/user/build.zh-CN.md). Host CI runs on Linux; only the environment recorded in the validation matrix has been tested locally.
 
-## Bring-up checklist
+The complete pinned Agora RTSA 1.10.1 package is included in `vendor/rtsa/`; target builds automatically use its AArch64 library. Supply a matching AArch64 compiler, development staging/sysroot and a runtime-library manifest as described in [independent target setup](docs/user/build.zh-CN.md).
 
-1. Record the SoC, Flash, RAM/PSRAM, operating voltages, reset and recovery inputs, and debug
-   console from the schematic.
-2. Record the audio codec or I2S wiring, microphone channels, speaker path, sample formats, and
-   gain controls.
-3. Record the display controller, touch controller, buttons, LEDs, and any camera interface.
-4. Choose and document the partition table, OTA layout, factory-data region, and recovery method.
-5. Implement a minimal boot, console, storage, and network smoke test before integrating the SDK.
-6. Implement the platform adapters and pass sustained bidirectional-audio, reconnect, repeated
-   session start/stop, and failure-cleanup tests on physical hardware.
-7. Add reproducible build commands, artifacts, CI coverage, and hardware validation results.
+```sh
+sh scripts/build-rv1126b.sh
+RV1126B_BUILD_DIR="$PWD/build/rv1126b-video-zh" sh scripts/build-rv1126b.sh -DMYBOT_ENABLE_VIDEO=ON
+python3 scripts/package-rv1126b.py --profile all --language zh-CN
+```
 
-Do not mark a hardware feature as supported based only on a successful compile or host test.
+Build and packaging commands run locally and do not deploy to a device. [Getting started](docs/user/getting-started.zh-CN.md) covers manual installation, service ownership, upgrade and rollback.
 
-## License
+## Project layout
 
-Repository-owned code is licensed under the [Apache License 2.0](LICENSE). The license file is an
-unmodified template and its copyright placeholder should be completed before release. Bundled
-SDKs, codec binaries, model files, fonts, audio prompts, and other third-party assets may use
-different terms; review their notices before redistributing source or firmware images.
+| Directory | Responsibility |
+| --- | --- |
+| `src/application/` | Configuration, identity, process guards and application lifecycle |
+| `src/platform/` | Board defaults, Linux services and hardware drivers |
+| `src/ui/` | Pure renderer, pixel-glasses view, expressions and compiled fonts |
+| `cmake/` | Dependency integration and toolchain configuration |
+| `vendor/mybot/`, `vendor/aosl/`, `vendor/lvgl/`, `vendor/rtsa/` | Independently pinned dependencies, including the complete RTSA package; build integration stays in `cmake/dependencies/` |
+| `tests/` | Unit, integration and automation-tool verification |
+| `tools/` | Developer programs, including the standalone `ui_preview/` |
+| `scripts/` | Build, check, code-generation and packaging automation |
+| `packaging/` | Delivery templates, startup script and example configuration |
+| `docs/` | User/developer guides, validation and historical evidence |
+| `githooks/` | Conventional Commit message validation |
+
+Project-maintained modules live under `src/`; pinned dependency snapshots live under `vendor/`. Public include namespaces (`mybot_platform/`, `mybot_ui/`) and CMake target names remain stable when directories move. See the [architecture guide](docs/development/architecture.zh-CN.md) for the dependency boundaries.
+
+## Documentation and contribution
+
+- [Documentation index](docs/README.md), [configuration](docs/user/configuration.zh-CN.md), [troubleshooting](docs/user/troubleshooting.zh-CN.md)
+- [Architecture](docs/development/architecture.zh-CN.md), [testing](docs/development/testing.zh-CN.md), [release process](docs/development/releasing.zh-CN.md)
+- [Dependency layout](docs/development/third-party-layout.zh-CN.md), [source provenance](VENDORED_SOURCES.md)
+- [Contributing](CONTRIBUTING.md), [support](SUPPORT.md), [changelog](CHANGELOG.md)
+
+Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. agent-studio-device-firmware/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. The bundled RTSA package retains its vendor terms and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.
