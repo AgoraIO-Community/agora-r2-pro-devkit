@@ -40,7 +40,10 @@ jobs:
           else
             range="$HEAD_SHA^!"
           fi
-          git log --no-merges --format='%s' "$range" | while IFS= read -r subject; do
+          # Imported source histories are preserved as a second parent and may predate
+          # this repository's commit convention. Validate commits added on the target
+          # branch's first-parent line without rejecting the preserved source history.
+          git log --first-parent --no-merges --format='%s' "$range" | while IFS= read -r subject; do
             printf '%s\n' "$subject" | ./githooks/commit-msg --subject-only
           done
   host:
