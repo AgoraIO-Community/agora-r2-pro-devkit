@@ -2,42 +2,55 @@
 #ifndef RV1126B_WIFI_PORTAL_H
 #define RV1126B_WIFI_PORTAL_H
 
-#include "wifi_backend.h"
-#include <memory>
+#include "wifi_common.h"
 
-namespace rv1126b_wifi {
-struct PortalStatus {
-    std::string state; /* ap, connecting, connected, error */
-    std::string error;
-    std::string ssid;
-    bool concurrent = false;
-    bool busy = false;
-};
-class PortalHandler {
-  public:
-    virtual ~PortalHandler() = default;
-    virtual PortalStatus status() = 0;
-    virtual std::vector<AccessPoint> networks() = 0;
-    virtual std::vector<std::string> saved_networks() = 0;
-    /* Queue work and return promptly: all network mutations run on the control
-     * worker. Candidate credentials are persisted only after connection succeeds. */
-    virtual bool submit(const std::string &ssid, const std::string &password,
-                        std::string &error) = 0;
-    virtual bool saved_action(const std::string &action, unsigned index,
-                              const std::string &expected_ssid, std::string &error) = 0;
-    virtual bool finish(std::string &error) = 0;
-};
-struct PortalConfig {
-    std::string address = "192.168.4.1";
-    unsigned short http_port = 80;
-    unsigned short dns_port = 53;
-};
-class Portal {
-  public:
-    virtual ~Portal() = default;
-    virtual bool start(PortalHandler &handler, std::string &error) = 0;
-    virtual void stop() = 0;
-};
-std::unique_ptr<Portal> make_portal(const PortalConfig &config = {});
-} // namespace rv1126b_wifi
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct {
+    char state[16], error[WIFI_ERROR_CAPACITY], ssid[WIFI_SSID_CAPACITY];
+    bool concurrent, busy;
+} wifi_portal_status_t;
+
+typedef struct {
+    void (*status)(void *context, wifi_portal_status_t *status);
+    void (*networks)(void *context, wifi_scan_t *scan);
+    void (*saved_networks)(void *context, wifi_saved_names_t *names);
+    bool (*submit)(void *context, const char *ssid, const char *password, char *error);
+    bool (*saved_action)(void *context, const char *action, unsigned index,
+                         const char *expected_ssid, char *error);
+    bool (*finish)(void *context, char *error);
+} wifi_portal_handler_ops_t;
+
+typedef struct {
+    const wifi_portal_handler_ops_t *ops;
+    void *context;
+} wifi_portal_handler_t;
+
+typedef struct {
+    const char *address;
+    unsigned short http_port, dns_port;
+} wifi_portal_config_t;
+
+typedef struct {
+    bool (*start)(void *context, const wifi_portal_handler_t *handler, char *error);
+    void (*stop)(void *context);
+    void (*destroy)(void *context);
+} wifi_portal_ops_t;
+
+typedef struct {
+    const wifi_portal_ops_t *ops;
+    void *context;
+} wifi_portal_t;
+
+/* NULL config selects 192.168.4.1:80/53. Handler stays alive until stop returns. */
+bool wifi_portal_create(const wifi_portal_config_t *config, wifi_portal_t *portal, char *error);
+
+void wifi_portal_destroy(wifi_portal_t *portal);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

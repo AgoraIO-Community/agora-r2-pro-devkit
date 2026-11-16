@@ -1,0 +1,337 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+#define RV1126B_SUPERVISOR_NO_MAIN
+#define RV1126B_SUPERVISOR_FORCE_STATUS_SCAN
+#include "../../src/platform/src/services/supervisor.c"
+#include "check.h"
+#include <dirent.h>
+
+static char temporary[PATH_MAX], runtime_path[PATH_MAX], logs_path[PATH_MAX];
+static char marker_path[PATH_MAX], executable_path[PATH_MAX];
+
+static void pause_ms(unsigned int value) {
+    struct timespec delay = {.tv_sec = value / 1000, .tv_nsec = (long)(value % 1000) * 1000000};
+    nanosleep(&delay, NULL);
+}
+
+static void remove_tree(const char *path) {
+    DIR *directory = opendir(path);
+    CHECK(directory);
+    struct dirent *entry;
+    while ((entry = readdir(directory))) {
+        if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, ".."))
+            continue;
+        char child[PATH_MAX];
+        CHECK(snprintf(child, sizeof(child), "%s/%s", path, entry->d_name) < (int)sizeof(child));
+        struct stat status;
+        CHECK(lstat(child, &status) == 0);
+        if (S_ISDIR(status.st_mode))
+            remove_tree(child);
+        else
+            CHECK(unlink(child) == 0);
+    }
+    CHECK(closedir(directory) == 0 && rmdir(path) == 0);
+}
+
+static void prepare(void) {
+    strcpy(temporary, "/tmp/mybot-supervisor-test-XXXXXX");
+    CHECK(mkdtemp(temporary));
+    CHECK(snprintf(runtime_path, sizeof(runtime_path), "%s/runtime", temporary) > 0);
+    CHECK(snprintf(logs_path, sizeof(logs_path), "%s/logs", temporary) > 0);
+    CHECK(snprintf(marker_path, sizeof(marker_path), "%s/marker", temporary) > 0);
+}
+
+static int child_payload(const char *mode, const char *marker) {
+    int fd = open(marker, O_WRONLY | O_CREAT | O_APPEND, 0600);
+    CHECK(fd >= 0);
+    if (!strcmp(mode, "failure")) {
+        CHECK(write(fd, "attempt\n", 8) == 8);
+        close(fd);
+        return 7;
+    }
+    if (!strcmp(mode, "exit")) {
+        close(fd);
+        return 0;
+    }
+    if (!strcmp(mode, "crash")) {
+        close(fd);
+        CHECK(kill(getpid(), SIGKILL) == 0);
+        return 1;
+    }
+    if (!strcmp(mode, "logs")) {
+        char bytes[2000];
+        memset(bytes, 'L', sizeof(bytes));
+        CHECK(write(STDOUT_FILENO, bytes, sizeof(bytes)) == (ssize_t)sizeof(bytes));
+    }
+    if (!strcmp(mode, "descendant") || !strcmp(mode, "orphan")) {
+        pid_t child = fork();
+        CHECK(child >= 0);
+        if (child == 0) {
+            CHECK(setsid() >= 0);
+            signal(SIGTERM, SIG_IGN);
+            close(fd);
+            for (;;)
+                pause();
+        }
+        char text[80];
+        int length = snprintf(text, sizeof(text), "%ld %ld\n", (long)getpid(), (long)child);
+        CHECK(write(fd, text, (size_t)length) == length);
+        close(fd);
+        if (!strcmp(mode, "orphan"))
+            return 0;
+        signal(SIGTERM, SIG_IGN);
+    } else {
+        char text[80];
+        int length = snprintf(text, sizeof(text), "%ld\n", (long)getpid());
+        CHECK(write(fd, text, (size_t)length) == length);
+        close(fd);
+    }
+    char input;
+    CHECK(read(STDIN_FILENO, &input, 1) == 0);
+    for (;;)
+        pause();
+}
+
+static pid_t start_supervisor(const char *mode, size_t log_limit) {
+    pid_t pid = fork();
+    CHECK(pid >= 0);
+    if (pid == 0) {
+        char *arguments[] = {executable_path, "--child", (char *)mode, marker_path, NULL};
+        rv1126b_supervisor_config_t config = {.runtime_directory = runtime_path,
+                                              .log_directory = logs_path,
+                                              .argv = arguments,
+                                              .terminate_timeout_ms = 100,
+                                              .cleanup_timeout_ms = 2000,
+                                              .restart_window_ms = 5000,
+                                              .restart_delays_ms = {5, 10, 15},
+                                              .log_limit_bytes = log_limit};
+        _exit(rv1126b_supervisor_run(&config));
+    }
+    return pid;
+}
+
+static bool query_state(char *state, size_t capacity) {
+    struct sockaddr_un address = {.sun_family = AF_UNIX};
+    CHECK(snprintf(address.sun_path, sizeof(address.sun_path), "%s/control.sock", runtime_path) <
+          (int)sizeof(address.sun_path));
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    CHECK(fd >= 0);
+    if (connect(fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        close(fd);
+        return false;
+    }
+    CHECK(write(fd, "status\n", 7) == 7);
+    struct pollfd ready = {.fd = fd, .events = POLLIN};
+    CHECK(poll(&ready, 1, 2000) > 0);
+    ssize_t length = read(fd, state, capacity - 1);
+    CHECK(length > 0);
+    state[length] = '\0';
+    close(fd);
+    return true;
+}
+
+static void await_state(const char *expected) {
+    uint64_t deadline = milliseconds() + 4000;
+    while (milliseconds() < deadline) {
+        char state[48];
+        if (query_state(state, sizeof(state)) && !strcmp(state, expected))
+            return;
+        pause_ms(5);
+    }
+    CHECK(false);
+}
+
+static int await_exit(pid_t pid) {
+    int status;
+    uint64_t deadline = milliseconds() + 4000;
+    while (milliseconds() < deadline) {
+        pid_t reaped = waitpid(pid, &status, WNOHANG);
+        CHECK(reaped >= 0);
+        if (reaped == pid) {
+            CHECK(WIFEXITED(status));
+            return WEXITSTATUS(status);
+        }
+        pause_ms(5);
+    }
+    CHECK(false);
+    return -1;
+}
+
+static void end_failed_fixture(pid_t pid) {
+    CHECK(kill(pid, SIGKILL) == 0);
+    int status;
+    CHECK(waitpid(pid, &status, 0) == pid && WIFSIGNALED(status));
+}
+
+static void read_marker(pid_t *first, pid_t *second) {
+    uint64_t deadline = milliseconds() + 4000;
+    while (milliseconds() < deadline) {
+        FILE *file = fopen(marker_path, "r");
+        if (file) {
+            long one = 0, two = 0;
+            int count = fscanf(file, "%ld %ld", &one, &two);
+            fclose(file);
+            if (count >= (second ? 2 : 1)) {
+                *first = (pid_t)one;
+                if (second)
+                    *second = (pid_t)two;
+                return;
+            }
+        }
+        pause_ms(5);
+    }
+    CHECK(false);
+}
+
+static void test_stop_and_duplicate_owner(void) {
+    prepare();
+    CHECK(setenv("MYBOT_TEST_SECRET", "not-for-service-logs", 1) == 0);
+    pid_t supervisor = start_supervisor("wait", 512 * 1024);
+    await_state("running\n");
+    pid_t child;
+    read_marker(&child, NULL);
+    CHECK(child > 1 && kill(child, 0) == 0);
+    pid_t duplicate = start_supervisor("wait", 512 * 1024);
+    CHECK(await_exit(duplicate) == 1);
+    CHECK(rv1126b_supervisor_control(runtime_path, 0) == 0);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 0);
+    CHECK(await_exit(supervisor) == 0);
+    CHECK(kill(child, 0) < 0 && errno == ESRCH);
+    CHECK(rv1126b_supervisor_control(runtime_path, 0) == 3);
+    char log_path[PATH_MAX];
+    CHECK(snprintf(log_path, sizeof(log_path), "%s/mybot.log", logs_path) > 0);
+    FILE *file = fopen(log_path, "r");
+    CHECK(file);
+    char text[512] = {0};
+    CHECK(fread(text, 1, sizeof(text) - 1, file) > 0);
+    CHECK(!strstr(text, "not-for-service-logs") && !strstr(text, "MYBOT_TEST_SECRET"));
+    fclose(file);
+    CHECK(unsetenv("MYBOT_TEST_SECRET") == 0);
+    remove_tree(temporary);
+}
+
+static void test_restart_budget(void) {
+    prepare();
+    pid_t supervisor = start_supervisor("failure", 512 * 1024);
+    await_state("failed\n");
+    CHECK(rv1126b_supervisor_control(runtime_path, 0) == 1);
+    struct stat status;
+    CHECK(stat(marker_path, &status) == 0 && status.st_size == 4 * 8);
+    pause_ms(100);
+    CHECK(stat(marker_path, &status) == 0 && status.st_size == 4 * 8);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 0);
+    CHECK(await_exit(supervisor) == 0);
+    remove_tree(temporary);
+}
+
+static void test_normal_exit_and_logs(void) {
+    prepare();
+    CHECK(await_exit(start_supervisor("exit", 512 * 1024)) == 0);
+    remove_tree(temporary);
+    prepare();
+    pid_t supervisor = start_supervisor("logs", 128);
+    await_state("running\n");
+    pid_t child;
+    read_marker(&child, NULL);
+    pause_ms(100);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 0 && await_exit(supervisor) == 0);
+    for (int i = 0; i < LOG_FILES; ++i) {
+        char path[PATH_MAX];
+        if (i)
+            CHECK(snprintf(path, sizeof(path), "%s/mybot.log.%d", logs_path, i) > 0);
+        else
+            CHECK(snprintf(path, sizeof(path), "%s/mybot.log", logs_path) > 0);
+        struct stat status;
+        CHECK(stat(path, &status) == 0 && status.st_size <= 128);
+        CHECK((status.st_mode & 0777) == 0600);
+    }
+    remove_tree(temporary);
+}
+
+static void test_descendant_cleanup(void) {
+#ifdef __linux__
+    for (int orphan = 0; orphan < 2; ++orphan) {
+        prepare();
+        pid_t foreign = fork();
+        CHECK(foreign >= 0);
+        if (foreign == 0) {
+            signal(SIGTERM, SIG_DFL);
+            for (;;)
+                pause();
+        }
+        pid_t supervisor = start_supervisor(orphan ? "orphan" : "descendant", 512 * 1024);
+        pid_t leader, descendant;
+        read_marker(&leader, &descendant);
+        if (!orphan) {
+            await_state("running\n");
+            CHECK(rv1126b_supervisor_control(runtime_path, 1) == 1);
+            await_state("failed\n");
+        } else {
+            CHECK(await_exit(supervisor) == 0);
+        }
+        CHECK(kill(leader, 0) < 0 && errno == ESRCH);
+        CHECK(kill(descendant, 0) < 0 && errno == ESRCH);
+        if (!orphan)
+            end_failed_fixture(supervisor);
+        CHECK(kill(foreign, 0) == 0);
+        CHECK(kill(foreign, SIGTERM) == 0);
+        int status;
+        CHECK(waitpid(foreign, &status, 0) == foreign);
+        remove_tree(temporary);
+    }
+#endif
+}
+
+static void test_unclean_crash_blocks_restart(void) {
+    prepare();
+    pid_t supervisor = start_supervisor("crash", 512 * 1024);
+    await_state("failed\n");
+    CHECK(rv1126b_supervisor_control(runtime_path, 0) == 1);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 1);
+    char path[PATH_MAX];
+    CHECK(snprintf(path, sizeof(path), "%s/unclean", runtime_path) > 0);
+    struct stat status;
+    CHECK(stat(path, &status) == 0 && (status.st_mode & 0777) == 0600);
+    end_failed_fixture(supervisor);
+    CHECK(rv1126b_supervisor_control(runtime_path, 0) == 1);
+    supervisor = start_supervisor("wait", 512 * 1024);
+    await_state("failed\n");
+    /* Existing marker prevents even the first payload launch. */
+    CHECK(stat(marker_path, &status) == 0 && status.st_size == 0);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 1);
+    end_failed_fixture(supervisor);
+    remove_tree(temporary);
+}
+
+static void test_unsafe_inputs(void) {
+    prepare();
+    CHECK(mkdir(runtime_path, 0755) == 0);
+    CHECK(await_exit(start_supervisor("wait", 128)) == 1);
+    CHECK(access(marker_path, F_OK) < 0);
+    CHECK(chmod(runtime_path, 0700) == 0);
+    char socket_file[PATH_MAX];
+    CHECK(snprintf(socket_file, sizeof(socket_file), "%s/control.sock", runtime_path) > 0);
+    CHECK(symlink("untouched", socket_file) == 0);
+    CHECK(await_exit(start_supervisor("wait", 128)) == 1);
+    struct stat status;
+    CHECK(lstat(socket_file, &status) == 0 && S_ISLNK(status.st_mode));
+    CHECK(access(marker_path, F_OK) < 0);
+    CHECK(signal_owned(getpid(), SIGKILL, true) < 0 && errno == ECHILD);
+    CHECK(signal_owned(0, SIGKILL, true) < 0);
+    CHECK(signal_owned(1, SIGKILL, true) < 0);
+    remove_tree(temporary);
+}
+
+int main(int argc, char **argv) {
+    (void)setvbuf(stdout, NULL, _IOLBF, 0);
+    if (argc == 4 && !strcmp(argv[1], "--child"))
+        return child_payload(argv[2], argv[3]);
+    CHECK(realpath(argv[0], executable_path));
+    test_stop_and_duplicate_owner();
+    test_restart_budget();
+    test_normal_exit_and_logs();
+    test_descendant_cleanup();
+    test_unclean_crash_blocks_restart();
+    test_unsafe_inputs();
+    puts("Supervisor control, direct-child identity, retry budget, logs and owned cleanup: PASS");
+    return 0;
+}

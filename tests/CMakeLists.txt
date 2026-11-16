@@ -49,6 +49,17 @@ add_test(NAME app-config COMMAND test-config)
 add_executable(test-runtime-guard integration/test_runtime_guard.c ../src/application/runtime_guard.c)
 target_include_directories(test-runtime-guard PRIVATE ../src/application)
 add_test(NAME runtime-guard COMMAND test-runtime-guard)
+add_executable(test-service-status unit/test_service_status.c ../src/application/service_status.c)
+target_include_directories(test-service-status PRIVATE ../src/application "${support_dir}")
+target_compile_definitions(test-service-status PRIVATE RV1126B_VERSION="${PROJECT_VERSION}")
+target_compile_options(test-service-status PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME service-status COMMAND test-service-status)
+set_tests_properties(service-status PROPERTIES TIMEOUT 30)
+add_executable(test-supervisor unit/test_supervisor.c)
+target_include_directories(test-supervisor PRIVATE "${platform_root}/include" "${support_dir}")
+target_compile_options(test-supervisor PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME supervisor COMMAND test-supervisor)
+set_tests_properties(supervisor PROPERTIES TIMEOUT 30)
 
 add_executable(test-audio-lifecycle integration/test_audio_lifecycle.c)
 target_include_directories(test-audio-lifecycle PRIVATE support/mocks/audio support/mocks
@@ -80,8 +91,8 @@ target_include_directories(test-network-lifecycle PRIVATE support/mocks
 target_link_libraries(test-network-lifecycle PRIVATE mybot::public_headers Threads::Threads)
 add_test(NAME network-lifecycle COMMAND test-network-lifecycle)
 
-foreach(part backend portal service)
-    add_executable(test-wifi-${part} unit/test_wifi_${part}.cc)
+foreach(part backend portal service profiles)
+    add_executable(test-wifi-${part} unit/test_wifi_${part}.c)
     target_include_directories(test-wifi-${part} PRIVATE "${support_dir}"
         "${platform_root}/src/services/wifi")
     target_link_libraries(test-wifi-${part} PRIVATE mybot_wifi)
@@ -89,6 +100,14 @@ foreach(part backend portal service)
     add_test(NAME wifi-${part} COMMAND test-wifi-${part})
     set_tests_properties(wifi-${part} PROPERTIES TIMEOUT 30)
 endforeach()
+
+add_executable(test-network-startup integration/test_network_startup.c ../src/application/network_gate.c)
+target_include_directories(test-network-startup PRIVATE "${support_dir}" ../src/application
+    "${platform_root}/src/services/wifi")
+target_link_libraries(test-network-startup PRIVATE mybot_wifi)
+target_compile_options(test-network-startup PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME network-startup COMMAND test-network-startup)
+set_tests_properties(network-startup PROPERTIES TIMEOUT 30)
 
 foreach(target test-pixels test-input test-input-worker test-renderer test-identity test-ui-runtime test-drm test-config test-runtime-guard test-audio-lifecycle test-network-lifecycle)
     target_include_directories(${target} PRIVATE "${support_dir}")
