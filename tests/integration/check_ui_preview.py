@@ -23,7 +23,7 @@ def main():
     changed = sorted(name for name in expected.keys() | actual.keys() if expected.get(name) != actual.get(name))
     if changed:
         raise SystemExit('UI baseline mismatch: ' + ', '.join(changed))
-    print(f'{args.language}: {len(actual)} frames match the accepted 0.1.1 baseline byte for byte.')
+    print(f'{args.language}: {len(actual)} frames match the recorded UI baseline byte for byte.')
 
 
 if __name__ == '__main__':

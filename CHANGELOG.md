@@ -2,6 +2,15 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.5.1 — Unreleased
+
+- Add a persistent settings entry with Wi-Fi setup, poweroff confirmation, cancellation and failure pages in both UI languages.
+- Place settings navigation at the top left and retain multitouch slot coordinates across contacts for repeated taps.
+- Keep product input available before and across SDK sessions, normalize touchscreen coordinates and isolate menu gestures from conversation controls.
+- Request planned poweroff through an authenticated supervisor transaction; shut down only after successful application and descendant cleanup.
+
+Actual device power removal and restart behavior require hardware acceptance.
+
 ## 0.4.4 — Unreleased
 
 - Implement the Wi-Fi backend, profile storage, captive portal and controller in C99 with explicit resource ownership and pthread synchronization.

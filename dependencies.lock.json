@@ -1304,7 +1304,7 @@
     "ui/view/lvgl_fonts.c": {
       "path": "src/ui/fonts/generated/lvgl_fonts.c",
       "original_sha256": "3c85a3b60114cc259762317c8d39e24727b23de57569ae61dc594888d9a6a018",
-      "result_sha256": "158551a25be4346e8b5d3c3bb57c53d6cd9ab8ab4d8bbb7f95a4edcada09483b",
+      "result_sha256": "0df1ed7f1b100587c2672a72dd0e411ff7f5d821391bf4907dc6cf8ecac091c5",
       "reason": "Re-rasterized native 640x480 UI font; reproducible generator and input identities are recorded below. Group maintained UI sources and assets under src/ui while preserving public include namespaces and generated font bytes.",
       "previous_paths": [
         "components/mybot_ui/fonts/generated/lvgl_fonts.c"
@@ -7491,7 +7491,7 @@
   ],
   "generated_fonts": {
     "manifest": "src/ui/fonts/sources.json",
-    "manifest_sha256": "7b76e8e5d5f74993805c35128ea5e82cf422da7a7e730f29d3269082cc6aa1e2",
+    "manifest_sha256": "fb61983942cafdf73614e4a4dd15d2bb62cb72cadf8cf71d7d44018e0b7dee54",
     "inputs": {
       "DejaVuSansMono-Bold.ttf": {
         "url": "https://cdn.jsdelivr.net/gh/matplotlib/matplotlib@v3.8.2/lib/matplotlib/mpl-data/fonts/ttf/DejaVuSansMono-Bold.ttf",
@@ -7511,7 +7511,7 @@
     "pillow_version": "10.2.0",
     "freetype_version": "2.13.2",
     "outputs": {
-      "src/ui/fonts/generated/lvgl_fonts.c": "158551a25be4346e8b5d3c3bb57c53d6cd9ab8ab4d8bbb7f95a4edcada09483b",
+      "src/ui/fonts/generated/lvgl_fonts.c": "0df1ed7f1b100587c2672a72dd0e411ff7f5d821391bf4907dc6cf8ecac091c5",
       "src/ui/fonts/generated/pair_font.c": "879e3ce6b590b612f8ecc326508678cfbe9747e6f5c606fb10eba6ac53e5747b",
       "src/ui/fonts/generated/pixel_fonts.c": "20122d9384ffebde5f0e412adc2ecc97e33fe56fb932dc39b6de4164b6ba9d35"
     }
@@ -8187,7 +8187,7 @@
     "packaging/time/sync-busybox.sh": "8601480a0493b640cdb9f916fe41f9b43f47c40365216747a1e7995146405329",
     "packaging/network/99-mybot-lease": "a8078a01d4f37dd93d8ae391fc2e338a2fcbcf830424cc466bd19e48b3420464",
     "packaging/service/S99mybot": "807d7a61e952ceb2db23ecd29f47e8cf438146116e9536ea22368e09567b23be",
-    "packaging/service/run-service.sh": "72b82a1378fd3bf0579b36a8012ede3ea63d466e64e94f18e9d5a9da437880dc",
+    "packaging/service/run-service.sh": "9c0bb1f0fee1b285fe96ebf4b405b032b65a105c0584c03d31056a157999d213",
     "packaging/service/audio-prepare.sh": "b17f5f91773709ffeba80582c61b458ab8ba13911451f0a69c10289dd4d2a6db",
     "packaging/service/mybot-rv1126b.conf": "ed88a8826281a579f8d3df4da5bede0f08bfe4b6f0a40974148b6a0f2818f642"
   },

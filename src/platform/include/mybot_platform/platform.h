@@ -5,6 +5,10 @@
 #include <mybot/mybot.h>
 #include <mybot/platform/mybot_platform.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Strings are borrowed for the process lifetime, before registration. */
 typedef struct {
     const char *capture_device;
@@ -19,12 +23,19 @@ typedef struct {
 /* Registers one complete SDK platform. Configuration strings must outlive it.
  * Returns 0 on success, -1 for invalid configuration or duplicate registration. */
 int rv1126b_platform_register(const rv1126b_platform_config_t *config);
+
 /* Checks routed IPv4 availability without configuring the operating system.
  * Returns 1 when ready, 0 while unavailable, -1 on an inspection failure. */
 int rv1126b_network_ready(const char *interface_name);
+
 /* True after foreground input requested application shutdown. */
 int rv1126b_key_exit_requested(void);
+
 /* Consumes one product-level request. Stop the SDK before changing Wi-Fi. */
 int rv1126b_key_wifi_requested(void);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

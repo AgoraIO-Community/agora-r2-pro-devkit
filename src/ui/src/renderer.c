@@ -8,6 +8,37 @@
 #include <stdlib.h>
 #include <string.h>
 
+LV_FONT_DECLARE(mybot_lvgl_font_40);
+LV_FONT_DECLARE(mybot_terminal_font_18);
+
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+#define SETTINGS_TITLE "设置"
+#define SETTINGS_WIFI "设备配网"
+#define SETTINGS_POWEROFF "关机"
+#define SETTINGS_BACK "返回"
+#define SETTINGS_CANCEL "取消"
+#define SETTINGS_CONFIRM "确认关机"
+#define SETTINGS_QUESTION "确认关机？"
+#define SETTINGS_WARNING "设备将停止运行\n确认关闭设备？"
+#define SETTINGS_PROGRESS "正在关机"
+#define SETTINGS_WAIT "请稍候"
+#define SETTINGS_FAILURE "关机失败"
+#define SETTINGS_RETRY "设备仍在运行\n请重试或检查系统"
+#else
+#define SETTINGS_TITLE "Settings"
+#define SETTINGS_WIFI "Wi-Fi setup"
+#define SETTINGS_POWEROFF "Power off"
+#define SETTINGS_BACK "Back"
+#define SETTINGS_CANCEL "Cancel"
+#define SETTINGS_CONFIRM "Power off"
+#define SETTINGS_QUESTION "Power off?"
+#define SETTINGS_WARNING "Current calls will end.\nPower off this device?"
+#define SETTINGS_PROGRESS "Powering off"
+#define SETTINGS_WAIT "Please wait"
+#define SETTINGS_FAILURE "Power off failed"
+#define SETTINGS_RETRY "The device is still on.\nPlease try again."
+#endif
+
 static struct {
     lv_display_t *display;
     uint32_t *draw;
@@ -18,8 +49,155 @@ static struct {
     int override_expression;
     bool failed;
     bool initialized;
+    lv_obj_t *settings_gear;
+    lv_obj_t *settings_panel;
+    lv_obj_t *settings_title;
+    lv_obj_t *settings_detail;
+    lv_obj_t *settings_controls[MYBOT_SETTINGS_CONFIRM + 1];
+    mybot_settings_page_t settings_page;
 } s_renderer;
 static uint32_t s_tick;
+
+static lv_obj_t *settings_panel(lv_obj_t *parent, int x, int y, int width, int height,
+                                uint32_t color) {
+    if (!parent)
+        return NULL;
+    lv_obj_t *panel = lv_obj_create(parent);
+    if (!panel)
+        return NULL;
+    lv_obj_remove_style_all(panel);
+    lv_obj_set_pos(panel, x, y);
+    lv_obj_set_size(panel, width, height);
+    lv_obj_set_style_bg_color(panel, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+    lv_obj_remove_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+    return panel;
+}
+
+static lv_obj_t *settings_label(lv_obj_t *parent, int x, int y, int width, int height,
+                                const char *text, const lv_font_t *font, uint32_t color) {
+    if (!parent)
+        return NULL;
+    lv_obj_t *label = lv_label_create(parent);
+    if (!label)
+        return NULL;
+    lv_obj_set_pos(label, x, y);
+    lv_obj_set_size(label, width, height);
+    lv_obj_set_style_text_font(label, font, 0);
+    lv_obj_set_style_text_color(label, lv_color_hex(color), 0);
+    lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_line_space(label, 4, 0);
+    lv_label_set_long_mode(label, LV_LABEL_LONG_CLIP);
+    lv_label_set_text_static(label, text);
+    return label;
+}
+
+static bool settings_button(mybot_settings_control_t control, const char *text, uint32_t color) {
+    mybot_settings_rect_t bounds = mybot_settings_bounds(control);
+    lv_obj_t *button = settings_panel(s_renderer.settings_panel, bounds.x, bounds.y, bounds.width,
+                                      bounds.height, 0x10191b);
+    if (!button)
+        return false;
+    lv_obj_set_style_border_width(button, 2, 0);
+    lv_obj_set_style_border_color(button, lv_color_hex(color), 0);
+    lv_obj_set_style_radius(button, 8, 0);
+    if (!settings_label(button, 0, (bounds.height - 4 - mybot_lvgl_font_40.line_height) / 2,
+                        bounds.width - 4, mybot_lvgl_font_40.line_height, text, &mybot_lvgl_font_40,
+                        color))
+        return false;
+    s_renderer.settings_controls[control] = button;
+    return true;
+}
+
+static bool settings_create(void) {
+    lv_obj_t *screen = lv_display_get_screen_active(s_renderer.display);
+    const mybot_settings_rect_t bounds = mybot_settings_bounds(MYBOT_SETTINGS_GEAR);
+    s_renderer.settings_gear =
+        settings_panel(screen, bounds.x, bounds.y, bounds.width, bounds.height, 0x0d1619);
+    if (!s_renderer.settings_gear)
+        return false;
+    lv_obj_set_style_border_width(s_renderer.settings_gear, 1, 0);
+    lv_obj_set_style_border_color(s_renderer.settings_gear, lv_color_hex(0x37565b), 0);
+    lv_obj_set_style_radius(s_renderer.settings_gear, 10, 0);
+    static const lv_point_precise_t outline[] = {
+        {23, 8},  {31, 8},  {32, 14}, {36, 16}, {41, 13}, {46, 19}, {42, 24}, {42, 30}, {46, 35},
+        {41, 41}, {36, 38}, {32, 40}, {31, 46}, {23, 46}, {22, 40}, {18, 38}, {13, 41}, {8, 35},
+        {12, 30}, {12, 24}, {8, 19},  {13, 13}, {18, 16}, {22, 14}, {23, 8}};
+    lv_obj_t *line = lv_line_create(s_renderer.settings_gear);
+    if (!line)
+        return false;
+    lv_line_set_points(line, outline, sizeof(outline) / sizeof(outline[0]));
+    lv_obj_set_style_line_width(line, 3, 0);
+    lv_obj_set_style_line_color(line, lv_color_hex(0x91e7d0), 0);
+    lv_obj_set_style_line_rounded(line, true, 0);
+    lv_obj_t *hub = settings_panel(s_renderer.settings_gear, 19, 19, 16, 16, 0x0d1619);
+    if (!hub)
+        return false;
+    lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(hub, 3, 0);
+    lv_obj_set_style_border_color(hub, lv_color_hex(0x91e7d0), 0);
+    s_renderer.settings_panel =
+        settings_panel(screen, 0, 0, RV1126B_UI_WIDTH, RV1126B_UI_HEIGHT, 0x050708);
+    if (!s_renderer.settings_panel ||
+        !settings_label(s_renderer.settings_panel, 64, 28, 512, 26, "MYBOT / SETTINGS",
+                        &mybot_terminal_font_18, 0x72b6aa))
+        return false;
+    s_renderer.settings_title = settings_label(s_renderer.settings_panel, 48, 76, 544, 56,
+                                               SETTINGS_TITLE, &mybot_lvgl_font_40, 0xe8f4ee);
+    s_renderer.settings_detail = settings_label(s_renderer.settings_panel, 48, 160, 544, 112, "",
+                                                &mybot_lvgl_font_40, 0xabc1ba);
+    if (!s_renderer.settings_title || !s_renderer.settings_detail ||
+        !settings_button(MYBOT_SETTINGS_WIFI, SETTINGS_WIFI, 0x91e7d0) ||
+        !settings_button(MYBOT_SETTINGS_POWEROFF, SETTINGS_POWEROFF, 0xee9b8c) ||
+        !settings_button(MYBOT_SETTINGS_BACK, SETTINGS_BACK, 0xabc1ba) ||
+        !settings_button(MYBOT_SETTINGS_CANCEL, SETTINGS_CANCEL, 0xabc1ba) ||
+        !settings_button(MYBOT_SETTINGS_CONFIRM, SETTINGS_CONFIRM, 0xee9b8c))
+        return false;
+    lv_obj_add_flag(s_renderer.settings_panel, LV_OBJ_FLAG_HIDDEN);
+    return true;
+}
+
+void rv1126b_renderer_settings(mybot_settings_page_t page) {
+    if (!s_renderer.initialized || !s_renderer.settings_panel)
+        return;
+    if (page < MYBOT_SETTINGS_CLOSED || page > MYBOT_SETTINGS_POWEROFF_ERROR)
+        page = MYBOT_SETTINGS_CLOSED;
+    if (page == s_renderer.settings_page)
+        return;
+    s_renderer.settings_page = page;
+    if (page == MYBOT_SETTINGS_CLOSED) {
+        lv_obj_add_flag(s_renderer.settings_panel, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_renderer.settings_gear, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_obj_add_flag(s_renderer.settings_gear, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_remove_flag(s_renderer.settings_panel, LV_OBJ_FLAG_HIDDEN);
+    for (int control = MYBOT_SETTINGS_WIFI; control <= MYBOT_SETTINGS_CONFIRM; ++control)
+        lv_obj_add_flag(s_renderer.settings_controls[control], LV_OBJ_FLAG_HIDDEN);
+    const char *title = SETTINGS_TITLE;
+    const char *detail = "";
+    if (page == MYBOT_SETTINGS_MENU) {
+        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_WIFI], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_POWEROFF],
+                           LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_BACK], LV_OBJ_FLAG_HIDDEN);
+    } else if (page == MYBOT_SETTINGS_CONFIRM_POWEROFF) {
+        title = SETTINGS_QUESTION;
+        detail = SETTINGS_WARNING;
+        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_CANCEL], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_CONFIRM],
+                           LV_OBJ_FLAG_HIDDEN);
+    } else if (page == MYBOT_SETTINGS_POWERING_OFF) {
+        title = SETTINGS_PROGRESS;
+        detail = SETTINGS_WAIT;
+    } else {
+        title = SETTINGS_FAILURE;
+        detail = SETTINGS_RETRY;
+        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_BACK], LV_OBJ_FLAG_HIDDEN);
+    }
+    lv_label_set_text_static(s_renderer.settings_title, title);
+    lv_label_set_text_static(s_renderer.settings_detail, detail);
+}
 
 static uint32_t tick(void) {
     return s_tick;
@@ -68,6 +246,8 @@ int rv1126b_renderer_create(rv1126b_present_fn present, void *user, uint32_t now
     lv_display_set_flush_cb(s_renderer.display, flush);
     mybot_expression_policy_init(&s_renderer.policy);
     if (mybot_lvgl_view_create(s_renderer.display) < 0)
+        goto fail;
+    if (!settings_create())
         goto fail;
     return 0;
 fail:
