@@ -2,6 +2,47 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.4.4 — Unreleased
+
+- Implement the Wi-Fi backend, profile storage, captive portal and controller in C99 with explicit resource ownership and pthread synchronization.
+- Separate supplicant control, process ownership and AP radio selection behind private C interfaces.
+- Preserve provisioning, committed lease verification, recovery and public C APIs; migrate Wi-Fi regression tests to C.
+
+Hardware regression evidence is recorded in the validation matrix.
+
+## 0.4.3 — Unreleased
+
+- Reselect the committed network when a system Wi-Fi reload resumes another saved profile.
+- Request renewal from the existing DHCP manager when the selected network still has a stale lease event, with a bounded setup confirmation window.
+
+Phone setup and business recovery require hardware regression testing for this candidate.
+
+## 0.4.2 — Unreleased
+
+- Resume network recovery while waiting to start the SDK after Wi-Fi provisioning, including a transient route loss after the portal closes.
+- Preserve the system supplicant control path and reconnect its control socket when a configuration reload replaces it.
+- Verify the committed network association and routed lease before reporting successful setup to the phone.
+
+Phone setup and business recovery require hardware regression testing for this candidate.
+
+## 0.4.1 — Unreleased
+
+- Select AP band/channel from the current station frequency and that radio's advertised concurrency instead of rejecting every 5 GHz station.
+- Prefer a 2.4 GHz AP on radios supporting multiple channels; use supported non-DFS station channels for a single-channel 5 GHz AP.
+- Keep 6 GHz distinct from 2.4 GHz when channel numbers overlap, and retain explicit failure for unsupported radio combinations.
+
+Device AP and phone interoperability remain subject to verification.
+
+## 0.4.0 — Unreleased
+
+- Add explicit versioned device deployment, private backups, binding identity checks and rollback without changing the existing data directory.
+- Add a BusyBox init service and a standalone supervisor with bounded restart, log rotation and owned descendant cleanup.
+- Integrate system Wi-Fi profiles and dhcpcd lease events; preserve committed station networks across application restarts.
+- Request SDK shutdown before saved-network recovery or AP entry after a sustained route loss.
+- Publish a private application health record and package the service, DHCP hook and supervisor with provenance checks.
+
+This deployment candidate requires user verification on the device, including restart, AP setup and audio regression.
+
 ## 0.3.3 — Unreleased
 
 - Gate SDK startup on plausible system time after network readiness and AP exit, with a configurable 1–300-second monotonic timeout, defaulting to 30 seconds.

@@ -80,14 +80,20 @@ AP 提示音由产品生命周期通过 `mybot_platform/prompt.h` 触发，只�
 
 ## Wi-Fi 配网边界
 
-`mybot_platform/wifi.h` 提供 C 接口；控制器串行执行扫描、连接、保存及 AP 切换。HTTP/DNS 各有独立 socket worker，处理线程只读取缓存快照或排队操作，连接尝试有总预算并支持取消。候选网络获得可用 IPv4 和路由后才更新私有凭据；SDK 在配网退出、网络就绪后恢复启动。
+Wi-Fi 模块由 C99 实现，`mybot_platform/wifi.h` 提供公共 C 接口；内部使用上下文结构体与操作函数表注入后端和门户，pthread 管理线程、互斥与条件等待。控制器串行执行扫描、连接、保存及 AP 切换。HTTP/DNS 各有独立 socket worker，处理线程只读取缓存快照或排队操作，连接尝试有总预算并支持取消。候选网络获得可用 IPv4 和路由后才更新私有凭据；SDK 在配网退出、网络就绪后恢复启动。
 
 优先创建独立 AP 虚拟接口并保留 STA；单接口回退只接管本应用拥有的 STA，无法安全接管时明确报错。门户绑定 AP 地址，原生提供 HTTP 80 和 captive DNS 53；dnsmasq 只提供 DHCP，不与 DNS worker 争用 53 端口。HTTP 写操作要求同源 Origin、Host 和每次启动更新的 CSRF token，解析限制为 1 KiB header 与 1 KiB body；SSID/密码不进入 URL 或日志，页面使用 `textContent` 显示动态网络名称。DNS 不转发到外部服务器。
 
-缓存最多 10 个网络；加密网络保存派生 PSK，文件采用原子私有写入，位于 `MYBOT_KV_STORE_DIR/wifi/wifi.credentials`。运行期配置和控制 socket 位于私有 session 目录；停止时取消尝试、等待线程、关闭端口并清理本应用拥有的运行资源，保留持久化配置。运行工具及硬件前提见[配网指南](../user/wifi-provisioning.zh-CN.md)。
+缓存最多 10 个网络；加密网络保存派生 PSK，文件采用原子私有写入，位于 `MYBOT_KV_STORE_DIR/wifi/wifi.credentials`。运行期配置和控制 socket 位于私有 session 目录；停止时取消尝试、等待线程、关闭端口并清理本应用拥有的运行资源，保留持久化配置。后端分别由 `wifi_backend.c` 编排、`wifi_wpa_control.c` 管理控制套接字、`wifi_process.c` 管理自有进程、`wifi_radio.c` 处理信道与扫描、`wifi_credentials.c` 管理私有凭据，`wifi_common.c` 提供有界缓冲区与单调时钟。运行工具及硬件前提见[配网指南](../user/wifi-provisioning.zh-CN.md)。
 
 ## 兼容边界
 
 工程治理保留 0.1.1 的命令行/环境名及优先级、server、身份算法、KV 路径、16 kHz mono S16/20 ms/Cloud AEC、显式开聊、原生 UI、默认旋转及表情行为。目标候选版仍需独立真机回归，旧验收结果不能覆盖新的二进制。
 
 MyBot、AOSL、LVGL、RTSA 快照与包装分离。父工程通过 `AOSL_DIR` 指定平级源码，由 MyBot 创建唯一的 `aosl` target；源码布局不改变 SDK → AOSL/RTSA 的链接依赖。完整 RTSA 包内置于 `vendor/rtsa/`，父工程固定其公共头与 AArch64 动态库路径；运行包只携带所选目标库及适用说明。UI 视图与字库属于项目管理资源，不登记为第三方源码快照；字体作为生成源码编译进程序，不新增设备运行时字体依赖。依赖变更见[依赖指南](dependencies.zh-CN.md)和[目录规则](third-party-layout.zh-CN.md)，实际检查见[测试指南](testing.zh-CN.md)。
+
+## 设备部署边界
+
+`mybot-supervisor` 独立监督应用及其自有子孙，使用私有 Unix 控制接口、有上限的重试和日志轮转；Linux 子进程收养结合 `/proc` 子关系及 `waitid(WNOWAIT)` 证明信号归属。异常强停不能证明 AP 内核资源已释放时，阻断再次启动和版本切换。
+
+系统网络协作由 `system_wifi_profile.c` 负责主记录的解析、原子提交与回滚，dhcpcd hook 发布匿名租约代次。产品 Wi-Fi 控制线程只在 SDK 停止确认后进行断网恢复；SDK 的网络观察器继续负责业务连接事件。程序发布目录和私有运行数据相互独立，部署工具显式调用 ADB，构建和打包保持纯本地操作。

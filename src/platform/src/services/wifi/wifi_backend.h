@@ -2,52 +2,51 @@
 #ifndef RV1126B_WIFI_BACKEND_H
 #define RV1126B_WIFI_BACKEND_H
 
-#include <atomic>
-#include <memory>
-#include <string>
-#include <vector>
+#include "wifi_common.h"
 
-namespace rv1126b_wifi {
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-struct Credential {
-    std::string ssid;
-    std::string psk; /* Empty for open Wi-Fi; otherwise a derived 64-digit PSK. */
-};
-struct AccessPoint {
-    std::string ssid;
-    int rssi = -100;
-    int authmode = 0;
-    int channel = 0;
-};
-struct BackendConfig {
-    std::string interface_name;
-    std::string storage_directory;
-    std::string runtime_directory;
-    std::string dhcp_script;
-};
+typedef struct {
+    const char *interface_name, *storage_directory, *runtime_directory, *dhcp_script;
+    const char *system_wpa_config, *dhcpcd_lease_directory;
+} wifi_backend_config_t;
 
-bool make_credential(const std::string &ssid, const std::string &password, Credential &credential,
-                     std::string &error);
+typedef struct {
+    bool (*initialize)(void *context, char *error);
+    const char *(*ap_ssid)(void *context);
+    bool (*start_ap)(void *context, char *error);
+    void (*stop_ap)(void *context);
+    bool (*ap_running)(void *context);
+    bool (*concurrent_ap)(void *context);
+    bool (*online)(void *context);
+    bool (*scan)(void *context, wifi_scan_t *scan, char *error);
+    bool (*load)(void *context, wifi_credentials_t *profiles, char *error);
+    bool (*save)(void *context, const wifi_credentials_t *profiles, char *error);
+    bool (*wait_committed)(void *context, const wifi_credential_t *credential, unsigned timeout_ms,
+                           const wifi_cancel_t *cancel, char *error);
+    bool (*connect)(void *context, const wifi_credential_t *credential, unsigned timeout_ms,
+                    const wifi_cancel_t *cancel, char *error);
+    void (*destroy)(void *context);
+} wifi_backend_ops_t;
 
-class Backend {
-  public:
-    virtual ~Backend() = default;
-    virtual bool initialize(std::string &error) = 0;
-    virtual std::string ap_ssid() const = 0;
-    virtual bool start_ap(std::string &error) = 0;
-    virtual void stop_ap() = 0;
-    virtual bool ap_running() = 0;
-    virtual bool concurrent_ap() const = 0;
-    virtual bool online() const = 0;
-    virtual std::vector<AccessPoint> scan(std::string &error) = 0;
-    virtual std::vector<Credential> load(std::string &error) = 0;
-    virtual bool save(const std::vector<Credential> &credentials, std::string &error) = 0;
-    /* Success requires a usable routed IPv4 address, not association alone.
-     * Cancel must bound shutdown; this method runs only on the control worker. */
-    virtual bool connect(const Credential &credential, unsigned timeout_ms,
-                         const std::atomic<bool> &cancel, std::string &error) = 0;
-};
+typedef struct {
+    const wifi_backend_ops_t *ops;
+    void *context;
+} wifi_backend_t;
 
-std::unique_ptr<Backend> make_linux_backend(const BackendConfig &config);
-} // namespace rv1126b_wifi
+/* Copies config strings. Non-NULL error buffers have WIFI_ERROR_CAPACITY bytes. */
+bool wifi_linux_backend_create(const wifi_backend_config_t *config, wifi_backend_t *backend,
+                               char *error);
+
+void wifi_backend_destroy(wifi_backend_t *backend);
+
+bool wifi_make_credential(const char *ssid, const char *password, wifi_credential_t *credential,
+                          char *error);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

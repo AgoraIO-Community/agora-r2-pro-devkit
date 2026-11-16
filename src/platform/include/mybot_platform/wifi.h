@@ -14,7 +14,9 @@ typedef enum {
     RV1126B_WIFI_AP_READY,
     RV1126B_WIFI_VERIFYING,
     RV1126B_WIFI_ONLINE,
-    RV1126B_WIFI_ERROR
+    RV1126B_WIFI_ERROR,
+    /* The SDK must stop before the product attempts recovery or opens an AP. */
+    RV1126B_WIFI_RECOVERY_REQUIRED
 } rv1126b_wifi_state_t;
 
 typedef struct {
@@ -39,6 +41,8 @@ typedef struct {
 int rv1126b_wifi_start(const rv1126b_wifi_config_t *config);
 /* The application must stop the SDK completely before requesting provisioning. */
 void rv1126b_wifi_request_provisioning(void);
+/* Acknowledge a lost route after stopping the SDK; retry saved profiles first. */
+void rv1126b_wifi_request_recovery(void);
 /* Copies a bounded status snapshot; no credentials are exposed. */
 void rv1126b_wifi_status(rv1126b_wifi_status_t *status);
 /* Cancels connection attempts, closes the portal and joins all owned workers. */

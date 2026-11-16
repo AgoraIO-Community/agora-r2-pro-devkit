@@ -17,7 +17,7 @@ endforeach()
 configure_file("${PROJECT_SOURCE_DIR}/cmake/build-config.json.in" "${PROJECT_BINARY_DIR}/build-config.json" @ONLY)
 configure_file("${PROJECT_SOURCE_DIR}/cmake/build_identity.c.in" "${CMAKE_CURRENT_BINARY_DIR}/build_identity.c" @ONLY)
 configure_file("${PROJECT_SOURCE_DIR}/cmake/build_identity.h.in" "${CMAKE_CURRENT_BINARY_DIR}/build_identity.h" @ONLY)
-add_executable(mybot-rv1126b main.c config.c runtime_guard.c device_identity.c
+add_executable(mybot-rv1126b main.c config.c runtime_guard.c device_identity.c service_status.c network_gate.c
     "${CMAKE_CURRENT_BINARY_DIR}/build_identity.c" "${PROJECT_BINARY_DIR}/build_source_identity.c")
 set_source_files_properties("${PROJECT_BINARY_DIR}/build_source_identity.c" PROPERTIES GENERATED TRUE)
 target_include_directories(mybot-rv1126b PRIVATE "${RV1126B_BOARD_INCLUDE}" "${CMAKE_CURRENT_BINARY_DIR}")
@@ -31,6 +31,12 @@ add_custom_target(mybot-build-inputs
         --build-dir "${PROJECT_BINARY_DIR}" --prepare
     BYPRODUCTS "${PROJECT_BINARY_DIR}/build_source_identity.c" VERBATIM)
 add_dependencies(mybot-rv1126b mybot-build-inputs)
+target_sources(mybot-supervisor PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/build_identity.c"
+    "${PROJECT_BINARY_DIR}/build_source_identity.c")
+add_dependencies(mybot-supervisor mybot-build-inputs)
+target_compile_definitions(mybot-supervisor PRIVATE RV1126B_BUILD_PROVENANCE=1)
+set_target_properties(mybot-supervisor PROPERTIES INSTALL_RPATH "$ORIGIN/../lib"
+    BUILD_WITH_INSTALL_RPATH TRUE)
 get_filename_component(rtsa_library_directory "${AGORA_RTC_LIBRARY}" DIRECTORY)
 add_custom_target(mybot-artifacts ALL
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/check-target-elf.py"
@@ -40,7 +46,18 @@ add_custom_target(mybot-artifacts ALL
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/build-manifest.py" --build-dir "${PROJECT_BINARY_DIR}"
     DEPENDS mybot-rv1126b VERBATIM)
 install(TARGETS mybot-rv1126b RUNTIME DESTINATION bin)
+install(TARGETS mybot-supervisor RUNTIME DESTINATION bin)
+add_custom_target(mybot-supervisor-artifacts ALL
+    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/check-target-elf.py"
+        "$<TARGET_FILE:mybot-supervisor>" --library-root "${RV1126B_STAGING}"
+        --output "${PROJECT_BINARY_DIR}/abi-report-supervisor.json"
+    DEPENDS mybot-supervisor VERBATIM)
 install(FILES "${AGORA_RTC_LIBRARY}" DESTINATION lib)
 install(DIRECTORY "${PROJECT_SOURCE_DIR}/vendor/mybot/assets/locales" DESTINATION assets)
 install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/wifi/udhcpc.script" DESTINATION assets/wifi)
 install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/time/sync-busybox.sh" DESTINATION assets/time)
+install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/network/99-mybot-lease" DESTINATION assets/network)
+install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/service/S99mybot"
+    "${PROJECT_SOURCE_DIR}/packaging/service/run-service.sh"
+    "${PROJECT_SOURCE_DIR}/packaging/service/audio-prepare.sh" DESTINATION assets/service)
+install(FILES "${PROJECT_SOURCE_DIR}/packaging/service/mybot-rv1126b.conf" DESTINATION assets/service)

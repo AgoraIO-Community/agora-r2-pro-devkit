@@ -1,6 +1,6 @@
 # MyBot RV1126B 运行包
 
-本包用于 RV1126B TEST2 RK805B V10 的现有 AArch64 Buildroot 系统。0.3.3 为系统时间保护候选，AP 配网、语音引导、音量与时间处理均需真机回归；此前 0.1.0 语音/UI与 0.1.1 显示优化已由用户验收。可选视频和长期专项尚未完成。
+本包用于 RV1126B TEST2 RK805B V10 的现有 AArch64 Buildroot 系统。0.4.4 为设备部署候选，AP 配网、语音引导、音量与时间处理均需真机回归；此前 0.1.0 语音/UI与 0.1.1 显示优化已由用户验收。可选视频和长期专项尚未完成。
 
 ## 校验与运行
 
@@ -76,3 +76,5 @@ RV1126B_VIDEO=1 ./run.sh
 ```
 
 反馈时提供包名、校验和、version、实际命令和问题附近日志；隐藏 token、配对码、设备 ID/Serial/MAC。不要上传 KV 目录。源码仓库的 `docs/validation/README.md` 是当前验证状态的唯一现行记录。
+
+受监督设备部署使用包内 `assets/service/` 和 `bin/mybot-supervisor`，由显式部署工具安装。`assets/network/99-mybot-lease` 是系统 dhcpcd 的租约事件 hook；它与应用自有 DHCP hook 用途不同。系统模式以系统 Wi-Fi 配置为主记录，已有绑定数据目录保持不变。

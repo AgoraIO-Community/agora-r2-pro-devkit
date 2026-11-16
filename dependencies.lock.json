@@ -8184,7 +8184,12 @@
     "vendor/rtsa/agora_sdk/include/agora_rtc_api.h": "2ea0add2c710dac2eaf8bbe9a2155217c75b19c3b10d15f8406973b8eb8f299f",
     "vendor/rtsa/agora_sdk/include/global_config.cmake": "b4dffdce9d1f32d5b1efe952353894360a9d21d5271f5497ed5d7d8c8d938fa9",
     "vendor/rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so": "0e878752644d94227c2aa5f3a9d2259c4098850297c867a2460cbbf8c66d3d98",
-    "packaging/time/sync-busybox.sh": "8601480a0493b640cdb9f916fe41f9b43f47c40365216747a1e7995146405329"
+    "packaging/time/sync-busybox.sh": "8601480a0493b640cdb9f916fe41f9b43f47c40365216747a1e7995146405329",
+    "packaging/network/99-mybot-lease": "a8078a01d4f37dd93d8ae391fc2e338a2fcbcf830424cc466bd19e48b3420464",
+    "packaging/service/S99mybot": "807d7a61e952ceb2db23ecd29f47e8cf438146116e9536ea22368e09567b23be",
+    "packaging/service/run-service.sh": "72b82a1378fd3bf0579b36a8012ede3ea63d466e64e94f18e9d5a9da437880dc",
+    "packaging/service/audio-prepare.sh": "b17f5f91773709ffeba80582c61b458ab8ba13911451f0a69c10289dd4d2a6db",
+    "packaging/service/mybot-rv1126b.conf": "ed88a8826281a579f8d3df4da5bede0f08bfe4b6f0a40974148b6a0f2818f642"
   },
   "import_omissions": {
     "third_party/mybot/.clang-format": {

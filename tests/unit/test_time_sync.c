@@ -343,6 +343,22 @@ static bool process_live(pid_t pid) {
     return true;
 }
 
+static void fixture_failure(rv1126b_time_sync_t **sync, const char *condition, int line) {
+    /* A failed test must still kill/reap the verified owned process group.
+     * Otherwise its sleep descendant inherits CTest's pipe after abort and
+     * makes an ordinary assertion failure look like a 30-second test timeout. */
+    rv1126b_time_sync_destroy(*sync);
+    *sync = NULL;
+    fprintf(stderr, "%s:%d: %s\n", __FILE__, line, condition);
+    abort();
+}
+
+#define FIXTURE_CHECK(sync, condition)                                                             \
+    do {                                                                                           \
+        if (!(condition))                                                                          \
+            fixture_failure(&(sync), #condition, __LINE__);                                        \
+    } while (0)
+
 static void test_real_owned_process_group(void) {
     const rv1126b_time_sync_backend_t *production = rv1126b_time_sync_default_backend();
     /* Even a positive PID cannot authorize signalling unless it is our child. */
@@ -380,11 +396,14 @@ static void test_real_owned_process_group(void) {
         CHECK(write(input[1], "keep\n", 5) == 5 && close(input[1]) == 0);
         int saved_input = dup(STDIN_FILENO);
         CHECK(saved_input >= 0 && dup2(input[0], STDIN_FILENO) == STDIN_FILENO);
-        CHECK(rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_WAIT_CLOCK);
-        CHECK(dup2(saved_input, STDIN_FILENO) == STDIN_FILENO && close(saved_input) == 0);
-        CHECK(fake.spawn_calls == 1 && fake.spawned_pid > 1);
+        FIXTURE_CHECK(sync, rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_WAIT_CLOCK);
+        FIXTURE_CHECK(sync,
+                      dup2(saved_input, STDIN_FILENO) == STDIN_FILENO && close(saved_input) == 0);
+        FIXTURE_CHECK(sync, fake.spawn_calls == 1 && fake.spawned_pid > 1);
         pid_t leader = 0, child = 0;
-        uint64_t deadline = real_monotonic() + 2000;
+        /* Script startup may be delayed by macOS execution checks under load.
+         * This fixture budget is independent of the production NTP deadline. */
+        uint64_t deadline = real_monotonic() + 10000;
         while (real_monotonic() < deadline) {
             file = fopen(pids, "r");
             if (file) {
@@ -399,20 +418,21 @@ static void test_real_owned_process_group(void) {
             }
             pause_one_ms();
         }
-        CHECK(leader == fake.spawned_pid && child > 1 && process_live(child));
+        FIXTURE_CHECK(sync, leader == fake.spawned_pid && child > 1 && process_live(child));
         char retained[5];
-        CHECK(read(input[0], retained, sizeof(retained)) == (ssize_t)sizeof(retained));
-        CHECK(!memcmp(retained, "keep\n", sizeof(retained)) && close(input[0]) == 0);
+        FIXTURE_CHECK(sync,
+                      read(input[0], retained, sizeof(retained)) == (ssize_t)sizeof(retained));
+        FIXTURE_CHECK(sync, !memcmp(retained, "keep\n", sizeof(retained)) && close(input[0]) == 0);
         if (exited_leader) {
             deadline = real_monotonic() + 2000;
             while (production->helper_exited(NULL, leader) == 0 && real_monotonic() < deadline) {
                 pause_one_ms();
             }
-            CHECK(production->helper_exited(NULL, leader) == 1);
-            CHECK(rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_FAILED);
+            FIXTURE_CHECK(sync, production->helper_exited(NULL, leader) == 1);
+            FIXTURE_CHECK(sync, rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_FAILED);
         } else {
-            CHECK(getpgid(leader) == leader && getpgid(child) == leader);
-            CHECK(rv1126b_time_sync_poll(sync, false) == RV1126B_TIME_WAIT_NETWORK);
+            FIXTURE_CHECK(sync, getpgid(leader) == leader && getpgid(child) == leader);
+            FIXTURE_CHECK(sync, rv1126b_time_sync_poll(sync, false) == RV1126B_TIME_WAIT_NETWORK);
         }
         rv1126b_time_sync_destroy(sync);
         int status;

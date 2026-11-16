@@ -163,18 +163,19 @@ def build_inputs(root, build):
             "dependencies": dependencies}
 
 
-def verified_abi(build, config, source_sha256, inputs_sha256):
+def verified_abi(build, config, source_sha256, inputs_sha256, *,
+                 binary_name="mybot-rv1126b", report_name="abi-report.json", require_rtsa=True):
     build = Path(build)
-    report = read_json(build / "abi-report.json")
+    report = read_json(build / report_name)
     binary = report.get("binary", {})
     if report.get("errors") != []:
         raise ValueError("ABI report is missing passing validation")
-    if binary.get("sha256") != digest(build / "mybot-rv1126b"):
+    if binary.get("sha256") != digest(build / binary_name):
         raise ValueError("Stale ABI report: executable changed")
     marker = ("MYBOT_RV1126B_BUILD_CONFIG:" + config["version"] + ";" + config["language"] +
               ";video=" + str(int(config["video"])) + ";ptime_ms=" + str(config["ptime_ms"]) +
               ";board=" + config["board"]).encode() + b"\0"
-    executable = (build / "mybot-rv1126b").read_bytes()
+    executable = (build / binary_name).read_bytes()
     if marker not in executable:
         raise ValueError("Executable build identity does not match configuration; rebuild")
     source_marker = b"MYBOT_RV1126B_SOURCE:" + source_sha256.encode() + b"\0"
@@ -201,7 +202,7 @@ def verified_abi(build, config, source_sha256, inputs_sha256):
             raise ValueError("Stale ABI dependency: " + entry.get("soname", entry["path"]))
         if entry.get("soname") == "libagora-rtc-sdk.so":
             matched = entry["sha256"] == rtsa_hash
-    if not matched:
+    if require_rtsa and not matched:
         raise ValueError("RTSA library does not match verified ABI closure")
     return report
 

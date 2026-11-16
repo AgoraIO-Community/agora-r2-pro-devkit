@@ -6,6 +6,8 @@ Project documentation and tool output describe this application and its required
 
 - `src/application/` owns configuration, identity, runtime guards and lifecycle. `src/platform/` owns board defaults, Linux services and drivers. `src/ui/` owns a pure 640×480 renderer and views. Use MyBot public headers only.
 - Keep public include namespaces (`mybot_platform/`, `mybot_ui/`) and CMake targets stable during directory refactors. `tools/` contains developer programs; `scripts/` contains build/check/generation/packaging automation.
+- Separate top-level C function definitions with a blank line; preserve that spacing when formatting or generating maintained code.
+- Keep header types and function declarations separated by blank lines, and guard C declarations with `__cplusplus` / `extern "C"` for C++ callers.
 - `vendor/` is a pinned snapshot boundary. Keep the required RTSA package complete, including vendor binaries and documentation. Make dependency changes deliberately, retain licenses, record patches and synchronize `dependencies.lock.json` and provenance. Do not bulk-format snapshots or generated fonts. See `VENDORED_SOURCES.md`.
 - Follow the Conventional Commits format and allowed types in `CONTRIBUTING.md`; keep the subject imperative and within 72 characters, mark incompatible changes with `!` and a `BREAKING CHANGE:` footer, and install `./scripts/setup-githooks.sh`.
 - Keep credentials, runtime data, private device identifiers, local SDK paths and generated packages out of commits. Generated outputs belong in ignored `build/`, `local/` and `dist/` directories.

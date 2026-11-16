@@ -15,11 +15,20 @@ add_library(mybot_time_sync STATIC src/services/time_sync.c)
 target_include_directories(mybot_time_sync PUBLIC include)
 target_compile_options(mybot_time_sync PRIVATE -Wall -Wextra -Werror)
 find_package(OpenSSL REQUIRED)
-add_library(mybot_wifi STATIC src/services/wifi/wifi_backend.cc
-    src/services/wifi/wifi_portal.cc src/services/wifi/wifi_service.cc)
+add_library(mybot_wifi STATIC src/services/wifi/wifi_common.c
+    src/services/wifi/wifi_backend.c src/services/wifi/wifi_credentials.c
+    src/services/wifi/wifi_process.c src/services/wifi/wifi_radio.c
+    src/services/wifi/wifi_wpa_control.c src/services/wifi/wifi_portal.c
+    src/services/wifi/wifi_service.c src/services/wifi/system_wifi_profile.c)
+set_target_properties(mybot_wifi PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 target_include_directories(mybot_wifi PUBLIC include PRIVATE src/services/wifi)
 target_link_libraries(mybot_wifi PUBLIC Threads::Threads OpenSSL::Crypto)
 target_compile_options(mybot_wifi PRIVATE -Wall -Wextra -Werror)
+add_executable(mybot-supervisor src/services/supervisor.c)
+target_include_directories(mybot-supervisor PRIVATE include)
+target_compile_options(mybot-supervisor PRIVATE -Wall -Wextra -Werror)
+target_compile_definitions(mybot-supervisor PRIVATE RV1126B_VERSION="${PROJECT_VERSION}")
+set_target_properties(mybot-supervisor PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 if(RV1126B_HOST_ONLY)
     return()
 endif()

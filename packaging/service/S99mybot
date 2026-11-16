@@ -1,0 +1,49 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+set -eu
+
+service_dir=/etc/mybot-rv1126b
+supervisor=$service_dir/mybot-supervisor
+runtime=/run/mybot-rv1126b-service
+
+start() {
+    [ -x "$supervisor" ] && [ -x "$service_dir/run-service.sh" ] || return 1
+    if "$supervisor" status --runtime "$runtime" >/dev/null 2>&1; then
+        return 0
+    else
+        state=$?
+        [ "$state" -eq 3 ] || return 1
+    fi
+    "$service_dir/run-service.sh" prepare || return 1
+    "$service_dir/run-service.sh" supervise </dev/null >/dev/null 2>&1 &
+    launcher=$!
+    attempt=0
+    while [ "$attempt" -lt 200 ]; do
+        if "$supervisor" status --runtime "$runtime" >/dev/null 2>&1; then
+            return 0
+        fi
+        kill -0 "$launcher" 2>/dev/null || return 1
+        attempt=$((attempt + 1))
+        sleep 0.1
+    done
+    echo 'MyBot: service did not become available; inspect private service logs' >&2
+    return 1
+}
+
+stop() {
+    if "$supervisor" stop --runtime "$runtime"; then
+        return 0
+    else
+        state=$?
+        # Absent is already stopped. A cleanup failure remains an error.
+        [ "$state" -eq 3 ]
+    fi
+}
+
+case "${1:-}" in
+    start) start ;;
+    stop) stop ;;
+    restart) stop && start ;;
+    status) exec "$supervisor" status --runtime "$runtime" ;;
+    *) echo 'Usage: S99mybot start|stop|restart|status' >&2; exit 2 ;;
+esac
