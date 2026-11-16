@@ -23,6 +23,19 @@ static lv_obj_t *find_label(lv_obj_t *object, const char *text) {
     return NULL;
 }
 
+static lv_obj_t *find_visible_label(lv_obj_t *object, const char *text) {
+    if (!lv_obj_is_visible(object))
+        return NULL;
+    if (lv_obj_check_type(object, &lv_label_class) && !strcmp(lv_label_get_text(object), text))
+        return object;
+    for (unsigned i = 0; i < lv_obj_get_child_count(object); ++i) {
+        lv_obj_t *found = find_visible_label(lv_obj_get_child(object, i), text);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
 static void check_visible_labels(lv_obj_t *object) {
     if (!lv_obj_is_visible(object))
         return;
@@ -107,7 +120,85 @@ static uint64_t hash(const uint32_t *pixels) {
         value = (value ^ pixels[i]) * UINT64_C(1099511628211);
     return value;
 }
+
+static void check_settings(uint32_t *now) {
+    lv_obj_t *root = lv_display_get_screen_active(lv_display_get_default());
+    CHECK(rv1126b_renderer_expression(MYBOT_EXPRESSION_NEUTRAL) == 0);
+    rv1126b_renderer_step(*now += 1000);
+    rv1126b_renderer_step(*now += 1000);
+    uint64_t closed = hash(rv1126b_renderer_canvas());
+    lv_obj_t *gear = lv_obj_get_child(root, (int)lv_obj_get_child_count(root) - 2);
+    const mybot_settings_rect_t bounds = mybot_settings_bounds(MYBOT_SETTINGS_GEAR);
+    lv_area_t box;
+    lv_obj_get_coords(gear, &box);
+    CHECK(lv_obj_is_visible(gear));
+    CHECK(box.x1 == bounds.x && box.y1 == bounds.y);
+    CHECK(box.x2 - box.x1 + 1 == bounds.width && box.y2 - box.y1 + 1 == bounds.height);
+    static const char *titles[] = {
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+        "设置",
+        "确认关机？",
+        "正在关机",
+        "关机失败"
+#else
+        "Settings",
+        "Power off?",
+        "Powering off",
+        "Power off failed"
+#endif
+    };
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+    const char *back_text = "返回";
+    const char *cancel_text = "取消";
+#else
+    const char *back_text = "Back";
+    const char *cancel_text = "Cancel";
+#endif
+    uint64_t pages[MYBOT_SETTINGS_POWEROFF_ERROR];
+    for (int page = MYBOT_SETTINGS_MENU; page <= MYBOT_SETTINGS_POWEROFF_ERROR; ++page) {
+        rv1126b_renderer_settings((mybot_settings_page_t)page);
+        rv1126b_renderer_step(*now += 1000);
+        pages[page - 1] = hash(rv1126b_renderer_canvas());
+        CHECK(!lv_obj_is_visible(gear));
+        CHECK(find_visible_label(root, titles[page - 1]));
+        CHECK(pages[page - 1] != closed);
+        for (int previous = MYBOT_SETTINGS_MENU; previous < page; ++previous)
+            CHECK(pages[page - 1] != pages[previous - 1]);
+        check_visible_labels(root);
+        if (page == MYBOT_SETTINGS_MENU || page == MYBOT_SETTINGS_POWEROFF_ERROR) {
+            lv_obj_t *back = find_visible_label(root, back_text);
+            mybot_settings_rect_t expected = mybot_settings_bounds(MYBOT_SETTINGS_BACK);
+            CHECK(back && expected.x == 16 && expected.y == 16);
+            lv_obj_get_coords(lv_obj_get_parent(back), &box);
+            CHECK(box.x1 == expected.x && box.y1 == expected.y);
+            CHECK(box.x2 - box.x1 + 1 == expected.width);
+            CHECK(box.y2 - box.y1 + 1 == expected.height);
+        } else if (page == MYBOT_SETTINGS_CONFIRM_POWEROFF) {
+            lv_obj_t *cancel = find_visible_label(root, cancel_text);
+            mybot_settings_rect_t expected = mybot_settings_bounds(MYBOT_SETTINGS_CANCEL);
+            CHECK(cancel && expected.x == 96 && expected.y == 300);
+            lv_obj_get_coords(lv_obj_get_parent(cancel), &box);
+            CHECK(box.x1 == expected.x && box.y1 == expected.y);
+            CHECK(box.x2 - box.x1 + 1 == expected.width);
+            CHECK(box.y2 - box.y1 + 1 == expected.height);
+        }
+        if (page == MYBOT_SETTINGS_POWERING_OFF) {
+            lv_obj_t *overlay = lv_obj_get_child(root, (int)lv_obj_get_child_count(root) - 1);
+            for (unsigned index = 3; index < lv_obj_get_child_count(overlay); ++index)
+                CHECK(!lv_obj_is_visible(lv_obj_get_child(overlay, (int)index)));
+        }
+    }
+    rv1126b_renderer_settings(MYBOT_SETTINGS_CLOSED);
+    rv1126b_renderer_step(*now += 1000);
+    CHECK(hash(rv1126b_renderer_canvas()) == closed);
+    CHECK(lv_obj_is_visible(gear));
+    rv1126b_renderer_settings((mybot_settings_page_t)99);
+    CHECK(hash(rv1126b_renderer_canvas()) == closed);
+    CHECK(rv1126b_renderer_expression(-1) == 0);
+}
+
 int main(void) {
+    rv1126b_renderer_settings(MYBOT_SETTINGS_MENU);
     s_frame = calloc(RV1126B_UI_WIDTH * RV1126B_UI_HEIGHT, sizeof(uint32_t));
     CHECK(s_frame);
     lv_font_glyph_dsc_t native_glyph;
@@ -202,6 +293,7 @@ int main(void) {
             find_label(lv_display_get_screen_active(lv_display_get_default()), "> MyBot / RV1126B");
         CHECK(brand && lv_obj_is_visible(brand));
         check_native_text(brand);
+        check_settings(&now);
         /* The product gate must also suppress a stale face/expression override,
          * and clearing it must restore the ordinary state-driven view. */
         status.clock_state = 1;
@@ -244,6 +336,6 @@ int main(void) {
         rv1126b_renderer_destroy();
     }
     free(s_frame);
-    puts("Real LVGL: workflow pages, clock gate, expressions, glyphs and pixel restoration: PASS");
+    puts("Real LVGL: workflow/settings pages, clock gate, glyphs and pixel restoration: PASS");
     return 0;
 }

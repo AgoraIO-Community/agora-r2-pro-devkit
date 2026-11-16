@@ -60,7 +60,7 @@ python3 scripts/deploy-rv1126b.py preflight --serial SERIAL \
 
 python3 scripts/deploy-rv1126b.py deploy --serial SERIAL \
   --settings local/deployment-settings.json \
-  --package dist/mybot-rv1126b-0.4.4-aarch64.tar.gz \
+  --package dist/mybot-rv1126b-0.5.1-aarch64.tar.gz \
   --sha256 ARCHIVE_SHA256 --dry-run
 ```
 

@@ -4,7 +4,7 @@
 
 A Linux application for running MyBot 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides AP Wi-Fi setup with voice guidance, HTTPS pairing, bidirectional voice, persistent device identity and output volume, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
 
-The current source is the **0.4.4 deployment candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. AP Wi-Fi setup, voice guidance, persistent volume and time handling require device testing; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
+The current source is the **0.5.1 deployment candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. AP Wi-Fi setup, voice guidance, persistent volume and time handling require device testing; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
 
 ## Platform and behavior
 
@@ -72,3 +72,5 @@ Project-maintained modules live under `src/`; pinned dependency snapshots live u
 Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. MyBot/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. The bundled RTSA package retains its vendor terms and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.
 
 Versioned installation, system Wi-Fi integration, service controls and rollback are described in the [device deployment guide](docs/user/deployment.zh-CN.md). Build and packaging scripts never deploy to a device.
+
+The top-right settings entry opens Wi-Fi setup and poweroff confirmation; see the [settings guide](docs/user/settings.zh-CN.md).

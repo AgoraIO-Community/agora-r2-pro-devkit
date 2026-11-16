@@ -9,6 +9,8 @@
 #include "build_identity.h"
 #include "mybot_platform/platform.h"
 #include "mybot_platform/display.h"
+#include "mybot_platform/controls.h"
+#include "mybot_platform/power.h"
 #include "mybot_platform/wifi.h"
 #include "mybot_platform/volume.h"
 #include "mybot_platform/prompt.h"
@@ -81,6 +83,22 @@ static void stop_sdk(void) {
             _Exit(EXIT_FAILURE);
         }
     }
+}
+
+/* The supervisor owns the system transition; this process owns orderly cleanup. */
+static bool accept_poweroff(void) {
+    if (!rv1126b_key_poweroff_requested())
+        return false;
+    if (rv1126b_poweroff_request() < 0) {
+        fprintf(stderr, "Cannot schedule device poweroff: %s\n", strerror(errno));
+        rv1126b_input_settings_page(MYBOT_SETTINGS_POWEROFF_ERROR);
+        return false;
+    }
+    publish_status("powering_off");
+    /* Allow the UI worker to present the final state before resource teardown. */
+    const struct timespec present = {.tv_sec = 0, .tv_nsec = 150000000};
+    nanosleep(&present, NULL);
+    return true;
 }
 
 int main(int argc, char **argv) {
@@ -161,6 +179,7 @@ int main(int argc, char **argv) {
     }
     int failed = 0;
     bool sdk_started = false, ui_started = false, wifi_started = false, volume_started = false;
+    bool input_started = false;
     rv1126b_time_sync_t *time_sync = NULL;
     char dhcp_script[PATH_MAX];
     if (!demo) {
@@ -244,6 +263,12 @@ int main(int argc, char **argv) {
         failed = 1;
         goto cleanup;
     }
+    if (rv1126b_input_start(&platform, rotation) < 0) {
+        fprintf(stderr, "Cannot start product input service\n");
+        failed = 1;
+        goto cleanup;
+    }
+    input_started = true;
     if (snprintf(dhcp_script, sizeof(dhcp_script), "%s/wifi/udhcpc.script",
                  getenv("MYBOT_ASSETS_DIR")) >= (int)sizeof(dhcp_script)) {
         failed = 1;
@@ -278,6 +303,23 @@ int main(int argc, char **argv) {
         rv1126b_network_gate_t network_gate = {0};
         fprintf(stdout, "Waiting for usable IPv4 routing and system time\n");
         while (!s_exit && monotonic_ms() < deadline) {
+            if (rv1126b_key_exit_requested() || accept_poweroff())
+                goto cleanup;
+            if (rv1126b_key_wifi_requested()) {
+                if (options.wifi_provisioning) {
+                    rv1126b_wifi_status_t current = {0};
+                    rv1126b_wifi_status(&current);
+                    if (!current.ap_active) {
+                        require_provisioning = true;
+                        prompt_announced = false;
+                        rv1126b_prompt_stop();
+                        (void)rv1126b_time_sync_poll(time_sync, false);
+                        rv1126b_wifi_request_provisioning();
+                    }
+                } else {
+                    fprintf(stderr, "Wi-Fi provisioning is disabled by configuration\n");
+                }
+            }
             rv1126b_wifi_status_t status = {0};
             rv1126b_wifi_status(&status);
             if (status.ap_active && !prompt_announced) {
@@ -339,8 +381,11 @@ int main(int argc, char **argv) {
                  * signals and an explicitly bounded verification run. */
                 for (unsigned int hold = 0; hold < 20 && platform.enable_ui && !s_exit &&
                                             monotonic_ms() < deadline && !rv1126b_ui_failed();
-                     ++hold)
+                     ++hold) {
+                    if (rv1126b_key_exit_requested() || accept_poweroff())
+                        goto cleanup;
                     nanosleep(&interval, NULL);
+                }
                 failed = 1;
                 goto cleanup;
             }
@@ -363,9 +408,14 @@ int main(int argc, char **argv) {
         bool recover_network = false;
         mybot_state_t previous = MYBOT_STATE_STOPPED;
         while (!s_exit && monotonic_ms() < deadline && mybot_is_running()) {
-            if (options.wifi_provisioning && rv1126b_key_wifi_requested()) {
-                reprovision = true;
-                break;
+            if (rv1126b_key_exit_requested() || accept_poweroff())
+                goto cleanup;
+            if (rv1126b_key_wifi_requested()) {
+                if (options.wifi_provisioning) {
+                    reprovision = true;
+                    break;
+                }
+                fprintf(stderr, "Wi-Fi provisioning is disabled by configuration\n");
             }
             rv1126b_wifi_status_t network_status = {0};
             rv1126b_wifi_status(&network_status);
@@ -418,6 +468,8 @@ cleanup:
         rv1126b_wifi_stop();
     if (volume_started)
         rv1126b_volume_shutdown();
+    if (input_started && rv1126b_input_stop() < 0)
+        failed = 1;
     if (ui_started && rv1126b_ui_stop() < 0)
         failed = 1;
     if (!demo)

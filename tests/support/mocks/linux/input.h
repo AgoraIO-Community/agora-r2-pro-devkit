@@ -18,10 +18,21 @@
 #define KEY_MENU 139
 #define KEY_MAX 0x2ff
 #define BTN_TOUCH 330
+#define ABS_X 0
+#define ABS_Y 1
 #define ABS_MT_SLOT 47
+#define ABS_MT_POSITION_X 53
+#define ABS_MT_POSITION_Y 54
 #define ABS_MT_TRACKING_ID 57
 #define EVIOCGVERSION 0x80044501UL
 #define EVIOCGNAME(length) (0x80004506UL | ((unsigned long)(length) << 16))
+#define EVIOCGABS(axis) (0x80184540UL + (axis))
+#define EVIOCGMTSLOTS(length) (0x8000450aUL | ((unsigned long)(length) << 16))
+#define EVIOCGKEY(length) (0x80004518UL | ((unsigned long)(length) << 16))
+#define EVIOCGBIT(event, length) ((0x80004520UL + (event)) | ((unsigned long)(length) << 16))
+struct input_absinfo {
+    int32_t value, minimum, maximum, fuzz, flat, resolution;
+};
 struct input_event {
     struct timeval time;
     uint16_t type, code;
