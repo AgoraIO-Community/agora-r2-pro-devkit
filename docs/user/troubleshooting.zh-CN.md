@@ -17,7 +17,11 @@
 | 英文重新出现明显 2×2 颗粒 | 确认运行 0.1.1 或之后的正确包；原生画布与字体不应被输出层再次放大 |
 | ALSA busy / configure 失败 | 确认原程序声卡已关闭，检查现有 `botstation_capture` / `botstation_playback` 和 codec/mixer 配置 |
 | private runtime directory | 检查 `/userdata` 已挂载，KV 目录为绝对路径、属于运行用户且权限 0700；不要删除绑定数据来试错 |
-| 长时间等待网络/时间 | 检查可用 IPv4、默认路由、DNS 和系统时间；该应用只监测既有网络，不负责配网 |
+| 长时间等待网络/时间 | 检查可用 IPv4、默认路由、DNS 和系统时间；启用配网时尝试缓存后进入 AP，`--no-wifi-provisioning` 则只监测已有网络 |
+| 未出现配网热点 | 检查无线接口、nl80211 AP 能力、必需系统工具和端口占用；`--wifi-interface wlan0 --wifi-provision` 可显式选择接口，详见[配网排查](wifi-provisioning.zh-CN.md#排查) |
+| 热点可见但手机不弹页面 | 保持连接 MyBot 热点，手动访问 `http://192.168.4.1/`；接受手机“无互联网仍保持连接”的提示 |
+| Wi-Fi 密码错误或连接失败 | 保持或重新连接热点，在页面修改后重试；连接失败不覆盖已保存网络，单接口模式在尝试期间会暂时断开热点 |
+| existing Wi-Fi manager owns the station | 驱动未能创建 AP+STA 接口，现有管理服务又拥有 STA；需要提供并发支持或由操作者显式移交该接口，应用不会停止系统网络管理器 |
 | TLS 或服务错误 | 检查 CA bundle、系统日期、HTTPS 地址和服务端响应；保持证书及 hostname 校验 |
 | ready 后不自动开聊 | 短触、Menu 或前台输入 `s` 后 Enter；这是默认显式开始行为 |
 | 退出略慢 | 正在进行的 HTTPS 可能等待超时预算；记录时长及日志以判断是否超出预期 |

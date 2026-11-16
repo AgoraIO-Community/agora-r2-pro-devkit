@@ -6,7 +6,7 @@
 
 需要 Python **3.10+**、CMake **3.25+**、C/C++ 编译器、构建工具、OpenSSL 开发文件、libdrm 开发头文件和 `pkg-config`。普通构建使用已提交的字库，不要求 Pillow/FreeType。确保 `python3 --version` 满足要求；系统默认版本较旧时，使用合适的解释器执行 Python 命令，并给脚本入口设置 `PYTHON=/path/to/python3.10`。
 
-Debian/Ubuntu 可安装 `build-essential pkg-config libssl-dev libdrm-dev cmake python3`，同时检查发行版提供的实际版本。主机测试不加载目标 RTSA 库，也不需要 AArch64 工具链或设备。
+Debian/Ubuntu 可安装 `build-essential pkg-config libssl-dev libdrm-dev cmake python3`，同时检查发行版提供的实际版本。主机测试不加载目标 RTSA 库，也不需要 AArch64 工具链或设备。AP 控制器使用模拟后端验证状态与取消；门户协议测试只绑定本机 loopback 临时端口，运行环境需要允许本地 TCP/UDP socket。
 
 ```sh
 python3 scripts/doctor.py --host
@@ -74,7 +74,9 @@ cmake --build --preset rv1126b-voice-zh
 
 英文使用独立目录并设置 `-DRV1126B_LANGUAGE=en-US`，打包设置 `--language en-US`。`--profile voice` 或 `--profile video` 只选择一个变体；`all` 必须两个均存在且配置一致，不能静默省略缺少的程序。可用 `--voice-build` / `--video-build` 指向其他构建目录。
 
-中文全配置候选包为 `dist/mybot-rv1126b-0.2.2-aarch64.tar.gz`；英文名附加 `-en-US`，单变体附加 `-voice` 或 `-video`。已有同名输出会被拒绝，先保留或移动旧候选结果。包内校验和、ABI 和 manifest 校验通过后，按[上手指南](getting-started.zh-CN.md)手动上板。
+中文全配置候选包为 `dist/mybot-rv1126b-0.3.0-aarch64.tar.gz`；英文名附加 `-en-US`，单变体附加 `-voice` 或 `-video`。已有同名输出会被拒绝，先保留或移动旧候选结果。包内校验和、ABI 和 manifest 校验通过后，按[上手指南](getting-started.zh-CN.md)手动上板。
+
+AP 配网代码随语音/视频变体一同构建，不新增 SDK/sysroot 获取方式。运行包包含 `assets/wifi/udhcpc.script`；`iw`、`hostapd`、`dnsmasq`、`wpa_supplicant`、`udhcpc`、`ip` 及驱动能力仍需由目标系统提供，不会因交叉构建或 ABI 检查通过而自动具备。部署前按[配网指南](wifi-provisioning.zh-CN.md)检查。
 
 ## UI 预览
 

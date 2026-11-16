@@ -1,6 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#endif
+#define _XOPEN_SOURCE 700
 #define _POSIX_C_SOURCE 200809L
 #include "platform_internal.h"
+#include "mybot_platform/volume.h"
 #include "check.h"
 
 #include <alsa/asoundlib.h>
@@ -11,6 +16,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include <mybot/mybot_build_config.h>
 
 static int allocations, mutexes, handles, init_step, fail_step;
@@ -22,6 +28,8 @@ static snd_pcm_sframes_t read_script[8], write_script[8];
 static size_t read_count, read_index, write_count, write_index;
 static int16_t written_samples[640];
 static size_t written_count;
+static int drain_error;
+static unsigned drain_calls, drain_again;
 static void *stop_during_wait;
 static const rv1126b_platform_config_t config = {.capture_device = "mock-capture",
                                                  .playback_device = "mock-playback"};
@@ -31,7 +39,7 @@ const rv1126b_platform_config_t *rv1126b_platform_config(void) {
 }
 
 static void *audio_calloc(size_t count, size_t size) {
-    if (fail_alloc)
+    if (fail_alloc > 0 && --fail_alloc == 0)
         return NULL;
     void *result = calloc(count, size);
     if (result)
@@ -213,6 +221,15 @@ int snd_pcm_drop(snd_pcm_t *pcm) {
     CHECK(pcm == &hardware && pcm->open);
     return drop_error;
 }
+int snd_pcm_drain(snd_pcm_t *pcm) {
+    CHECK(pcm == &hardware && pcm->open);
+    ++drain_calls;
+    if (drain_again) {
+        --drain_again;
+        return -EAGAIN;
+    }
+    return drain_error;
+}
 snd_pcm_sframes_t snd_pcm_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_uframes_t frames) {
     CHECK(pcm == &hardware && pcm->open);
     ++read_calls;
@@ -273,6 +290,15 @@ static void test_partial_initialization(void) {
     CHECK(ops->init(&ctx, 16000, 1, 16) == -1);
     check_released();
     fail_alloc = 0;
+    /* Playback owns a separate gain buffer. Failure of its second allocation
+     * must release the already acquired context and mutex without opening PCM. */
+    for (int allocation = 1; allocation <= 2; ++allocation) {
+        fail_alloc = allocation;
+        ctx = NULL;
+        CHECK(rv1126b_playback_ops()->init(&ctx, 16000, 1, 16) == -1 && ctx == NULL);
+        CHECK(fail_alloc == 0);
+        check_released();
+    }
     fail_mutex = 1;
     CHECK(ops->init(&ctx, 16000, 1, 16) == -1);
     check_released();
@@ -329,25 +355,128 @@ static void test_capture_deadline_and_stop(void) {
 
 static void test_playback_recovery_and_deadline(void) {
     const mybot_audio_playback_ops_t *ops = rv1126b_playback_ops();
+    const mybot_audio_volume_ops_t *volume = rv1126b_volume_ops();
+    char storage[] = "/tmp/mybot-audio-volume-test-XXXXXX";
+    CHECK(mkdtemp(storage));
+    CHECK(rv1126b_volume_prepare(storage) == 0);
     void *ctx = NULL;
-    int16_t samples[320];
-    for (int i = 0; i < 320; ++i)
-        samples[i] = (int16_t)(i - 160);
-    CHECK(ops->init(&ctx, 16000, 1, 16) == 0 && ops->start(ctx) == 0);
+    void *volume_ctx = NULL;
+    int16_t samples[320], original[320], half[320];
+    const int16_t source[] = {-32768, -32767, -101, -100, -1, 0, 1, 100, 101, 32767};
+    const int16_t scaled[] = {-16384, -16384, -51, -50, -1, 0, 1, 50, 51, 16384};
+    for (size_t i = 0; i < 320; ++i) {
+        samples[i] = source[i % 10];
+        half[i] = scaled[i % 10];
+    }
+    memcpy(original, samples, sizeof(samples));
+    /* Match SDK startup: playback opens before the volume adapter attaches. */
+    CHECK(ops->init(&ctx, 16000, 1, 16) == 0);
+    CHECK(volume->init(&volume_ctx) == 0);
+    CHECK(volume->set_volume(volume_ctx, 50) == 0);
+    CHECK(ops->start(ctx) == 0);
     unsigned prepares = prepare_calls;
     write_count = 3;
+    write_index = written_count = 0;
     write_script[0] = 100;
     write_script[1] = -EPIPE;
     write_script[2] = 220;
     CHECK(ops->write(ctx, samples, 320) == 320);
     CHECK(prepare_calls == prepares + 1 && written_count == 320);
-    CHECK(memcmp(written_samples, samples, sizeof(samples)) == 0);
+    CHECK(memcmp(written_samples, half, sizeof(half)) == 0);
+    CHECK(memcmp(samples, original, sizeof(samples)) == 0);
     uint64_t started = fake_ms;
     CHECK(ops->write(ctx, samples, 320) == 0);
     CHECK(fake_ms - started >= 20 && fake_ms - started <= 25);
+
+    /* A deadline may return an accepted prefix. Retrying the original suffix
+     * at a new gain must neither resend that prefix nor attenuate it twice. */
+    write_count = 1;
+    write_index = written_count = 0;
+    write_script[0] = 100;
+    started = fake_ms;
+    CHECK(ops->write(ctx, samples, 320) == 100);
+    CHECK(fake_ms - started >= 20 && fake_ms - started <= 25);
+    CHECK(written_count == 100);
+    CHECK(memcmp(written_samples, half, 100 * sizeof(*half)) == 0);
+    CHECK(memcmp(samples, original, sizeof(samples)) == 0);
+    CHECK(volume->set_volume(volume_ctx, 100) == 0);
+    write_count = 1;
+    write_index = 0;
+    write_script[0] = 220;
+    CHECK(ops->write(ctx, samples + 100, 220) == 220);
+    CHECK(written_count == 320);
+    CHECK(memcmp(written_samples + 100, original + 100, 220 * sizeof(*original)) == 0);
+    CHECK(memcmp(samples, original, sizeof(samples)) == 0);
+
+    /* Muting changes the actual PCM boundary while retaining borrowed input. */
+    CHECK(volume->set_volume(volume_ctx, 0) == 0);
+    write_count = 1;
+    write_index = written_count = 0;
+    write_script[0] = 320;
+    CHECK(ops->write(ctx, samples, 320) == 320);
+    CHECK(written_count == 320);
+    for (size_t i = 0; i < written_count; ++i)
+        CHECK(written_samples[i] == 0);
+    CHECK(memcmp(samples, original, sizeof(samples)) == 0);
+
+    CHECK(volume->set_volume(volume_ctx, 50) == 0);
     CHECK(ops->stop(ctx) == 0);
     unsigned calls = write_calls;
     CHECK(ops->write(ctx, samples, 320) == 0 && write_calls == calls);
+    ops->destroy(ctx);
+    volume->destroy(volume_ctx);
+    check_released();
+
+    /* A Wi-Fi transition recreates SDK/PCM owners, retaining product volume. */
+    ctx = volume_ctx = NULL;
+    CHECK(ops->init(&ctx, 16000, 1, 16) == 0);
+    CHECK(volume->init(&volume_ctx) == 0);
+    int restored = -1;
+    CHECK(volume->get_volume(volume_ctx, &restored) == 0 && restored == 50);
+    CHECK(ops->start(ctx) == 0);
+    write_count = 1;
+    write_index = written_count = 0;
+    write_script[0] = 320;
+    CHECK(ops->write(ctx, samples, 320) == 320);
+    CHECK(written_count == 320 && !memcmp(written_samples, half, sizeof(half)));
+    CHECK(!memcmp(samples, original, sizeof(samples)));
+    CHECK(ops->stop(ctx) == 0);
+    ops->destroy(ctx);
+    volume->destroy(volume_ctx);
+    check_released();
+    rv1126b_volume_shutdown();
+    char record[512];
+    CHECK(snprintf(record, sizeof(record), "%s/volume.settings", storage) > 0);
+    CHECK(unlink(record) == 0);
+    CHECK(rmdir(storage) == 0);
+}
+
+static void test_playback_drain(void) {
+    const mybot_audio_playback_ops_t *ops = rv1126b_playback_ops();
+    void *ctx = NULL;
+    CHECK(ops->init(&ctx, 16000, 1, 16) == 0 && ops->start(ctx) == 0);
+    CHECK(rv1126b_playback_drain(NULL, 100) < 0);
+    CHECK(rv1126b_playback_drain(ctx, 0) < 0);
+    CHECK(rv1126b_playback_drain(ctx, 1001) < 0);
+    drain_again = 2;
+    unsigned calls = drain_calls;
+    CHECK(rv1126b_playback_drain(ctx, 100) == 0 && drain_calls == calls + 3);
+    int16_t samples[320] = {0};
+    calls = write_calls;
+    CHECK(ops->write(ctx, samples, 320) == 0 && calls == write_calls);
+    CHECK(ops->start(ctx) == 0);
+    drain_again = 1000;
+    uint64_t started = fake_ms;
+    CHECK(rv1126b_playback_drain(ctx, 100) < 0);
+    CHECK(fake_ms - started >= 100 && fake_ms - started <= 105);
+    drain_again = 0;
+    drain_error = -EIO;
+    CHECK(rv1126b_playback_drain(ctx, 100) < 0);
+    drain_error = 0;
+    stop_during_wait = ctx;
+    drain_again = 1;
+    CHECK(rv1126b_playback_drain(ctx, 100) < 0 && stop_during_wait == NULL);
+    CHECK(ops->stop(ctx) == 0);
     ops->destroy(ctx);
     check_released();
 }
@@ -357,6 +486,7 @@ int main(void) {
     test_partial_initialization();
     test_capture_deadline_and_stop();
     test_playback_recovery_and_deadline();
-    puts("ALSA partial initialization, bounded I/O, recovery and stop ownership: PASS");
+    test_playback_drain();
+    puts("ALSA ownership, bounded I/O, recovery and persistent output gain: PASS");
     return 0;
 }

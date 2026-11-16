@@ -3,6 +3,7 @@
 #include "platform_internal.h"
 #include "linux_platform_adapters.h"
 #include "mybot_platform/display.h"
+#include "mybot_platform/volume.h"
 
 #include <linux/input.h>
 #include <net/if.h>
@@ -31,6 +32,7 @@ int rv1126b_platform_register(const rv1126b_platform_config_t *config) {
         .key = rv1126b_key_ops(),
         .audio_capture = rv1126b_capture_ops(),
         .audio_playback = rv1126b_playback_ops(),
+        .audio_volume = rv1126b_volume_ops(),
         .https = linux_https_platform_openssl_ops(),
         .lcd = config->enable_ui ? rv1126b_ui_lcd_ops() : linux_lcd_platform_console_ops(),
         .announce = linux_announce_platform_file_ops(),

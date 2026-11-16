@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
     }
     if (rv1126b_renderer_create(NULL, NULL, 1) < 0)
         return 1;
-    mybot_display_runtime_status_t status = {"ready", false};
+    mybot_display_runtime_status_t status = {.state = "ready", .in_conversation = false};
     uint32_t now = 100;
     int failed = 0;
     for (int i = 0; i < MYBOT_LCD_SCREEN_COUNT && !failed; ++i) {

@@ -1,0 +1,42 @@
+#!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+# Sourced by dhcpcd: isolate all variables and exits from the parent hook runner.
+(
+    set -eu
+    umask 077
+    station=${interface:-}
+    case "$station" in ''|*[!A-Za-z0-9_.-]*|mbap*) exit 0 ;; esac
+    lease_root=${MYBOT_DHCPCD_LEASE_DIR:-/run/mybot-network/leases}
+    case "$lease_root" in /*) ;; *) exit 1 ;; esac
+    [ ! -L "$lease_root" ] || exit 1
+    mkdir -p "$lease_root"
+    chmod 700 "$lease_root"
+    case "${reason:-}" in
+        EXPIRE|FAIL|STOP|DEPARTED|NOCARRIER|RELEASE)
+            rm -f "$lease_root/$station.lease"
+            exit 0 ;;
+        BOUND|RENEW|REBIND|REBOOT|INFORM|STATIC) ;;
+        *) exit 0 ;;
+    esac
+    lease_ip=${new_ip_address:-}
+    printf '%s\n' "$lease_ip" | awk -F. '
+        NF != 4 { exit 1 }
+        { for (i = 1; i <= 4; ++i) if ($i !~ /^[0-9]+$/ || $i > 255) exit 1 }
+    ' || exit 0
+    association=$(wpa_cli -i "$station" status 2>/dev/null) || exit 0
+    bssid=$(printf '%s\n' "$association" | sed -n 's/^bssid=//p')
+    state=$(printf '%s\n' "$association" | sed -n 's/^wpa_state=//p')
+    [ "$state" = COMPLETED ] || exit 0
+    printf '%s\n' "$bssid" | awk -F: '
+        NF != 6 { exit 1 }
+        { for (i = 1; i <= 6; ++i) if ($i !~ /^[0-9a-fA-F][0-9a-fA-F]$/) exit 1 }
+    ' || exit 0
+    generation=$(cat /proc/sys/kernel/random/uuid)
+    [ -n "$generation" ] || exit 1
+    temporary=$(mktemp "$lease_root/.lease-XXXXXX")
+    trap 'rm -f "$temporary"' EXIT HUP INT TERM
+    printf 'version=1\ngeneration=%s\nbssid=%s\nipv4=%s\n' \
+        "$generation" "$bssid" "$lease_ip" > "$temporary"
+    chmod 600 "$temporary"
+    mv -f "$temporary" "$lease_root/$station.lease"
+)

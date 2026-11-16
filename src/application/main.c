@@ -3,10 +3,16 @@
 #include "device_identity.h"
 #include "config.h"
 #include "runtime_guard.h"
+#include "service_status.h"
+#include "network_gate.h"
 #include "board_config.h"
 #include "build_identity.h"
 #include "mybot_platform/platform.h"
 #include "mybot_platform/display.h"
+#include "mybot_platform/wifi.h"
+#include "mybot_platform/volume.h"
+#include "mybot_platform/prompt.h"
+#include "mybot_platform/time_sync.h"
 #include "mybot_ui/expression.h"
 
 #include <errno.h>
@@ -20,6 +26,31 @@
 #include <unistd.h>
 
 static volatile sig_atomic_t s_exit;
+
+static void publish_status(const char *state) {
+    static bool warned;
+    if (rv1126b_service_status(state) < 0 && !warned) {
+        fprintf(stderr, "Cannot publish private application status\n");
+        warned = true;
+    }
+}
+
+static const char *sdk_status(mybot_state_t state) {
+    switch (state) {
+    case MYBOT_STATE_READY:
+        return "ready";
+    case MYBOT_STATE_PAIRING:
+        return "pairing";
+    case MYBOT_STATE_IN_CONVERSATION:
+        return "conversation";
+    case MYBOT_STATE_WIFI_DISCONNECTED:
+        return "offline";
+    case MYBOT_STATE_FAILED:
+        return "failed";
+    default:
+        return "starting_services";
+    }
+}
 
 static void signal_handler(int signal_number) {
     (void)signal_number;
@@ -38,6 +69,18 @@ static int copy_field(char *output, size_t size, const char *input) {
         return -1;
     memcpy(output, input, strlen(input) + 1);
     return 0;
+}
+
+static void stop_sdk(void) {
+    mybot_stop();
+    if (mybot_get_state() != MYBOT_STATE_STOPPED) {
+        fprintf(stderr, "SDK shutdown incomplete; retrying cleanup\n");
+        mybot_stop();
+        if (mybot_get_state() != MYBOT_STATE_STOPPED) {
+            fprintf(stderr, "SDK workers remain active; terminating process with locks held\n");
+            _Exit(EXIT_FAILURE);
+        }
+    }
 }
 
 int main(int argc, char **argv) {
@@ -117,7 +160,9 @@ int main(int argc, char **argv) {
         return 1;
     }
     int failed = 0;
-    bool sdk_started = false, ui_started = false;
+    bool sdk_started = false, ui_started = false, wifi_started = false, volume_started = false;
+    rv1126b_time_sync_t *time_sync = NULL;
+    char dhcp_script[PATH_MAX];
     if (!demo) {
         char executable[PATH_MAX], assets[PATH_MAX];
         ssize_t length = readlink("/proc/self/exe", executable, sizeof(executable) - 1);
@@ -144,6 +189,23 @@ int main(int argc, char **argv) {
         fprintf(stdout, "mybot-rv1126b %s: id=%s, locale=%s, ptime=%d ms, video=%d\n",
                 RV1126B_VERSION, device_id, RV1126B_LOCALE, MYBOT_AUDIO_PTIME_MS,
                 MYBOT_ENABLE_VIDEO);
+        if (rv1126b_volume_prepare(getenv("MYBOT_KV_STORE_DIR")) < 0) {
+            fprintf(stderr, "Cannot restore private playback volume\n");
+            failed = 1;
+            goto cleanup;
+        }
+        volume_started = true;
+        const rv1126b_time_sync_config_t time_config = {
+            .timeout_seconds = options.time_sync_timeout,
+            .helper_path = options.time_sync_helper,
+        };
+        time_sync = rv1126b_time_sync_create(&time_config);
+        if (!time_sync) {
+            fprintf(stderr, "Cannot initialize system time readiness guard\n");
+            failed = 1;
+            goto cleanup;
+        }
+        publish_status("starting");
     }
     if (platform.enable_ui) {
         if (rv1126b_ui_start(drm, rotation) < 0) {
@@ -182,59 +244,184 @@ int main(int argc, char **argv) {
         failed = 1;
         goto cleanup;
     }
-    const mybot_lcd_content_t waiting = {MYBOT_LCD_SCREEN_WIFI_PROVISIONING, {0}, 0};
-    rv1126b_ui_set_state(MYBOT_STATE_WIFI_PROVISIONING);
-    rv1126b_ui_show(&waiting);
-    fprintf(stdout,
-            "Waiting for usable IPv4 routing and system time; network setup is product-owned\n");
-    while (!s_exit && monotonic_ms() < deadline) {
-        int ready = rv1126b_network_ready(platform.network_interface);
-        if (ready < 0 || (platform.enable_ui && rv1126b_ui_failed())) {
+    if (snprintf(dhcp_script, sizeof(dhcp_script), "%s/wifi/udhcpc.script",
+                 getenv("MYBOT_ASSETS_DIR")) >= (int)sizeof(dhcp_script)) {
+        failed = 1;
+        goto cleanup;
+    }
+    const char *wifi_runtime = getenv("MYBOT_WIFI_RUNTIME_DIR");
+    const rv1126b_wifi_config_t wifi = {
+        .enabled = options.wifi_provisioning,
+        .force_ap = options.force_wifi_provisioning,
+        .interface_name = options.wifi_interface,
+        .storage_directory = getenv("MYBOT_KV_STORE_DIR"),
+        .runtime_directory = wifi_runtime ? wifi_runtime : "/run/mybot-rv1126b-wifi",
+        .dhcp_script = dhcp_script,
+    };
+    if (rv1126b_wifi_start(&wifi) < 0) {
+        fprintf(stderr, "Cannot start Wi-Fi control service\n");
+        failed = 1;
+        goto cleanup;
+    }
+    wifi_started = true;
+    bool require_provisioning = options.force_wifi_provisioning;
+    for (;;) {
+        const mybot_lcd_content_t waiting = {MYBOT_LCD_SCREEN_WIFI_PROVISIONING, {0}, 0};
+        rv1126b_ui_set_state(MYBOT_STATE_WIFI_PROVISIONING);
+        rv1126b_ui_show(&waiting);
+        rv1126b_ui_time_status(0);
+        int last_wifi_state = -1;
+        /* One announcement per setup session, including single-radio retries
+         * that temporarily stop and then restore the same AP. */
+        bool prompt_announced = false;
+        int last_time_state = -1;
+        rv1126b_network_gate_t network_gate = {0};
+        fprintf(stdout, "Waiting for usable IPv4 routing and system time\n");
+        while (!s_exit && monotonic_ms() < deadline) {
+            rv1126b_wifi_status_t status = {0};
+            rv1126b_wifi_status(&status);
+            if (status.ap_active && !prompt_announced) {
+                prompt_announced = true;
+                if (rv1126b_prompt_start(getenv("MYBOT_ASSETS_DIR"), getenv("MYBOT_LOCALE")) < 0)
+                    fprintf(stderr, "Cannot start Wi-Fi setup voice guidance\n");
+            } else if (!status.ap_active) {
+                rv1126b_prompt_stop();
+            }
+            if ((int)status.state != last_wifi_state) {
+                fprintf(stdout, "Wi-Fi state=%d%s%s\n", status.state, status.error[0] ? ": " : "",
+                        status.error);
+                if (status.ap_active)
+                    fprintf(stdout, "Connect to hotspot %s and open http://192.168.4.1\n",
+                            status.ssid);
+                last_wifi_state = (int)status.state;
+            }
+            rv1126b_ui_provisioning(status.ap_active ? status.ssid : NULL);
+            int ready = rv1126b_network_ready(platform.network_interface);
+            if (ready < 0 || (platform.enable_ui && rv1126b_ui_failed()) ||
+                (require_provisioning && status.state == RV1126B_WIFI_ERROR && !status.ap_active)) {
+                failed = 1;
+                goto cleanup;
+            }
+            rv1126b_network_gate_action_t network_action =
+                rv1126b_network_gate_poll(&network_gate, options.wifi_provisioning,
+                                          require_provisioning, sdk_started, ready, &status);
+            if (network_action == RV1126B_NETWORK_GATE_RECOVER) {
+                /* No SDK is running in this loop. A route lost while closing
+                 * setup still needs the same recovery acknowledgement as a
+                 * loss during normal operation. */
+                fprintf(stdout, "Retrying Wi-Fi before SDK startup\n");
+                rv1126b_wifi_request_recovery();
+            }
+            bool network_ready = network_action == RV1126B_NETWORK_GATE_READY;
+            rv1126b_time_sync_state_t time_state = rv1126b_time_sync_poll(time_sync, network_ready);
+            if ((int)time_state != last_time_state) {
+                fprintf(stdout, "Time readiness state=%d%s%s\n", time_state,
+                        rv1126b_time_sync_error(time_sync)[0] ? ": " : "",
+                        rv1126b_time_sync_error(time_sync));
+                last_time_state = (int)time_state;
+            }
+            rv1126b_ui_time_status(time_state == RV1126B_TIME_WAIT_CLOCK ? 1 : 0);
+            publish_status(status.ap_active                        ? "ap"
+                           : time_state == RV1126B_TIME_WAIT_CLOCK ? "waiting_clock"
+                                                                   : "waiting_network");
+            if (time_state == RV1126B_TIME_FAILED || time_state == RV1126B_TIME_TIMEOUT) {
+                fprintf(stderr,
+                        "Cannot start services: %s\n"
+                        "Check the system time service or configure --time-sync-helper; "
+                        "then restart.\n",
+                        rv1126b_time_sync_error(time_sync));
+                rv1126b_prompt_stop();
+                rv1126b_time_sync_destroy(time_sync);
+                time_sync = NULL;
+                rv1126b_ui_time_status(2);
+                publish_status("failed");
+                /* Give the screen time to show the fault while honoring exit
+                 * signals and an explicitly bounded verification run. */
+                for (unsigned int hold = 0; hold < 20 && platform.enable_ui && !s_exit &&
+                                            monotonic_ms() < deadline && !rv1126b_ui_failed();
+                     ++hold)
+                    nanosleep(&interval, NULL);
+                failed = 1;
+                goto cleanup;
+            }
+            if (network_ready && time_state == RV1126B_TIME_READY)
+                break;
+            nanosleep(&interval, NULL);
+        }
+        if (s_exit || monotonic_ms() >= deadline)
+            goto cleanup;
+        rv1126b_ui_provisioning(NULL);
+        rv1126b_ui_time_status(0);
+        rv1126b_prompt_stop();
+        if (mybot_start(&config) < 0) {
+            fprintf(stderr, "MyBot startup failed\n");
             failed = 1;
             goto cleanup;
         }
-        if (ready && time(NULL) >= 1767225600)
-            break;
-        nanosleep(&interval, NULL);
-    }
-    if (s_exit || monotonic_ms() >= deadline)
-        goto cleanup;
-    if (mybot_start(&config) < 0) {
-        fprintf(stderr, "MyBot startup failed\n");
-        failed = 1;
-        goto cleanup;
-    }
-    sdk_started = true;
-    mybot_state_t previous = MYBOT_STATE_STOPPED;
-    while (!s_exit && monotonic_ms() < deadline && mybot_is_running()) {
-        mybot_state_t state = mybot_get_state();
-        if (state != previous) {
-            fprintf(stdout, "SDK state=%d\n", state);
-            rv1126b_ui_set_state(state);
-            previous = state;
-        }
-        if (state == MYBOT_STATE_FAILED || (platform.enable_ui && rv1126b_ui_failed())) {
-            failed = 1;
-            break;
-        }
-        nanosleep(&interval, NULL);
-    }
-    if (!s_exit && monotonic_ms() < deadline && !rv1126b_key_exit_requested())
-        failed = 1;
-cleanup:
-    if (sdk_started) {
-        mybot_stop();
-        if (mybot_get_state() != MYBOT_STATE_STOPPED) {
-            fprintf(stderr, "SDK shutdown incomplete; retrying cleanup\n");
-            mybot_stop();
-            if (mybot_get_state() != MYBOT_STATE_STOPPED) {
-                fprintf(stderr, "SDK workers remain active; terminating process with locks held\n");
-                _Exit(EXIT_FAILURE);
+        sdk_started = true;
+        bool reprovision = false;
+        bool recover_network = false;
+        mybot_state_t previous = MYBOT_STATE_STOPPED;
+        while (!s_exit && monotonic_ms() < deadline && mybot_is_running()) {
+            if (options.wifi_provisioning && rv1126b_key_wifi_requested()) {
+                reprovision = true;
+                break;
             }
+            rv1126b_wifi_status_t network_status = {0};
+            rv1126b_wifi_status(&network_status);
+            if (options.wifi_provisioning &&
+                network_status.state == RV1126B_WIFI_RECOVERY_REQUIRED) {
+                recover_network = true;
+                break;
+            }
+            mybot_state_t state = mybot_get_state();
+            if (state != previous) {
+                fprintf(stdout, "SDK state=%d\n", state);
+                rv1126b_ui_set_state(state);
+                publish_status(sdk_status(state));
+                previous = state;
+            }
+            if (state == MYBOT_STATE_FAILED || (platform.enable_ui && rv1126b_ui_failed())) {
+                failed = 1;
+                goto cleanup;
+            }
+            nanosleep(&interval, NULL);
         }
+        bool input_exit = rv1126b_key_exit_requested();
+        if (!reprovision && options.wifi_provisioning && !input_exit)
+            reprovision = rv1126b_key_wifi_requested() != 0;
+        if (!reprovision && options.wifi_provisioning && !input_exit &&
+            rv1126b_network_ready(platform.network_interface) == 0)
+            recover_network = true;
+        stop_sdk();
+        sdk_started = false;
+        if (s_exit || monotonic_ms() >= deadline || input_exit)
+            goto cleanup;
+        if (!reprovision && !recover_network) {
+            failed = 1;
+            goto cleanup;
+        }
+        require_provisioning = true;
+        if (reprovision)
+            rv1126b_wifi_request_provisioning();
+        else
+            rv1126b_wifi_request_recovery();
     }
+cleanup:
+    if (!demo)
+        publish_status("stopping");
+    rv1126b_prompt_stop();
+    if (sdk_started)
+        stop_sdk();
+    rv1126b_time_sync_destroy(time_sync);
+    if (wifi_started)
+        rv1126b_wifi_stop();
+    if (volume_started)
+        rv1126b_volume_shutdown();
     if (ui_started && rv1126b_ui_stop() < 0)
         failed = 1;
+    if (!demo)
+        publish_status(failed ? "failed" : "stopped");
     close(lock);
     if (legacy_lock >= 0)
         close(legacy_lock);

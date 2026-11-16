@@ -39,11 +39,11 @@ def main():
                 ast.parse(path.read_text(), filename=name)
             except SyntaxError as error:
                 errors.append(str(error))
-        if path.suffix == '.sh':
+        if path.suffix in ('.sh', '.script'):
             result = subprocess.run(['sh', '-n', str(path)], capture_output=True, text=True)
             if result.returncode:
                 errors.append(result.stderr.strip())
-        if path.suffix in ('.md', '.py', '.sh', '.cmake', '.json', '.yml', '.yaml') or path.name == 'CMakeLists.txt':
+        if path.suffix in ('.md', '.py', '.sh', '.script', '.cmake', '.json', '.yml', '.yaml') or path.name == 'CMakeLists.txt':
             for no, line in enumerate(path.read_text().splitlines(), 1):
                 if line.rstrip() != line:
                     errors.append(f'{name}:{no}: trailing whitespace')

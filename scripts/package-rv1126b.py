@@ -4,16 +4,27 @@
 
 import argparse
 import gzip
+import json
 import os
 from pathlib import Path
 import shutil
 import tarfile
 import tempfile
 
-from build_metadata import (digest, git, public_abi, public_manifest, source_snapshot,
-                            verify_manifest, write_json)
+from build_metadata import (digest, git, json_digest, public_abi, public_manifest, source_snapshot,
+                            verified_abi, verify_manifest, write_json)
 
 ROOT = Path(__file__).resolve().parents[1]
+
+EXECUTABLE_ASSETS = {
+    "assets/wifi/udhcpc.script": "packaging/wifi/udhcpc.script",
+    "assets/time/sync-busybox.sh": "packaging/time/sync-busybox.sh",
+    "assets/network/99-mybot-lease": "packaging/network/99-mybot-lease",
+    "assets/service/S99mybot": "packaging/service/S99mybot",
+    "assets/service/run-service.sh": "packaging/service/run-service.sh",
+    "assets/service/audio-prepare.sh": "packaging/service/audio-prepare.sh",
+}
+DATA_ASSETS = {'assets/service/mybot-rv1126b.conf': 'packaging/service/mybot-rv1126b.conf'}
 
 LICENSES = [
     ("LICENSE", "project-APACHE-2.0.txt"),
@@ -70,7 +81,9 @@ def deterministic_archive(directory, archive, epoch):
                         info.type, info.mode = tarfile.DIRTYPE, 0o755
                         tar.addfile(info)
                     else:
-                        info.mode = 0o755 if path.name == "run.sh" or path.parent.name == "bin" else 0o644
+                        executable = (path.name == "run.sh" or path.parent.name == "bin" or
+                                      path.relative_to(directory).as_posix() in EXECUTABLE_ASSETS)
+                        info.mode = 0o755 if executable else 0o644
                         info.size = path.stat().st_size
                         with path.open("rb") as data:
                             tar.addfile(info, data)
@@ -83,6 +96,10 @@ def package(root, args):
     for profile in profiles:
         build = Path(getattr(args, profile + "_build")).resolve()
         manifest, report = verify_manifest(root, build, args.language, profile == "video")
+        inputs = manifest['inputs']
+        verified_abi(build, inputs['config'], inputs['source']['sha256'], json_digest(inputs),
+                     binary_name='mybot-supervisor', report_name='abi-report-supervisor.json',
+                     require_rtsa=False)
         validated.append((profile, build, manifest, report))
     baseline = validated[0][2]["inputs"]
     for _, _, manifest, _ in validated[1:]:
@@ -126,6 +143,25 @@ def package(root, args):
             write_json(staging / ("build-manifest-" + profile + ".json"), public_build)
         shutil.copyfile(baseline["config"]["sdk"]["rtsa_library"], staging / "lib/libagora-rtc-sdk.so")
         shutil.copytree(root / "vendor/mybot/assets/locales", staging / "assets/locales")
+        for relative, source in EXECUTABLE_ASSETS.items():
+            target = staging / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(root / source, target)
+            target.chmod(0o755)
+        for relative, source in DATA_ASSETS.items():
+            (staging / relative).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(root / source, staging / relative)
+        supervisor_build = validated[0][1]
+        shutil.copyfile(supervisor_build / 'mybot-supervisor', staging / 'bin/mybot-supervisor')
+        (staging / 'bin/mybot-supervisor').chmod(0o755)
+        supervisor_report = public_abi(json.loads(
+            (supervisor_build / 'abi-report-supervisor.json').read_text()))
+        write_json(staging / 'abi-report-supervisor.json', supervisor_report)
+        supervisor_manifest = public_manifest(validated[0][2])
+        supervisor_manifest['role'] = 'supervisor'
+        supervisor_manifest['binary_sha256'] = digest(staging / 'bin/mybot-supervisor')
+        supervisor_manifest['abi_report_sha256'] = digest(staging / 'abi-report-supervisor.json')
+        write_json(staging / 'supervisor-manifest.json', supervisor_manifest)
         launcher = (root / "packaging/run.sh").read_text()
         if args.profile == "video":
             if "${RV1126B_VIDEO:-0}" not in launcher:
