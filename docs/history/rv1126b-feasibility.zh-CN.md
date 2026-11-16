@@ -20,7 +20,7 @@
 | --- | --- | --- |
 | [瑞芯微 RV1126B 官方介绍](https://www.rock-chips.com/a/cn/product/RV11xilie/2025/1208/2117.html) | 本次已获取网页 | SoC 能力；不能替代具体开发板、驱动与应用验证 |
 | [agent-studio-device-firmware](https://github.com/AgoraIO-Community/agent-studio-device-firmware/blob/4c36cbee4fe8908b37ccee12dcebc0b17bc436f1/CMakeLists.txt) | 1.3.0，`4c36cbee4fe8908b37ccee12dcebc0b17bc436f1`，工作区干净 | 目标 SDK 与公共接口 |
-| [AOSL 固定版本](https://github.com/AgoraIO-Community/agent-studio-device-firmware/blob/4c36cbee4fe8908b37ccee12dcebc0b17bc436f1/.gitmodules) | MyBot gitlink 为 `84e086084ebcd0ae2455a0ce5721950c5fe2e656` | SDK 固定的 AOSL Linux 源码依赖 |
+| [AOSL 固定版本](https://github.com/AgoraIO-Community/agent-studio-device-firmware/blob/4c36cbee4fe8908b37ccee12dcebc0b17bc436f1/.gitmodules) | agent-studio-device-firmware gitlink 为 `84e086084ebcd0ae2455a0ce5721950c5fe2e656` | SDK 固定的 AOSL Linux 源码依赖 |
 | [目标 RTSA 来源](../dependencies/RTSA_SOURCE.txt) | 1.10.1，AArch64 Linux GNU，20 ms | 本地已有目标库、头文件与构建元数据 |
 
 构建需要固定工具链、开发头文件、运行库快照及其清单，记录实际文件哈希与本地补丁；仅记录源码版本不足以复现目标产物。

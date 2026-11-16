@@ -56,15 +56,15 @@ This system-time guard candidate requires hardware clock, service-ownership and 
 ## 0.3.2 — Unreleased
 
 - Play the bundled localized Wi-Fi guidance once per setup session, only after the AP and portal are ready; connection retries do not repeat it.
-- Apply saved output volume to guidance, including mute, through the same playback adapter used by MyBot.
-- Keep the prompt worker mutually exclusive with SDK audio; cancel and release playback when leaving AP setup or exiting before restarting MyBot.
+- Apply saved output volume to guidance, including mute, through the same playback adapter used by agent-studio-device-firmware.
+- Keep the prompt worker mutually exclusive with SDK audio; cancel and release playback when leaving AP setup or exiting before restarting agent-studio-device-firmware.
 - Report guidance failures without disabling the AP portal, and document target checks for complete playback, retry behavior and audio cleanup.
 
 This AP voice-guidance candidate requires hardware audio and Wi-Fi regression testing.
 
 ## 0.3.1 — Unreleased
 
-- Connect MyBot device-volume controls to a platform playback-gain adapter, applying output gain once without changing capture gain or system mixer settings.
+- Connect agent-studio-device-firmware device-volume controls to a platform playback-gain adapter, applying output gain once without changing capture gain or system mixer settings.
 - Persist volume across application and SDK restarts, including manual AP Wi-Fi setup, in a private atomic settings file.
 - Preserve existing key, terminal and cloud controls with a 0–100 range and a default of 100, matching the previous output level.
 - Fall back to the default with a warning for invalid settings; report save failures and retain the last working gain.
@@ -76,7 +76,7 @@ This persistent-volume candidate requires hardware audio and Cloud AEC regressio
 - Add native AP Wi-Fi setup with an open `mybot-xxxx` hotspot, captive DNS and a bilingual mobile page at `192.168.4.1`.
 - Support nearby and hidden networks, asynchronous connection/retry, saved-network default/deletion, and up to 10 private profiles containing derived PSKs.
 - Preserve an existing usable network; try cached profiles before AP setup, and persist candidates only after routed IPv4 connectivity is available.
-- Add 3-second touch/Menu hold and terminal `w` for manual setup, stopping MyBot before AP entry and restarting it after completion.
+- Add 3-second touch/Menu hold and terminal `w` for manual setup, stopping agent-studio-device-firmware before AP entry and restarting it after completion.
 - Add explicit Wi-Fi interface/force/disable CLI options, AP+STA preference with safe station ownership checks, and a bundled DHCP hook. Target-side network tools and driver support remain required.
 - Add host controller/backend/protocol checks, input/UI coverage and a hardware verification guide.
 
