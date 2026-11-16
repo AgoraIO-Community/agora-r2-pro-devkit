@@ -42,6 +42,10 @@ class PackagingTests(unittest.TestCase):
         self.write(self.root / "packaging/run.sh", 'case "${RV1126B_VIDEO:-0}" in\n0) :;;\n1) :;;\nesac\n')
         self.write(self.root / "packaging/example.env", "# fixture\n")
         self.write(self.root / "packaging/README.zh-CN.md", "fixture guide\n")
+        for source in packager.EXECUTABLE_ASSETS.values():
+            self.write(self.root / source, "#!/bin/sh\nexit 0\n")
+        for source in packager.DATA_ASSETS.values():
+            self.write(self.root / source, "# configuration fixture\n")
         self.write(self.root / "vendor/mybot/assets/locales/zh-CN/0.pcm", "pcm")
         self.sdk = self.base / "sdk"
         self.rtsa = self.sdk / "lib/libagora-rtc-sdk.so"
@@ -95,6 +99,11 @@ class PackagingTests(unittest.TestCase):
                 "machine": 183, "soname": "libagora-rtc-sdk.so", "runpaths": []}
         metadata.write_json(build / "abi-report.json", {"errors": [], "binary": binary,
                             "dependency_count": 1, "checked": [binary, rtsa]})
+        self.write(build / 'mybot-supervisor', (build / 'mybot-rv1126b').read_text())
+        supervisor = dict(binary, path=str(build / 'mybot-supervisor'))
+        metadata.write_json(build / 'abi-report-supervisor.json', {
+            'errors': [], 'binary': supervisor, 'dependency_count': 1,
+            'checked': [supervisor, rtsa]})
         self.seal(build)
         return build
 
@@ -118,6 +127,13 @@ class PackagingTests(unittest.TestCase):
             if entry["path"] == str(binary):
                 entry["sha256"] = metadata.digest(binary)
         metadata.write_json(build / "abi-report.json", report)
+        supervisor = build / 'mybot-supervisor'
+        supervisor.write_bytes(executable)
+        helper_report = metadata.read_json(build / 'abi-report-supervisor.json')
+        for entry in [helper_report['binary'], *helper_report['checked']]:
+            if entry['path'] == str(supervisor):
+                entry['sha256'] = metadata.digest(supervisor)
+        metadata.write_json(build / 'abi-report-supervisor.json', helper_report)
 
     def test_archive_is_reproducible_and_public_metadata_has_no_host_paths(self):
         destination, archive, first_hash = packager.package(self.root, self.args)
@@ -132,6 +148,10 @@ class PackagingTests(unittest.TestCase):
                 self.assertEqual((item.uid, item.gid, item.uname, item.gname), (0, 0, "", ""))
                 self.assertFalse(item.issym() or item.islnk())
                 self.assertNotIn("..", Path(item.name).parts)
+                if any(item.name.endswith('/' + name) for name in packager.EXECUTABLE_ASSETS):
+                    self.assertEqual(item.mode, 0o755)
+        for name in packager.EXECUTABLE_ASSETS:
+            self.assertTrue((destination / name).stat().st_mode & 0o111)
         for line in (destination / "SHA256SUMS").read_text().splitlines():
             expected, filename = line.split("  ", 1)
             self.assertEqual(expected, metadata.digest(destination / filename))
@@ -141,6 +161,19 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "valid JSON"):
             packager.package(self.root, self.args)
         self.assertFalse(self.args.output_dir.exists())
+
+    def test_supervisor_tampering_is_rejected(self):
+        self.write(self.voice / 'mybot-supervisor', 'changed supervisor')
+        with self.assertRaisesRegex(ValueError, 'Stale ABI'):
+            packager.package(self.root, self.args)
+        self.assertFalse(self.args.output_dir.exists())
+
+    def test_supervisor_requires_passing_abi(self):
+        report = metadata.read_json(self.voice / 'abi-report-supervisor.json')
+        report['errors'] = ['missing libc']
+        metadata.write_json(self.voice / 'abi-report-supervisor.json', report)
+        with self.assertRaisesRegex(ValueError, 'ABI report'):
+            packager.package(self.root, self.args)
 
     def test_explicit_voice_profile_does_not_require_video(self):
         (self.video / "build-manifest.json").unlink()

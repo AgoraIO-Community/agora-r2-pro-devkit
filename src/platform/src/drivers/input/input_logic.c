@@ -61,13 +61,29 @@ int rv1126b_touch_event(rv1126b_touch_t *touch, unsigned type, unsigned code, in
             for (size_t i = 0; i < sizeof(touch->slots) / sizeof(touch->slots[0]); ++i)
                 down = down || touch->slots[i];
         }
-        if (down && !touch->down)
+        if (down && !touch->down) {
             touch->pressed_at = now;
+            touch->long_sent = false;
+            touch->long_pending = false;
+        }
         bool released = !down && touch->down;
         touch->down = down;
         uint32_t duration = now - touch->pressed_at;
+        if (released && duration >= 3000 && !touch->long_sent)
+            touch->long_pending = true;
         if (released && duration >= 50 && duration < 1000)
             return talk(state, event);
+    }
+    return 0;
+}
+
+int rv1126b_touch_provisioning_request(rv1126b_touch_t *touch, uint32_t now) {
+    if (!touch || touch->dropped || touch->long_sent)
+        return 0;
+    if (touch->long_pending || (touch->down && (uint32_t)(now - touch->pressed_at) >= 3000)) {
+        touch->long_pending = false;
+        touch->long_sent = true;
+        return 1;
     }
     return 0;
 }

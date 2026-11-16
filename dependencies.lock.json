@@ -1268,8 +1268,8 @@
     "ui/include/mybot_platform/display_status.h": {
       "path": "src/ui/include/mybot_ui/display_status.h",
       "original_sha256": "fe2c1d976fd852db69a43292506253b7909d05206ea4ea5ff183f8145cb56283",
-      "result_sha256": "fe2c1d976fd852db69a43292506253b7909d05206ea4ea5ff183f8145cb56283",
-      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable. Group maintained UI sources and assets under src/ui while preserving public include namespaces and generated font bytes.",
+      "result_sha256": "bcf27360bd3cd619d5c4f9e6300ddf82b133cc1706ab1a3a1aea25bd1da2491a",
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable. Group maintained UI sources and assets under src/ui while preserving public include namespaces and generated font bytes. Add product-owned AP provisioning status and show hotspot guidance only while its portal is active. Add a product clock-readiness waiting/failure presentation while preserving existing UI frames and generated fonts.",
       "previous_paths": [
         "components/mybot_ui/include/mybot_ui/display_status.h"
       ]
@@ -1349,8 +1349,8 @@
     "ui/view/pixel_glasses_view.cc": {
       "path": "src/ui/views/pixel_glasses/pixel_glasses_view.cc",
       "original_sha256": "c128562e29bbd41a7b57556c0adc986cf0800ed89743122460624328050cad57",
-      "result_sha256": "ca99e93f26fe66e4545e93edcb73a1ac2ff619e729df61cc4af40a2987ba6766",
-      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable. Group maintained UI sources and assets under src/ui while preserving public include namespaces and generated font bytes.",
+      "result_sha256": "608d39252d455a7513843831b7409cf11126c6ab472f257b2e947761b1c6491e",
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable. Group maintained UI sources and assets under src/ui while preserving public include namespaces and generated font bytes. Add product-owned AP provisioning status and show hotspot guidance only while its portal is active. Add a product clock-readiness waiting/failure presentation while preserving existing UI frames and generated fonts.",
       "previous_paths": [
         "components/mybot_ui/views/pixel_glasses/pixel_glasses_view.cc"
       ]
@@ -1358,8 +1358,8 @@
     "platforms/rv1126b/rv1126b_audio.c": {
       "path": "src/platform/src/drivers/audio/alsa_audio.c",
       "original_sha256": "88c94f27001bd114fe44ee141ca7a2d48074614c01b604160da456546ce0ed59",
-      "result_sha256": "db37b42c346e5b985a8005c66847bcca8e1bc8a4ae4544994fdcd97f9a83a703",
-      "reason": "RV1126B Linux driver/service adaptation; move into its component, use internal headers and centralized board defaults. Group maintained Linux board drivers and services under src/platform while preserving public include namespaces.",
+      "result_sha256": "cc5efe6c2de540bb62c2d820296010d50b3b26937d4ae2b0727658232f92af08",
+      "reason": "RV1126B Linux driver/service adaptation; move into its component, use internal headers and centralized board defaults. Group maintained Linux board drivers and services under src/platform while preserving public include namespaces. Apply product-owned persistent output gain to a separate PCM buffer at the ALSA boundary; preserve borrowed SDK PCM and partial-write accounting. Add bounded nonblocking drain for product-owned Wi-Fi prompt playback.",
       "previous_paths": [
         "components/mybot_platform/src/drivers/audio/alsa_audio.c"
       ]
@@ -8183,7 +8183,13 @@
     "vendor/rtsa/agora_sdk/.config": "0e68ca6780371527c82c27115dcf7176767f1ce14caced7c41e8554fecb37d13",
     "vendor/rtsa/agora_sdk/include/agora_rtc_api.h": "2ea0add2c710dac2eaf8bbe9a2155217c75b19c3b10d15f8406973b8eb8f299f",
     "vendor/rtsa/agora_sdk/include/global_config.cmake": "b4dffdce9d1f32d5b1efe952353894360a9d21d5271f5497ed5d7d8c8d938fa9",
-    "vendor/rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so": "0e878752644d94227c2aa5f3a9d2259c4098850297c867a2460cbbf8c66d3d98"
+    "vendor/rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so": "0e878752644d94227c2aa5f3a9d2259c4098850297c867a2460cbbf8c66d3d98",
+    "packaging/time/sync-busybox.sh": "8601480a0493b640cdb9f916fe41f9b43f47c40365216747a1e7995146405329",
+    "packaging/network/99-mybot-lease": "a8078a01d4f37dd93d8ae391fc2e338a2fcbcf830424cc466bd19e48b3420464",
+    "packaging/service/S99mybot": "807d7a61e952ceb2db23ecd29f47e8cf438146116e9536ea22368e09567b23be",
+    "packaging/service/run-service.sh": "72b82a1378fd3bf0579b36a8012ede3ea63d466e64e94f18e9d5a9da437880dc",
+    "packaging/service/audio-prepare.sh": "b17f5f91773709ffeba80582c61b458ab8ba13911451f0a69c10289dd4d2a6db",
+    "packaging/service/mybot-rv1126b.conf": "ed88a8826281a579f8d3df4da5bede0f08bfe4b6f0a40974148b6a0f2818f642"
   },
   "import_omissions": {
     "third_party/mybot/.clang-format": {
@@ -9512,7 +9518,7 @@
         "src/ui/views/pixel_glasses/pixel_expression_shapes.h": "53e5ba308227615afd759567d55075ac22e81bbac1947e9f74982d4c5e155004",
         "src/ui/views/pixel_glasses/pixel_expressions.c": "edaa31dafdee7a6e801b558b9a311bafea3a1d32eea75a0d81ee9a1933fa8b5e",
         "src/ui/views/pixel_glasses/pixel_glasses.h": "9cd9d810d89030ecabd3fac3cddf3087b8425295435114b915726f1a7303dab7",
-        "src/ui/views/pixel_glasses/pixel_glasses_view.cc": "ca99e93f26fe66e4545e93edcb73a1ac2ff619e729df61cc4af40a2987ba6766"
+        "src/ui/views/pixel_glasses/pixel_glasses_view.cc": "608d39252d455a7513843831b7409cf11126c6ab472f257b2e947761b1c6491e"
       }
     }
   ],

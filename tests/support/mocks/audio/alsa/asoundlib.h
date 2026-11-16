@@ -58,6 +58,7 @@ int snd_pcm_sw_params_get_start_threshold(const snd_pcm_sw_params_t *params,
                                           snd_pcm_uframes_t *frames);
 int snd_pcm_prepare(snd_pcm_t *pcm);
 int snd_pcm_drop(snd_pcm_t *pcm);
+int snd_pcm_drain(snd_pcm_t *pcm);
 snd_pcm_sframes_t snd_pcm_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_uframes_t frames);
 snd_pcm_sframes_t snd_pcm_writei(snd_pcm_t *pcm, const void *buffer, snd_pcm_uframes_t frames);
 int snd_pcm_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *frames);

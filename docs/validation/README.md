@@ -1,6 +1,6 @@
 # 当前验证状态
 
-本页是项目验证状态的唯一现行入口。更新日期：2026-11-13。当前源码版本：**0.2.2 源码目录重构候选版**。历史检查保持其原始版本归属，不自动移用于新二进制。
+本页是项目验证状态的唯一现行入口。更新日期：2026-11-16。当前源码版本：**0.4.4 Wi-Fi 纯 C 迁移候选版**。历史检查保持其原始版本归属，不自动移用于新二进制。
 
 目标基线：**RV1126B TEST2 RK805B V10**、AArch64 Buildroot 2024.02、Linux 6.1.172、glibc 2.41，物理屏幕 480×640。已记录的本地主机为 **Intel macOS**，交叉编译使用 Zig 0.15.2；Linux/Apple Silicon 的新 CI/开发入口需以实际运行证据为准。
 
@@ -26,6 +26,24 @@
 | 0.2.2，中文/英文/UBSan | 全新主机目录 | 三套各 13/13，每套含 130 项工具测试；双语 UI 基线及固定字体生成 `--check` 通过 | Intel macOS，未执行远端 CI |
 | 0.2.2，zh-CN/en-US × voice/video | 四套 AArch64 净构建 | 构建与 manifest 通过；ABI 语音 9 / 视频 11 项依赖，均 `errors=[]`；旧 AOSL/RTSA 路径被覆盖，每套唯一 AOSL target 的 49 项源码来自 `vendor/aosl/` | 未在设备执行 |
 | 0.2.2，迁移工具与交付 | 本地检查 | 目录迁移负向测试、锁刷新零差异、host/target doctor、质量检查通过；双语包各 53 项校验，中文两次归档字节一致 | 候选包仍需真机回归 |
+| 0.3.0，中文/英文/UBSan | 主机逻辑与协议 | 三套各 16/16，包含 130 项工具测试；新增 Wi-Fi 后端、真实 loopback HTTP/DNS 和控制器测试；原双语 34 帧 UI 基线保持一致，新增 AP 指引文字/字形/布局检查通过 | Intel macOS；未操作目标设备或验证射频 |
+| 0.3.0，zh-CN/en-US × voice/video | 四套 AArch64 构建 | 构建与 manifest 通过；语音 9 / 视频 11 项 ABI 依赖，均 `errors=[]`；固定 SDK、RTSA、字体未变 | 构建不证明目标系统具备 AP 工具和驱动能力 |
+| 0.3.0，AP 运行包 | 本地制品检查 | 双语包各 54 项校验通过；DHCP hook 内容一致且归档权限为 0755；两个独立目录的中文归档字节一致 | `iw`、hostapd、dnsmasq、supplicant、udhcpc 仍由目标系统提供 |
+| 0.3.1，中文/英文/UBSan | 主机逻辑 | 三套各 17/17，包含 130 项工具测试；新增音量恢复、私有存储边界、并发读取和实际 ALSA 增益/部分写入重试检查；双语 UI 基线通过 | Intel macOS；未测实际响度或声学效果 |
+| 0.3.1，zh-CN/en-US × voice/video | 四套 AArch64 构建 | 构建与 manifest 通过；语音 9 / 视频 11 项 ABI 依赖，均 `errors=[]`；依赖与质量检查通过 | 不代表真机播放、音量或 AEC 验收 |
+| 0.3.2，中文/英文/UBSan | 主机逻辑 | 三套各 18/18，包含 130 项工具测试；新增双语提示、短写/无进度/取消/失败清理及 ALSA 排空边界；双语 UI 基线通过 | Intel macOS；未测实际播报完整性和声卡交接 |
+| 0.3.2，zh-CN/en-US × voice/video | 四套 AArch64 构建 | 构建与 manifest 通过；语音 9 / 视频 11 项 ABI 依赖，均 `errors=[]`；依赖与质量检查通过 | AP 广播、提示音和业务恢复仍待设备验证 |
+| 0.3.3，中文/英文/UBSan | 主机逻辑 | 三套各 19/19，包含 133 项工具测试；新增网络/时钟双门槛、超时/断网重置、外部服务优先、假 helper 进程组回收与 stdin 隔离；新增等待/失败 UI 检查，旧双语基线通过 | Intel macOS；没有修改宿主时钟或运行真实授时 |
+| 0.3.3，zh-CN/en-US × voice/video | 四套 AArch64 构建 | 构建与 manifest 通过；语音 9 / 视频 11 项 ABI 依赖，均 `errors=[]`；资源锁、质量和打包工具检查通过 | 设备时间服务、BusyBox applet、权限、DNS 和 UDP 123 需实际验证 |
+| 0.4.1，中文/英文/UBSan | 主机逻辑与工具 | 三套各 21/21，包含 163 项工具用例；覆盖系统 Wi-Fi 事务、租约事件、恢复前 SDK 停止、监督与私有健康状态、AP 频段/并发选择；双语 UI 基线通过 | Intel macOS；不代替物理音视频和手机验证 |
+| 0.4.1，zh-CN/en-US × voice/video | 四套 AArch64 构建与制品 | 全部构建和 manifest 通过；语音 9、视频 11、独立监督程序 2 项 ABI 依赖，均 `errors=[]`；双语归档及部署校验通过 | 设备仅运行中文语音配置，未执行英文/视频业务 |
+| 0.4.1，中文语音 | 授权真机部署与冒烟 | 版本化部署、身份匹配、绑定与 Wi-Fi 配置字节保留、服务启停/重启、单一业务进程及 `state=ready` 通过；5 GHz STA 与 2.4 GHz AP 共存，HTTP 200、DNS 应答、DHCP 监听共存及退出清理通过 | 未重启设备；手机 DHCP/提交配网、实际对话/声学、断网恢复与长期运行待用户验收 |
+| 0.4.1，手机配网后恢复 | 用户真机与故障定位 | 手机报告完成后，设备卡在等待网络；现场 WLAN 已恢复关联、地址与默认路由，Wi-Fi 状态却停在 `RECOVERY_REQUIRED` | 已由 0.4.3 修复并执行设备 HTTP 完整流程回归；手机复测待用户执行 |
+| 0.4.3，中文/英文/UBSan | 主机与交叉构建 | 三套各 22/22，每套含 163 项工具测试；四套目标构建通过，ABI 依赖语音 9、视频 11、监督程序 2，均 `errors=[]` | 物理手机、音视频和重启不由构建结果证明 |
+| 0.4.3，中文语音 | 设备配网 HTTP 完整流程 | 实际提交已保存网络、持久化重载、目标关联/租约确认、成功响应、热点关闭、SDK 自动恢复 `ready`；确认成功耗时约 5 秒；退出清理、绑定与网络记录保留通过 | 客户端在设备本地执行，未模拟手机射频、DHCP 或触摸输入；仍需用户手机复测 |
+| 0.4.4，Wi-Fi 纯 C | macOS 与 Ubuntu 24.04 | 两种宿主的中文、英文、UBSan 各 23/23，每套含 163 项工具测试；Ubuntu ASan + UBSan 的四项 Wi-Fi 与网络启动测试 5/5 | Ubuntu 使用 GCC 13.3；不代表目标设备启用 sanitizer |
+| 0.4.4，zh-CN/en-US × voice/video | 交叉构建与语言检查 | 四套构建通过，Wi-Fi 的 9 个源文件均以 `-std=c99` 编译；ABI 语音 9、视频 11、监督程序 2 项，均无错误；7 个头文件的 C99/C++17 独立包含及 C/C++ 调用链接检查通过 | Wi-Fi 模块为纯 C；项目其他模块可以继续使用 C++ |
+| 0.4.4，中文语音 | 设备部署与配网回归 | 本地 HTTP 客户端约 5.5 秒确认配网成功，热点关闭后 SDK 恢复 `ready`；绑定和 Wi-Fi 配置字节保留，临时 AP 清理通过 | 手机实际无线接入、完整语音与重启仍待用户验收 |
 | 公共 CI / 其他宿主组合 | CI / 环境 | 以仓库对应提交实际 workflow 运行记录为准 | 配置存在不等于已运行通过 |
 
 ## 保留的基线制品
@@ -46,11 +64,13 @@ de26c8978e939e1c41dbdbdf73bd624809e90552ae4ff71701920043f65d9716
 
 ## 尚未完成的硬件专项
 
-- 当前 0.2.2 候选的绑定复用、UI方向/文字/动画、语音、输入/音量、重复启停及退出恢复。
+- 当前 0.4.4 候选的 UI 方向/文字/动画、语音、输入/音量与重启自启动；音量需检查静音、应用重启与手动配网后的恢复、云端控制和 AEC。代理已验证服务启停/重启及绑定字节保留，实际业务由用户验收。
+- 系统时间有效/无效、默认等待超时、已有时间服务和可选 helper、断网取消及 SDK 启动门槛；见[时间验证指南](../user/time-sync.zh-CN.md#排查与设备验证)。2026 年门槛仅排除明显无效时间，不能证明精确 NTP 同步。
+- 手机发现热点、DHCP/captive browser、提交配网、错误密码重试、凭据重启复用、会话中手动配网与单接口驱动路径；步骤见 [AP 验证指南](../user/wifi-provisioning.zh-CN.md#设备验证)。代理已验证本板 AP+STA 多信道、门户/DNS 与退出清理。
 - 视频首帧/云端接收、方向/颜色、V4L2/MPP 启停与语音/UI并发。
 - 音质/增益和 AEC 测量、物理按键位置、网络恢复、显示恢复和长时间稳定性。
 
-初始设备检查由代理只读执行；0.1.0/0.1.1 部署及真机测试由用户完成。本轮工程治理在主机进行，不隐式上传或运行设备程序。设备状态不能根据历史快照推断。
+初始设备检查由代理只读执行；0.1.0/0.1.1 部署及真机测试由用户完成。早期工程治理仅在主机进行；2026-11-16 用户明确授权后，代理执行了下述设备替换与冒烟，没有重启设备。设备状态不能根据历史快照推断。
 
 新增证据应记录版本/revision、包 SHA256、profile/language、板型/系统、命令、执行者、结果及未覆盖项。指南见[测试](../development/testing.zh-CN.md)与[上手](../user/getting-started.zh-CN.md)。
 
@@ -102,3 +122,109 @@ de26c8978e939e1c41dbdbdf73bd624809e90552ae4ff71701920043f65d9716
 - 双语预检包的 53 项 SHA256 全部通过，目标库及厂商说明与 `vendor/rtsa/` 原文件一致；中文归档在两个独立输出目录中字节相同。
 
 候选制品单独存放于 `dist/source-layout/`，文件名为 `mybot-rv1126b-0.2.2-aarch64.tar.gz` 与 `mybot-rv1126b-0.2.2-en-US-aarch64.tar.gz`，确切 SHA256 见相邻 `.sha256`。以上检查针对提交前工作区，制品保留开发状态身份；未执行设备部署、真机测试或远端发布，旧交付包保持原样。
+
+## 0.3.0 AP 配网逻辑复现与证据
+
+用户本轮明确设备已关机，仅要求逻辑实现，由用户后续执行设备测试。实现与检查均在主机进行，没有运行设备程序或修改设备文件。AP 的无线驱动、系统工具、射频并发、DHCP 与手机兼容性仍待确认，不将逻辑或交叉构建结果写成真机通过。
+
+- 主机目录为 `build/ap-provision/host-{zh,en,ubsan}`；完整日志保存在各目录的 `Testing/Temporary/LastTest.log`，构建日志位于同级 `host-*-build*.log`。环境仍为 Intel macOS、Python 3.10.19、CMake 4.2.0、AppleClang 17 和 Zig 0.15.2。
+- `wifi-backend` 验证 PBKDF2 标准向量、UTF-8/长度/控制字符、扫描解析、0600 原子存储及符号链接拒绝、shell 字符按普通参数传递、命令超时/取消/输出上限/回收，以及同一 SSID/BSSID 的已确认租约复用和更换网络时拒绝旧租约。
+- `wifi-portal` 在 loopback 高端口执行 HTTP/DNS 协议检查，覆盖 captive 重定向、JSON/Unicode、Host/Origin/CSRF、错误帧、异步连接/失败/重试、保存操作 busy/SSID 身份约束、DNS 查询边界及关闭。页面 JavaScript 语法和异步保存的实际函数行为另行检查通过。
+- `wifi-service` 使用模拟后端与门户，覆盖已有网络保留、禁用模式、AP 启动失败回收、保存网络时限、两次试连、实际路由门槛、单接口恢复、保存失败保持 AP、最多 10 项及默认/删除、索引过期拒绝、手动请求与 ONLINE/关闭竞争、退出响应延迟和取消。
+- 输入测试覆盖 3 秒触摸请求的单次触发、释放与丢帧清理，终端 `w` 只生成产品请求。屏幕线程复制真实热点状态；只有 AP/门户准备好才显示热点与地址，原先等待网络页仍保持旧基线。
+- 目标目录为 `build/ap-provision/rv1126b-{voice,video}-{zh,en}`，保留 ABI 与构建 manifest；全部固定依赖、原始导入历史与生成字库身份不变。依赖、质量、锁更新幂等和 target doctor 检查通过。
+- 双语预检包各 54 项 SHA256 通过，`assets/wifi/udhcpc.script` 与源码一致；直接目录和 tar 归档均为可执行权限，中文两次归档相同。
+
+最终候选包位于 `dist/ap-provision/`，名称为 `mybot-rv1126b-0.3.0-aarch64.tar.gz` 与 `mybot-rv1126b-0.3.0-en-US-aarch64.tar.gz`。SHA256 见相邻 `.sha256`；制品绑定提交前开发工作区。未创建远端发布或自动部署，之前交付包保留。
+
+## 0.3.1 音量持久化复现与证据
+
+主机测试使用 `build/batch1-volume/host-{zh,en,ubsan}`，日志为各目录的 `Testing/Temporary/LastTest.log`。四套目标配置位于 `build/batch1-volume/rv1126b-{voice,video}-{zh,en}`，各自保留 ABI 与构建 manifest。环境仍为 Intel macOS、Python 3.10.19、CMake 4.2.0、AppleClang 17 与 Zig 0.15.2。
+
+- 音量服务验证默认 100、0/50/100 PCM 边界、SDK 重建与新进程恢复、损坏文件、权限/链接/FIFO 拒绝、保存失败保留当前增益，以及持久化期间的并发读取。
+- ALSA 集成验证实际 50% 输出、静音、部分写入和恢复、截止后改变音量并重试原始后缀，检查输入 PCM 不变及第二次分配失败的清理。
+- SDK 音量适配器仅在产品存储恢复后注册，SDK 停启保留状态；最终输出缩放一次，音频热路径不执行持久化或等待音量锁。云 AEC 参考保留设备音量前信号，实际声学效果待测。
+- 固定 SDK、RTSA 和字体没有修改；更新当前 ALSA 适配结果哈希，原始导入清单保持不变，锁刷新预览为 `changes=[]`。
+
+本轮未访问设备；设备验证由用户后续执行。构建和主机测试不能证明物理音量、云端控制或 AEC 效果。
+
+## 0.3.2 AP 语音提示复现与证据
+
+主机目录为 `build/batch2-prompt/host-{zh,en,ubsan}`，各套 `Testing/Temporary/LastTest.log` 保存 18 项结果。目标目录为 `build/batch2-prompt/rv1126b-{voice,video}-{zh,en}`，保留 ABI、源码身份和构建 manifest。运行环境与 0.3.1 相同。
+
+- 独立提示音测试验证双语 S16LE 数据、短写/零写入后的原后缀、EOF 尾帧、无进度超时、主动取消、重复启动拒绝与停止后重播；同时覆盖无效资源、PCM 初始化/启动/写入/排空/停止失败及资源回收。
+- ALSA 排空测试覆盖 `EAGAIN` 后成功、截止超时、错误和等待期间的停止；成功后禁止继续写入，须重新 start。提示音正常 EOF 最多排空 100 ms，取消直接停止。
+- 主循环按配网会话锁存首次真实 AP active；错误密码造成的单接口热点重建不重播。离开 AP、SDK 启动和退出清理前均停止并等待 worker，声卡不会由提示音与 SDK 同时占用。
+- 复用原有双语 `wificonfig.pcm` 和播放增益，未修改依赖快照或字体。依赖、质量和锁更新幂等检查通过，原始导入历史保持不变。
+
+未访问或部署设备。实际双语播报、尾音、静音、取消延迟、声卡交接与配网后业务恢复按 [AP 验证步骤](../user/wifi-provisioning.zh-CN.md#设备验证)由用户验证。
+
+## 0.3.3 启动时间保护复现与证据
+
+主机目录为 `build/batch3-time/host-{zh,en,ubsan}`，每套 `Testing/Temporary/LastTest.log` 保存 19 项结果，含 133 项工具用例。目标目录为 `build/batch3-time/rv1126b-{voice,video}-{zh,en}`，保留 ABI、源码身份与构建 manifest。环境与前两项相同。
+
+- 时间服务通过注入的实时时钟、单调时钟和进程后端验证网络/时钟同时就绪、AP/离线期间不计时、断网重置窗口、系统服务优先、超时与 helper 退出后时间仍无效的失败路径。
+- 使用真实的临时假 helper 验证正在运行和已退出 leader 的进程组清理、PID 保留与回收、禁止对 0/1/自身/非子进程发信号，以及标准输入重定向后不消费前台管道。没有运行真实 NTP、设置系统日期或改变网络。
+- UI 检查等待/失败标签、字形与布局、表情覆盖抑制、清除后帧哈希恢复及线程状态复制；原有每语言 34 帧基线保持一致，无字体或依赖快照改动。
+- BusyBox wrapper 的主机名、IPv4、参数边界用假 BusyBox 验证；打包测试检查两个可执行资源在目录及 tar 中的权限和可复现性。可选脚本随包保留，但默认不启用。
+- 当前 UI 适配哈希与可执行脚本输入已登记，依赖检查与锁更新幂等通过；原始导入清单保持不变。
+
+前三项均在主机实施，未访问设备或修改设备文件。候选包与相邻 `.sha256` 保存在各次独立 `dist/batch1-volume/`、`dist/batch2-prompt/` 和 `dist/batch3-time/` 目录；源码提交后的干净构建包另行生成，具体身份以包内 manifest 为准。尚未执行真实时间同步、无线配网、提示音、响度或 AEC 的硬件验收。
+
+## 0.4.1 设备替换部署与冒烟证据
+
+2026-11-16，用户授权修改设备配置并部署新版，由代理通过 USB ADB 执行。制品来自 `dev@8bbbc84` 上的未提交工作区，manifest 保留开发状态和当时的源码摘要；不作为干净提交的正式发布。主机环境仍为 Intel macOS、Python 3.10.19、CMake 4.2.0、Zig 0.15.2。没有向主机导出绑定 token、Wi-Fi 密钥或设备私有数据备份。
+
+- 主机目录为 `build/production-rollout/host-{zh,en,ubsan}`，三套均 21/21；每套包含 163 项工具测试，日志位于各目录的 `Testing/Temporary/LastTest.log`。目标四套目录为 `build/production-rollout/rv1126b-{voice,video}-{zh,en}`，ABI 和独立监督程序报告均无错误。质量、依赖及锁更新幂等检查通过。
+- 额外在本板运行 AArch64 `test-supervisor`，验证子进程身份、独立进程组/后代回收及内核缺少 `/proc/PID/task/PID/children` 时的 `/proc` 回退路径；仅使用测试创建的进程和临时文件，没有停止系统网络进程。
+- 先部署 0.4.0 冒烟时发现 5 GHz STA 被旧 AP 信道保护拒绝，修复为 0.4.1。读取本无线 PHY 的有效组合确认支持 managed+AP 多信道后，保持 STA 信道 149（5745 MHz），在临时 `mbap*` 接口开启 2.4 GHz 信道 1（2412 MHz）的 AP。`hostapd` 状态为 ENABLED；匿名健康记录为 `state=ap`。
+- 通过 `--wifi-provision --run-seconds 30 --input-device none --touch-device none` 执行有界 AP 冒烟；`wget -T 2` 访问 `http://192.168.4.1/` 返回 HTTP 200，DNS 查询 `mybot.invalid` 返回 `192.168.4.1`。门户 HTTP/DNS 与 AP DHCP 监听正常，同时保留系统 USB dnsmasq。未连接手机，不将 DHCP 监听解释为手机实际取得租约。
+- AP 正常退出后临时接口和 hostapd 均已回收，原 WLAN 默认路由保留。部署前后的 `/etc/wpa_supplicant.conf` 与 `device_auth` 在设备内比较完全一致；仅将原 Wi-Fi 文件权限收紧为 0600。系统模式以该 Wi-Fi 配置为主记录，安装 dhcpcd hook 并触发原生 reconfigure，生成 0600 租约事件，没有另建私有 Wi-Fi 主记录。
+- 使用 `scripts/deploy-rv1126b.py deploy ... --execute` 校验、备份与安装。首次完整备份保存在设备内 `/userdata/mybot/backups/20261116-112814/original.tar`（0600）；另有每次部署的私有备份和主机脱敏回执。部署工具检查平台和现有身份匹配，未重置绑定。
+- 当前 `/userdata/mybot/current` 指向 `releases/mybot-rv1126b-0.4.1-aarch64`；`previous` 指向已验收的 `releases/mybot-rv1126b-0.1.1-aarch64`。0.4.0 仅保留为诊断版本，不作为默认回退。原预装服务已禁用并移出开机脚本匹配范围；旧程序文件保留为非活动恢复材料。
+- `/etc/init.d/S99mybot start|stop|restart|status` 已实测；最终状态为 `running`、应用 `version=0.4.1` / `state=ready`，只有一个新版业务进程和一个独立监督程序，没有 `unclean` 标记。实际程序来自版本目录，工作目录仍为 `/userdata/mybot-rv1126b`，资源绑定物理 release，不随链接切换漂移。开机脚本已安装启用，但未执行设备重启。
+
+本轮归档位于 `dist/production-rollout/`：
+
+| 归档 | SHA256 |
+| --- | --- |
+| `mybot-rv1126b-0.4.1-aarch64.tar.gz` | `89abd4f08cf98519154e73d1e5a8c25fca86475ae557f4205adc5a5153ea6bbc` |
+| `mybot-rv1126b-0.4.1-en-US-aarch64.tar.gz` | `2dd2e89f754ffe5ba6bbbbb3d83d04aea0b7695d7e57019f650b9039c5faf8f7` |
+
+交付前的硬件记录只证明上述部署和冒烟。重启自启动、手机完整配网与错误密码重试、触摸/按键、实际语音与提示音、音量恢复、断网恢复、AEC、视频及长期稳定性仍由用户后续验证；本轮没有发起对话、运行真实授时 helper 或重启设备。部署操作与回退方法见[设备替换指南](../user/deployment.zh-CN.md)。
+
+## 0.4.3 配网后恢复修复与证据
+
+2026-11-16，用户报告 0.4.1 长按进入配网、手机显示完成后，设备停在等待网络。代理通过授权 ADB 检查：WLAN 为 COMPLETED 且已有地址和默认路由，应用健康为 `waiting_network`，最后的 Wi-Fi 状态为 `RECOVERY_REQUIRED`。故障是配网完成后的路由波动触发恢复请求，而 SDK 尚未启动的等待循环没有确认该请求；同时发现系统配置重载时控制套接字可能因 `/var/run` 改写为 `/run` 而失效。
+
+- 应用新增网络启动门控，在 SDK 已停止、AP 已关闭时确认恢复请求；重复快照不重复发起恢复。新增集成回归使用真实 Wi-Fi Service 复现 AP 关闭导致路由丢失、路由已恢复但状态仍等待、应用确认后重连成功的完整状态链。
+- 保留原控制接口文本，并在重配置导致 Unix datagram 端点替换时重新连接；真实 Unix socket 测试覆盖重建、回复丢失与明确拒绝。手机成功状态现在必须等待保存后的目标网络关联、有效租约和路由稳定。
+- 中间候选 0.4.2 的设备 HTTP 测试发现，重载会短暂选择其他已保存网络；仅观察 15 秒不能可靠恢复目标。0.4.3 对此增加一次受控重选择，并在目标关联后缺少租约证明时，向现有 dhcpcd 请求一次有界续租；确认预算为 30 秒，期间手机保持连接中。没有启动竞争的 supplicant/DHCP 客户端。
+- 0.4.3 主机目录仍为 `build/production-rollout/host-{zh,en,ubsan}`，三套各 22/22（每套含 163 项工具测试）。四套 `rv1126b-{voice,video}-{zh,en}` 构建和 ABI 校验通过；质量、依赖与锁更新幂等检查通过。日志名称为同目录下 `*-043-build.log`、`*-043-ctest.log` 及各套 `Testing/Temporary/LastTest.log`。
+- 通过部署工具安装 0.4.3，保留设备内备份 `/userdata/mybot/backups/20261116-production-043/original.tar.gz`。在设备本地运行临时 HTTP 客户端，从设备配置读取首选网络，向真实门户提交、轮询成功并请求退出；凭据始终留在设备内存和本地配网请求中，没有导出、放入进程参数或打印。
+- 本次客户端收到提交 202，约 5011 ms 后得到 `connected`，退出请求 202；应用状态顺序为 AP → CONNECTING → VERIFYING → ONLINE，随后系统时间就绪、SDK 启动到 READY，健康为 `version=0.4.3` / `state=ready`。未再发生重载失败或永久等待。
+- 正常结束测试应用后，AP 接口与 hostapd 均已回收；设备内比较确认 `device_auth` 与首次备份一致，Wi-Fi 配置与本次部署前备份一致。已重新启动常驻服务，默认回退链接仍为已验收的 0.1.1；0.4.1/0.4.2 只保留作诊断，不作为默认回退。
+
+本轮中文归档 `mybot-rv1126b-0.4.3-aarch64.tar.gz` SHA256 为 `34b464d93a2e0c2ce71823b22899ea5c8e70c971103b189a8215e668e38f14dd`，英文归档 `mybot-rv1126b-0.4.3-en-US-aarch64.tar.gz` SHA256 为 `f4a53e0db54c2610c7b3836b95bb6a6f53b58ed64220c7b288a2595189827558`，均位于 `dist/production-rollout/`。制品仍来自 `dev@8bbbc84` 上的未提交开发工作区。
+
+本轮设备 HTTP 客户端验证了实际后端与应用恢复，不能替代手机无线发现、DHCP、captive browser 和长按输入的整体验证；这些由用户再次操作确认。本轮没有重启设备或发起语音对话。
+
+## 0.4.4 Wi-Fi 纯 C 迁移与证据
+
+Wi-Fi 运行实现及对应测试已迁移为 C99。公开 `mybot_platform/wifi.h` 接口保持兼容，内部使用上下文与操作表、容量受限的数据结构、明确的销毁顺序、pthread 同步和单调时钟。旧 `.cc` 实现已移除；源码拆分为控制器、门户、系统配置、凭据、Linux 后端、进程、无线解析、控制套接字和公共辅助共 9 个 `.c` 文件。
+
+- 主机使用全新 `build/c-wifi-migration/host-{zh,en,ubsan}`，三套各 23/23（每套含 163 项工具测试）；独立配置/租约测试保留原用例，并增加 C 字符串边界和 UTF-8 检查。原双语 UI 基线通过。真实 Unix socket 重建、HTTP/DNS、取消、进程回收和配网后恢复回归均保留。
+- Ubuntu 24.04.4 使用 GCC 13.3、CMake 3.28.3、Python 3.12.3、OpenSSL 3.0.13、libdrm 2.4.125，在隔离源码副本执行中文、英文和 UBSan，各 23/23。另一个 ASan + UBSan 配置只构建并运行 `wifi-backend`、`wifi-portal`、`wifi-service`、`wifi-profiles`、`network-startup`，5/5 通过。日志和 `results.json` 位于忽略目录 `build/c-wifi-migration/ubuntu-validation-20261116/`；没有覆盖 Ubuntu 原仓库或其 Git 历史。
+- 四套目标目录为 `build/c-wifi-migration/rv1126b-{voice,video}-{zh,en}`；所有 Wi-Fi 编译记录均为 `.c` 和 `-std=c99`，构建、来源 manifest 与 ABI 检查通过。固定依赖、原始导入清单、字体和网页内容保持一致，依赖检查及锁更新预览无差异。
+- 通过授权部署工具安装中文 0.4.4，设备内备份为 `/userdata/mybot/backups/20261116-production-044/original.tar.gz`。设备 C HTTP 客户端只在本机读取已保存网络并提交真实门户，不导出凭据、不放入参数或日志；约 5514 ms 返回成功，退出请求 202，随后 AP → CONNECTING → VERIFYING → ONLINE → SDK READY。实际健康为 `version=0.4.4` / `state=ready`。
+- 正常终止有界验证进程后，临时 AP 和 hostapd 均已清理；在设备内比较 `device_auth` 与首次备份一致、Wi-Fi 配置与本次部署前备份一致。已启动常驻服务，默认回退保留已验收的 0.1.1，没有重启设备。
+- 制作上述制品后，按用户要求为函数定义、头文件类型和声明补充空行，并为全部 7 个 Wi-Fi 头文件增加 `__cplusplus` / `extern "C"` 保护。C 静态库重新构建通过；逐头文件以 C99、C++17 严格模式独立包含，再分别编译、链接并执行调用 C 静态库的程序，均通过。格式、依赖检查及源码差异空白检查通过。Ubuntu 更新隔离副本后也重新构建 C 库，GCC 13.3 / G++ 13.3 的逐头文件检查各 7/7，两个客户端的链接运行均通过，日志为 `header-compatibility.log`；此前全套测试和 sanitizer 无需因排版重复。设备常驻服务重启后仍恢复 `ready`。这些排版与调用兼容性调整不改变已部署程序的 C 业务行为；制品源码身份以包内 manifest 为准。
+
+制品位于 `dist/c-wifi-migration/`：
+
+| 归档 | SHA256 |
+| --- | --- |
+| `mybot-rv1126b-0.4.4-aarch64.tar.gz` | `1a784631b6138648aa9c16aaee0539aa11ff96aba0a4619b8e01a8296369bfb9` |
+| `mybot-rv1126b-0.4.4-en-US-aarch64.tar.gz` | `57087b30a3c996500c9cd6d44b80bce42388e0b0f69e8a3ca84d87b5acd23a6d` |
+
+上述制品仍来自 `dev@8bbbc84` 上的未提交工作区。本轮未发起语音对话，设备本地 HTTP 检查不能替代用户手机的发现热点、DHCP、浏览器和长按操作回归；英文/视频业务与长期稳定性未在设备验收。

@@ -29,10 +29,13 @@ typedef struct {
     input_source_t key, touch;
     rv1126b_touch_t touch_state;
     bool stopping;
+    bool talk_down, talk_long_sent;
+    uint32_t talk_pressed_at;
     mybot_key_event_handler_t emit;
     void *user;
 } input_context_t;
 static int s_exit_requested;
+static int s_wifi_requested;
 
 static uint32_t now_ms(void) {
     struct timespec now;
@@ -106,6 +109,9 @@ static void stdin_key(input_context_t *ctx, char code) {
     case 'e':
         emit(ctx, MYBOT_KEY_EVENT_EXIT);
         break;
+    case 'w':
+        __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
+        break;
     default:
         break;
     }
@@ -126,6 +132,32 @@ static int drain_input(input_context_t *ctx, input_source_t *source, bool touch)
         struct input_event input;
         memcpy(&input, source->partial, sizeof(input));
         source->used = 0;
+        if (!touch && input.type == EV_SYN && input.code == SYN_DROPPED) {
+            ctx->talk_down = false;
+            ctx->talk_long_sent = false;
+        }
+        if (!touch && input.type == EV_KEY && input.code == rv1126b_platform_config()->talk_key) {
+            if (input.value == 1 && !ctx->talk_down) {
+                ctx->talk_down = true;
+                ctx->talk_long_sent = false;
+                ctx->talk_pressed_at = now_ms();
+            } else if (input.value == 0) {
+                if (ctx->talk_down && !ctx->talk_long_sent) {
+                    if ((uint32_t)(now_ms() - ctx->talk_pressed_at) >= 3000) {
+                        __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
+                    } else {
+                        mybot_key_event_t event;
+                        if (rv1126b_key_translate(input.code, rv1126b_platform_config()->talk_key,
+                                                  mybot_get_state(), &event))
+                            emit(ctx, event);
+                    }
+                }
+                ctx->talk_down = false;
+            }
+            /* Wait for release before emitting a short click: holding Menu
+             * for setup must not start a conversation first. */
+            continue;
+        }
         mybot_key_event_t event;
         int ready = touch
                         ? rv1126b_touch_event(&ctx->touch_state, input.type, input.code,
@@ -146,7 +178,7 @@ static void *input_worker(void *opaque) {
                                 {ctx->stdin_fd, POLLIN, 0},
                                 {ctx->key.fd, POLLIN, 0},
                                 {ctx->touch.fd, POLLIN, 0}};
-        int ret = poll(fds, 4, -1);
+        int ret = poll(fds, 4, 100);
         if (ret < 0 && errno == EINTR)
             continue;
         if (ret < 0 || fds[0].revents || __atomic_load_n(&ctx->stopping, __ATOMIC_ACQUIRE))
@@ -174,7 +206,19 @@ static void *input_worker(void *opaque) {
                 AOSL_LOG_WRN("input: %s source disconnected", i ? "touch" : "key");
                 close(sources[i]->fd);
                 sources[i]->fd = -1;
+                if (i == 0)
+                    ctx->talk_down = false;
+                else
+                    memset(&ctx->touch_state, 0, sizeof(ctx->touch_state));
             }
+        }
+        uint32_t now = now_ms();
+        if (rv1126b_touch_provisioning_request(&ctx->touch_state, now))
+            __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
+        if (ctx->talk_down && !ctx->talk_long_sent &&
+            (uint32_t)(now - ctx->talk_pressed_at) >= 3000) {
+            ctx->talk_long_sent = true;
+            __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
         }
     }
     return NULL;
@@ -224,13 +268,14 @@ static int key_init(void **out, mybot_key_event_handler_t handler, void *user) {
         return -1;
     }
     __atomic_store_n(&s_exit_requested, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_wifi_requested, 0, __ATOMIC_RELEASE);
     if (pthread_create(&ctx->thread, NULL, input_worker, ctx) != 0) {
         close_context(ctx);
         return -1;
     }
     *out = ctx;
     AOSL_LOG_NTC("input: short touch/menu toggles conversation; left/right changes volume; "
-                 "stdin s/q/p/u/d/e (Enter)");
+                 "hold touch/menu 3 s for Wi-Fi setup; stdin s/q/p/u/d/w/e (Enter)");
     return 0;
 }
 
@@ -252,6 +297,10 @@ static void key_destroy(void *opaque) {
 
 int rv1126b_key_exit_requested(void) {
     return __atomic_load_n(&s_exit_requested, __ATOMIC_ACQUIRE);
+}
+
+int rv1126b_key_wifi_requested(void) {
+    return __atomic_exchange_n(&s_wifi_requested, 0, __ATOMIC_ACQ_REL);
 }
 
 const mybot_key_ops_t *rv1126b_key_ops(void) {

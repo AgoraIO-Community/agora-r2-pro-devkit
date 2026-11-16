@@ -235,9 +235,11 @@ void update_terminal(mybot_expression_t expression) {
 
 void update_runtime_terminal(const mybot_lcd_content_t &content,
                              const mybot_display_runtime_status_t &status) {
-    const bool conversation =
-        status.in_conversation && content.screen == MYBOT_LCD_SCREEN_IN_CONVERSATION;
-    const char *state = status.state;
+    const bool conversation = !status.clock_state && status.in_conversation &&
+                              content.screen == MYBOT_LCD_SCREEN_IN_CONVERSATION;
+    const char *state = status.clock_state == 1   ? "waiting_time"
+                        : status.clock_state == 2 ? "time_failed"
+                                                  : status.state;
     const char *voiceprint = "";
     if (conversation) {
         /* A malformed multi-phase mask has a deterministic display priority. */
@@ -569,6 +571,8 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
             copied_status.state[i] = status->state[i];
         }
         copied_status.in_conversation = status->in_conversation;
+        if (status->clock_state == 1 || status->clock_state == 2)
+            copied_status.clock_state = status->clock_state;
     }
     if (!copied_status.state[0]) {
         std::memcpy(copied_status.state, "stopped", sizeof("stopped"));
@@ -587,7 +591,8 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
     const bool workflow_changed =
         !s_view->has_content || normalized.screen != s_view->previous.screen ||
         std::strcmp(normalized.pair_code, s_view->previous.pair_code) != 0 ||
-        std::strcmp(copied_ssid, s_view->provisioning_ssid) != 0;
+        std::strcmp(copied_ssid, s_view->provisioning_ssid) != 0 ||
+        copied_status.clock_state != s_view->runtime_status.clock_state;
     const bool status_changed =
         !s_view->has_content || normalized.indicators != s_view->previous.indicators ||
         copied_status.in_conversation != s_view->runtime_status.in_conversation ||
@@ -599,12 +604,26 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
     /* The display owner chooses face expressions after updating this snapshot.
      * Workflow/status changes never insert an intermediate default face or
      * restart either expression clock. Guidance still replaces a visible face. */
-    if (workflow_changed && content->screen != MYBOT_LCD_SCREEN_READY &&
-        content->screen != MYBOT_LCD_SCREEN_IN_CONVERSATION) {
+    if (workflow_changed && copied_status.clock_state) {
+        if (copied_status.clock_state == 1)
+            show_guide({"System time", "Checking system time", kGreeting});
+        else
+            show_guide({"Time unavailable", "Check time service; restart", kError});
+        set_text(s_view->detail, "Required: 2026 or later");
+        set_hidden(s_view->detail, false);
+    } else if (workflow_changed && content->screen != MYBOT_LCD_SCREEN_READY &&
+               content->screen != MYBOT_LCD_SCREEN_IN_CONVERSATION) {
         show_guide(kScreens[content->screen]);
         if (provisioning) {
             std::memcpy(s_view->provisioning_ssid, copied_ssid, sizeof(s_view->provisioning_ssid));
-            lv_label_set_text_static(s_view->detail, s_view->provisioning_ssid);
+            if (copied_ssid[0]) {
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+                show_guide({s_view->provisioning_ssid, "请连接设备热点", kGreeting});
+#else
+                show_guide({s_view->provisioning_ssid, "Connect to device Wi-Fi", kGreeting});
+#endif
+            }
+            lv_label_set_text_static(s_view->detail, copied_ssid[0] ? "http://192.168.4.1" : "");
             set_hidden(s_view->detail, !copied_ssid[0]);
         }
         if (pairing_code) {
@@ -621,7 +640,7 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
 }
 
 int mybot_pixel_glasses_show_expression(mybot_expression_t expression) {
-    if (!s_view || !s_view->root || !s_view->has_content ||
+    if (!s_view || !s_view->root || !s_view->has_content || s_view->runtime_status.clock_state ||
         (s_view->previous.screen != MYBOT_LCD_SCREEN_READY &&
          s_view->previous.screen != MYBOT_LCD_SCREEN_IN_CONVERSATION) ||
         expression < MYBOT_EXPRESSION_NEUTRAL || expression >= MYBOT_EXPRESSION_COUNT)
@@ -632,7 +651,7 @@ int mybot_pixel_glasses_show_expression(mybot_expression_t expression) {
 }
 
 int mybot_pixel_glasses_replay_expression(mybot_expression_t expression) {
-    if (!s_view || !s_view->root || !s_view->has_content ||
+    if (!s_view || !s_view->root || !s_view->has_content || s_view->runtime_status.clock_state ||
         (s_view->previous.screen != MYBOT_LCD_SCREEN_READY &&
          s_view->previous.screen != MYBOT_LCD_SCREEN_IN_CONVERSATION) ||
         expression < MYBOT_EXPRESSION_NEUTRAL || expression >= MYBOT_EXPRESSION_COUNT)

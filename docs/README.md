@@ -6,6 +6,7 @@
 | --- | --- |
 | [上手与升级](user/getting-started.zh-CN.md) | 设备要求、解包、资源占用、UI/语音检查、回退 |
 | [构建](user/build.zh-CN.md) | 主机开发、独立目标 SDK、presets 与交付包 |
+| [AP 配网](user/wifi-provisioning.zh-CN.md) | 热点入口、浏览器流程、系统前提与设备验收 |
 | [配置](user/configuration.zh-CN.md) | CLI、环境变量、身份、语言与音频契约 |
 | [故障排查](user/troubleshooting.zh-CN.md) | 构建、显示、音频、网络和摄像头问题 |
 

@@ -2,6 +2,86 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.4.4 — Unreleased
+
+- Implement the Wi-Fi backend, profile storage, captive portal and controller in C99 with explicit resource ownership and pthread synchronization.
+- Separate supplicant control, process ownership and AP radio selection behind private C interfaces.
+- Preserve provisioning, committed lease verification, recovery and public C APIs; migrate Wi-Fi regression tests to C.
+
+Hardware regression evidence is recorded in the validation matrix.
+
+## 0.4.3 — Unreleased
+
+- Reselect the committed network when a system Wi-Fi reload resumes another saved profile.
+- Request renewal from the existing DHCP manager when the selected network still has a stale lease event, with a bounded setup confirmation window.
+
+Phone setup and business recovery require hardware regression testing for this candidate.
+
+## 0.4.2 — Unreleased
+
+- Resume network recovery while waiting to start the SDK after Wi-Fi provisioning, including a transient route loss after the portal closes.
+- Preserve the system supplicant control path and reconnect its control socket when a configuration reload replaces it.
+- Verify the committed network association and routed lease before reporting successful setup to the phone.
+
+Phone setup and business recovery require hardware regression testing for this candidate.
+
+## 0.4.1 — Unreleased
+
+- Select AP band/channel from the current station frequency and that radio's advertised concurrency instead of rejecting every 5 GHz station.
+- Prefer a 2.4 GHz AP on radios supporting multiple channels; use supported non-DFS station channels for a single-channel 5 GHz AP.
+- Keep 6 GHz distinct from 2.4 GHz when channel numbers overlap, and retain explicit failure for unsupported radio combinations.
+
+Device AP and phone interoperability remain subject to verification.
+
+## 0.4.0 — Unreleased
+
+- Add explicit versioned device deployment, private backups, binding identity checks and rollback without changing the existing data directory.
+- Add a BusyBox init service and a standalone supervisor with bounded restart, log rotation and owned descendant cleanup.
+- Integrate system Wi-Fi profiles and dhcpcd lease events; preserve committed station networks across application restarts.
+- Request SDK shutdown before saved-network recovery or AP entry after a sustained route loss.
+- Publish a private application health record and package the service, DHCP hook and supervisor with provenance checks.
+
+This deployment candidate requires user verification on the device, including restart, AP setup and audio regression.
+
+## 0.3.3 — Unreleased
+
+- Gate SDK startup on plausible system time after network readiness and AP exit, with a configurable 1–300-second monotonic timeout, defaulting to 30 seconds.
+- Preserve OS time services by default; report timeout and helper failures through the UI and standard error, then exit with a nonzero status.
+- Support an explicitly selected foreground time helper only when the clock is invalid and no existing time daemon is detected; cancel and reap its owned process group on network loss or shutdown.
+- Bundle an opt-in BusyBox one-shot wrapper with validated NTP server configuration, without installing services or disabling TLS verification.
+- Reset the wait window on network loss and reject successful helper exits that leave an invalid clock; the 2026 threshold remains a plausibility check, not proof of precise synchronization.
+
+This system-time guard candidate requires hardware clock, service-ownership and NTP connectivity testing.
+
+## 0.3.2 — Unreleased
+
+- Play the bundled localized Wi-Fi guidance once per setup session, only after the AP and portal are ready; connection retries do not repeat it.
+- Apply saved output volume to guidance, including mute, through the same playback adapter used by agent-studio-device-firmware.
+- Keep the prompt worker mutually exclusive with SDK audio; cancel and release playback when leaving AP setup or exiting before restarting agent-studio-device-firmware.
+- Report guidance failures without disabling the AP portal, and document target checks for complete playback, retry behavior and audio cleanup.
+
+This AP voice-guidance candidate requires hardware audio and Wi-Fi regression testing.
+
+## 0.3.1 — Unreleased
+
+- Connect agent-studio-device-firmware device-volume controls to a platform playback-gain adapter, applying output gain once without changing capture gain or system mixer settings.
+- Persist volume across application and SDK restarts, including manual AP Wi-Fi setup, in a private atomic settings file.
+- Preserve existing key, terminal and cloud controls with a 0–100 range and a default of 100, matching the previous output level.
+- Fall back to the default with a warning for invalid settings; report save failures and retain the last working gain.
+
+This persistent-volume candidate requires hardware audio and Cloud AEC regression testing.
+
+## 0.3.0 — Unreleased
+
+- Add native AP Wi-Fi setup with an open `mybot-xxxx` hotspot, captive DNS and a bilingual mobile page at `192.168.4.1`.
+- Support nearby and hidden networks, asynchronous connection/retry, saved-network default/deletion, and up to 10 private profiles containing derived PSKs.
+- Preserve an existing usable network; try cached profiles before AP setup, and persist candidates only after routed IPv4 connectivity is available.
+- Add 3-second touch/Menu hold and terminal `w` for manual setup, stopping agent-studio-device-firmware before AP entry and restarting it after completion.
+- Add explicit Wi-Fi interface/force/disable CLI options, AP+STA preference with safe station ownership checks, and a bundled DHCP hook. Target-side network tools and driver support remain required.
+- Add host controller/backend/protocol checks, input/UI coverage and a hardware verification guide.
+
+This AP Wi-Fi setup candidate requires hardware testing; host and cross-build evidence does not establish target radio or DHCP behavior.
+
 ## 0.2.2 — Unreleased
 
 - Group maintained code under `src/application/`, `src/platform/` and `src/ui/`, and pinned dependencies under `vendor/`.

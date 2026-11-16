@@ -46,6 +46,23 @@ int main(void) {
     CHECK(!touch(&state, EV_KEY, BTN_TOUCH, 0, 200, &event));
     CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 200, &event));
     CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 210, &event));
+    memset(&state, 0, sizeof(state));
+    CHECK(!touch(&state, EV_KEY, BTN_TOUCH, 1, 100, &event));
+    CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 100, &event));
+    CHECK(!rv1126b_touch_provisioning_request(&state, 3099));
+    CHECK(rv1126b_touch_provisioning_request(&state, 3100));
+    CHECK(!rv1126b_touch_provisioning_request(&state, 3200));
+    CHECK(!touch(&state, EV_KEY, BTN_TOUCH, 0, 3300, &event));
+    CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 3300, &event));
+    CHECK(!rv1126b_touch_provisioning_request(&state, 3300));
+    CHECK(!touch(&state, EV_KEY, BTN_TOUCH, 1, 4000, &event));
+    CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 4000, &event));
+    CHECK(!touch(&state, EV_KEY, BTN_TOUCH, 0, 7100, &event));
+    CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 7100, &event));
+    CHECK(rv1126b_touch_provisioning_request(&state, 7100));
+    CHECK(!rv1126b_touch_provisioning_request(&state, 7101));
+    CHECK(!touch(&state, EV_SYN, SYN_DROPPED, 0, 8000, &event));
+    CHECK(!rv1126b_touch_provisioning_request(&state, 11000));
     puts("Input state gating, touch boundaries, duplicate edges and dropped events: PASS");
     return 0;
 }

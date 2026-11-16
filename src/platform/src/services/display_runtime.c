@@ -84,7 +84,7 @@ int rv1126b_ui_start(const char *device, unsigned rotation) {
     s_ui.stopping = s_ui.startup_done = s_ui.failed = false;
     s_ui.expression = -1;
     s_ui.latest = (mybot_lcd_content_t){MYBOT_LCD_SCREEN_STARTING, {0}, 0};
-    s_ui.status = (mybot_display_runtime_status_t){"starting", false};
+    s_ui.status = (mybot_display_runtime_status_t){.state = "starting", .in_conversation = false};
     s_ui.pending = true;
     if (pthread_create(&s_ui.thread, NULL, ui_worker, NULL) != 0) {
         pthread_mutex_unlock(&s_ui.lock);
@@ -163,6 +163,25 @@ void rv1126b_ui_set_state(mybot_state_t state) {
     snprintf(s_ui.status.state, sizeof(s_ui.status.state), "%s", name);
     s_ui.status.in_conversation = state == MYBOT_STATE_IN_CONVERSATION;
     s_ui.pending = true;
+    pthread_mutex_unlock(&s_ui.lock);
+}
+
+void rv1126b_ui_provisioning(const char *ssid) {
+    pthread_mutex_lock(&s_ui.lock);
+    snprintf(s_ui.status.provisioning_ssid, sizeof(s_ui.status.provisioning_ssid), "%s",
+             ssid ? ssid : "");
+    s_ui.pending = true;
+    pthread_mutex_unlock(&s_ui.lock);
+}
+
+void rv1126b_ui_time_status(int status) {
+    if (status < 0 || status > 2)
+        return;
+    pthread_mutex_lock(&s_ui.lock);
+    if (s_ui.status.clock_state != status) {
+        s_ui.status.clock_state = status;
+        s_ui.pending = true;
+    }
     pthread_mutex_unlock(&s_ui.lock);
 }
 

@@ -81,7 +81,7 @@ void rv1126b_renderer_update(const mybot_lcd_content_t *content,
         return;
     s_tick = now;
     mybot_expression_policy_update(&s_renderer.policy, content, now);
-    mybot_pixel_glasses_update(content, NULL, status);
+    mybot_pixel_glasses_update(content, status ? status->provisioning_ssid : NULL, status);
 }
 
 void rv1126b_renderer_step(uint32_t now) {

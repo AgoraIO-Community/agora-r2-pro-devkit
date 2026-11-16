@@ -24,5 +24,7 @@ int rv1126b_platform_register(const rv1126b_platform_config_t *config);
 int rv1126b_network_ready(const char *interface_name);
 /* True after foreground input requested application shutdown. */
 int rv1126b_key_exit_requested(void);
+/* Consumes one product-level request. Stop the SDK before changing Wi-Fi. */
+int rv1126b_key_wifi_requested(void);
 
 #endif

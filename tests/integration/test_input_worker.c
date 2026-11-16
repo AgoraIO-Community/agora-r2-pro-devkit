@@ -36,6 +36,40 @@ static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t changed = PTHREAD_COND_INITIALIZER;
 static bool callback_entered, release_callback, destroyed;
 static unsigned calls;
+static unsigned menu_calls;
+static void menu_handler(mybot_key_event_t event, void *user) {
+    (void)user;
+    CHECK(event == MYBOT_KEY_EVENT_CONVERSATION_START);
+    ++menu_calls;
+}
+static void menu_edge(input_context_t *context, input_source_t *source, int write_fd, int value) {
+    const struct input_event event = {.type = EV_KEY, .code = KEY_MENU, .value = value};
+    CHECK(write(write_fd, &event, sizeof(event)) == (ssize_t)sizeof(event));
+    CHECK(drain_input(context, source, false) == 0);
+}
+static void check_menu_gestures(void) {
+    int descriptors[2];
+    CHECK(native_pipe2(descriptors, 0) == 0);
+    input_context_t context = {.emit = menu_handler};
+    input_source_t source = {.fd = descriptors[0]};
+    __atomic_store_n(&s_wifi_requested, 0, __ATOMIC_RELEASE);
+    menu_edge(&context, &source, descriptors[1], 1);
+    CHECK(menu_calls == 0);
+    menu_edge(&context, &source, descriptors[1], 0);
+    CHECK(menu_calls == 1 && !rv1126b_key_wifi_requested());
+    menu_edge(&context, &source, descriptors[1], 1);
+    context.talk_pressed_at = now_ms() - 3000;
+    menu_edge(&context, &source, descriptors[1], 2);
+    menu_edge(&context, &source, descriptors[1], 0);
+    CHECK(menu_calls == 1 && rv1126b_key_wifi_requested());
+    CHECK(!rv1126b_key_wifi_requested());
+    menu_edge(&context, &source, descriptors[1], 1);
+    context.talk_long_sent = true;
+    menu_edge(&context, &source, descriptors[1], 0);
+    CHECK(menu_calls == 1 && !rv1126b_key_wifi_requested());
+    close(descriptors[0]);
+    close(descriptors[1]);
+}
 static void handler(mybot_key_event_t event, void *user) {
     CHECK(user == &calls && event == MYBOT_KEY_EVENT_PAIR);
     pthread_mutex_lock(&lock);
@@ -55,6 +89,7 @@ static void *destroy_worker(void *ctx) {
 }
 
 int main(void) {
+    check_menu_gestures();
     int input[2];
     CHECK(pipe(input) == 0);
     int saved = dup(STDIN_FILENO);
@@ -68,6 +103,16 @@ int main(void) {
     }
     void *ctx = NULL;
     CHECK(rv1126b_key_ops()->init(&ctx, handler, &calls) == 0);
+    CHECK(write(input[1], "w", 1) == 1);
+    bool wifi_requested = false;
+    const struct timespec key_pause = {.tv_sec = 0, .tv_nsec = 1000000};
+    for (unsigned attempt = 0; attempt < 1000 && !wifi_requested; ++attempt) {
+        wifi_requested = rv1126b_key_wifi_requested() != 0;
+        if (!wifi_requested)
+            nanosleep(&key_pause, NULL);
+    }
+    CHECK(wifi_requested && !rv1126b_key_wifi_requested());
+    CHECK(calls == 0);
     CHECK(write(input[1], "p", 1) == 1);
     struct timespec deadline;
     CHECK(clock_gettime(CLOCK_REALTIME, &deadline) == 0);

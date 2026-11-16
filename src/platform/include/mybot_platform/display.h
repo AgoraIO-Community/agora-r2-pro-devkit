@@ -13,6 +13,12 @@ int rv1126b_ui_stop(void);
 void rv1126b_ui_set_state(mybot_state_t state);
 /* Copies bounded content during this call; caller keeps ownership. */
 void rv1126b_ui_show(const mybot_lcd_content_t *content);
+/* Show actual AP guidance only after the portal has started. NULL clears it. */
+void rv1126b_ui_provisioning(const char *ssid);
+/* Product startup clock gate: 0 clears, 1 waits, 2 reports failure.
+ * Readiness means the supported clock range, not proof of NTP synchronization.
+ * Invalid values are ignored. */
+void rv1126b_ui_time_status(int status);
 /* Selects an existing expression; -1 restores the state-driven policy. */
 void rv1126b_ui_demo_expression(int expression);
 /* Thread-safe query of startup/render/cleanup failure. */
