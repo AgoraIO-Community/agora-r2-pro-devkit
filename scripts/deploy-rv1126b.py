@@ -13,6 +13,7 @@ import shlex
 import struct
 import subprocess
 import tarfile
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 DEVICE_ROOT = "/userdata/mybot"
@@ -215,17 +216,21 @@ class Adb:
         else:
             self.serial = devices[0]
 
-    def command(self, arguments, data=None):
-        result = subprocess.run([self.executable, "-s", self.serial, *arguments], input=data,
-                                capture_output=True, text=True)
+    def command(self, arguments, data=None, timeout=None):
+        try:
+            result = subprocess.run([self.executable, "-s", self.serial, *arguments], input=data,
+                                    capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f"ADB {arguments[0]} operation timed out; inspect the private "
+                               "on-device deployment state") from error
         if result.returncode:
             # Do not echo subprocess output: service/network diagnostics may contain credentials.
             raise RuntimeError(f"ADB {arguments[0]} operation failed (exit {result.returncode}); "
                                "inspect the private on-device deployment state")
         return result.stdout
 
-    def shell(self, script):
-        return self.command(["shell", "sh", "-s"], "set -eu\numask 077\n" + script)
+    def shell(self, script, timeout=None):
+        return self.command(["shell", "sh", "-s"], "set -eu\numask 077\n" + script, timeout=timeout)
 
 
 def identity_check(settings):
@@ -522,17 +527,89 @@ case "$recorded" in *[!0-9a-f]*) exit 84;; esac
 """ + release_load_check(name, bool(video))
 
 
-def status_script():
+def status_script(expected_release=None, video=None):
+    if expected_release is not None and not NAME.fullmatch(expected_release):
+        raise ValueError("Invalid installed release name")
+    selected = "mybot-rv1126b-video" if video else "mybot-rv1126b"
+    executable_check = (f'[ "$executable" = "$release/bin/{selected}" ]' if video is not None else
+                        '[ "$executable" = "$release/bin/mybot-rv1126b" ] || '
+                        '[ "$executable" = "$release/bin/mybot-rv1126b-video" ]')
     return f"""
+[ "$(id -u)" = 0 ] || exit 10
+current=
 for item in current previous; do
     target=$(readlink {DEVICE_ROOT}/"$item" 2>/dev/null || true)
-    case "$target" in ''|releases/mybot-rv1126b-*) printf '%s=%s\\n' "$item" "$target";; *) exit 70;; esac
+    case "$target" in ''|releases/mybot-rv1126b-*) ;; *) exit 70;; esac
+    tail=${{target#releases/}}
+    case "$tail" in *[!A-Za-z0-9.-]*|*..*) exit 70;; esac
+    printf '%s=%s\\n' "$item" "$target"
+    if [ "$item" = current ]; then current=$target; fi
 done
+service_state=not_installed
 if [ -x {SERVICE} ]; then
-    if {SERVICE} status >/dev/null 2>&1; then printf 'service=running\\n';
-    else printf 'service=stopped_or_failed\\n'; fi
-else printf 'service=not_installed\\n'; fi
+    service_state=$({SERVICE} status 2>/dev/null) || :
+    case "$service_state" in starting|running|backoff|stopping|stopped|failed|poweroff_pending|poweroff) ;;
+        *) service_state=query_failed;; esac
+fi
+printf 'service=%s\\n' "$service_state"
+health=not_ready
+verified=no
+status=/run/mybot-rv1126b/application.status
+if [ ! -L /run/mybot-rv1126b ] && [ -d /run/mybot-rv1126b ] &&
+   [ "$(stat -c '%u:%a' /run/mybot-rv1126b)" = '0:700' ] &&
+   [ -f "$status" ] && [ ! -L "$status" ] &&
+   [ "$(stat -c '%u:%a:%h' "$status")" = '0:600:1' ] &&
+   [ "$(stat -c %s "$status")" -le 128 ] &&
+   information=$(cat "$status") && printf '%s\\n' "$information" | awk -F= '
+       NF != 2 {{ exit 1 }}
+       $1 == "version" && $2 ~ /^[0-9]+\\.[0-9]+\\.[0-9]+$/ {{ version++; next }}
+       $1 == "pid" && $2 ~ /^[0-9]+$/ && length($2) <= 10 && $2 + 0 > 1 {{ pid++; next }}
+       $1 == "state" && $2 ~ /^[a-z_]+$/ && length($2) < 32 {{ state++; next }}
+       {{ exit 1 }}
+       END {{ if (version != 1 || pid != 1 || state != 1) exit 1 }}
+   '; then
+    version=$(printf '%s\\n' "$information" | awk -F= '$1 == "version" {{print $2}}')
+    pid=$(printf '%s\\n' "$information" | awk -F= '$1 == "pid" {{print $2}}')
+    state=$(printf '%s\\n' "$information" | awk -F= '$1 == "state" {{print $2}}')
+    printf 'application_version=%s\\napplication_pid=%s\\napplication_state=%s\\n' "$version" "$pid" "$state"
+    release={DEVICE_ROOT}/$current
+    expected_version=${{current#releases/mybot-rv1126b-}}
+    expected_version=${{expected_version%%-*}}
+    executable=$(readlink /proc/"$pid"/exe 2>/dev/null || true)
+    wanted={shlex.quote('releases/' + expected_release) if expected_release else '"$current"'}
+    if [ -n "$current" ] && [ "$current" = "$wanted" ] && [ "$version" = "$expected_version" ] &&
+       [ -d "$release" ] && [ ! -L "$release" ] && kill -0 "$pid" 2>/dev/null &&
+       {{ {executable_check}; }}; then
+        verified=yes
+        if [ "$service_state" = running ]; then
+            case "$state" in
+                ready|conversation) health=ready;;
+                waiting_network|waiting_clock|wifi_error|ap|pairing|offline) health=degraded;;
+                starting_services) health=started;;
+            esac
+        fi
+    fi
+else
+    printf 'application_state=unavailable\\n'
+fi
+printf 'application_verified=%s\\napplication_health=%s\\n' "$verified" "$health"
 """
+
+
+def wait_for_application(adb, release, video, timeout=30):
+    """Confirm a local application lifetime; cloud readiness is independent."""
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = max(0.1, deadline - time.monotonic())
+        output = adb.shell(status_script(release, video), timeout=min(5, remaining))
+        status = dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
+        if (status.get("service") == "running" and status.get("application_verified") == "yes" and
+                status.get("application_health") in ("ready", "degraded", "started")):
+            return output
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Selected application did not reach a verified local startup state; "
+                               "inspect the private on-device service state")
+        time.sleep(0.2)
 
 
 def receipt(tag, action, values, output_root=ROOT / "local/deployment"):
@@ -593,12 +670,12 @@ def main(argv=None):
             return 0
         adb = Adb(args.adb, args.serial)
         adb.select()
+        if args.action == "status":
+            print(adb.shell(status_script()).strip())
+            return 0
         output = adb.shell(PREFLIGHT + capability_preflight() + (identity_check(settings) if settings else ""))
         if args.action == "preflight":
             print(output.strip())
-            return 0
-        if args.action == "status":
-            print(adb.shell(status_script()).strip())
             return 0
         rollback_target = args.release
         if args.action == "rollback":
@@ -647,6 +724,9 @@ install_file "$backup/service.conf.new" /etc/mybot-rv1126b.conf 600
             rollback_script += f"{SERVICE} stop >/dev/null 2>&1 || exit 80\n"
             rollback_script += switch_release(rollback_target, None, args.start)
             output += adb.shell(rollback_script)
+        if args.start:
+            selected = package["name"] if args.action == "deploy" else rollback_target
+            print(wait_for_application(adb, selected, settings.get("video", False)).strip())
         adb.shell("rmdir /run/mybot-deploy.lock\n")
         values = {"tag": tag, "backup": DEVICE_ROOT + "/backups/" + tag,
                   "package_sha256": package["sha256"] if package else None,

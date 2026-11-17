@@ -15,7 +15,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("deployment", ROOT / "scripts/deploy-rv1126b.py")
@@ -541,6 +541,111 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("capabilities=ready", scripts[0])
         self.assertIn("--version", scripts[-1])
         self.assertFalse(any("S99mybot stop" in script for script in scripts))
+        receipt.assert_not_called()
+
+    def status_fixture(self, *, state='ready', service='running', version='0.4.0',
+                       alive=True, wrong_executable=False, mode=0o600, expected=None, video=None):
+        root = self.base / 'installation'
+        release = root / 'releases' / self.name
+        (release / 'bin').mkdir(parents=True)
+        (root / 'current').symlink_to('releases/' + self.name)
+        executable = release / 'bin/mybot-rv1126b'
+        executable.write_text('fixture application\n')
+        proc = self.base / 'proc/123'
+        proc.mkdir(parents=True)
+        (proc / 'exe').symlink_to(executable if not wrong_executable else self.base / 'other-application')
+        runtime = self.base / 'runtime'
+        runtime.mkdir(mode=0o700)
+        status = runtime / 'application.status'
+        status.write_text('version=' + version + '\npid=123\nstate=' + state + '\n')
+        status.chmod(mode)
+        service_script = self.base / 'service'
+        service_script.write_text('#!/bin/sh\nprintf "%s\\n" ' + shlex.quote(service) + '\n')
+        service_script.chmod(0o755)
+        with patch.object(deployment, 'DEVICE_ROOT', str(root)), \
+                patch.object(deployment, 'SERVICE', str(service_script)):
+            script = deployment.status_script(expected, video)
+        script = script.replace('/run/mybot-rv1126b', str(runtime)).replace('/proc/', str(self.base / 'proc') + '/')
+        metadata = shlex.quote(sys.executable) + ' -c ' + shlex.quote(
+            "import os,sys; p=os.stat(sys.argv[-1]); "
+            "print(sys.argv[-2].replace('%u','0').replace('%a','%o' % (p.st_mode & 0o777))"
+            ".replace('%h',str(p.st_nlink)).replace('%s',str(p.st_size)))")
+        prefix = ('set -eu\nid() { printf "0\\n"; }\nstat() { ' + metadata + ' "$@"; }\n'
+                  'kill() { return ' + ('0' if alive else '1') + '; }\n')
+        before = status.read_bytes()
+        result = subprocess.run(['sh', '-s'], input=prefix + script, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(status.read_bytes(), before)
+        return dict(line.split('=', 1) for line in result.stdout.splitlines())
+
+    def test_status_preserves_supervisor_state_and_distinguishes_degraded_application(self):
+        for service, state, health in (('running', 'ready', 'ready'), ('backoff', 'ready', 'not_ready'),
+                                        ('running', 'wifi_error', 'degraded'), ('running', 'ap', 'degraded'),
+                                        ('running', 'waiting_network', 'degraded'), ('running', 'pairing', 'degraded'),
+                                        ('running', 'starting_services', 'started'), ('running', 'starting', 'not_ready'),
+                                        ('running', 'failed', 'not_ready')):
+            with self.subTest(service=service, state=state), tempfile.TemporaryDirectory(dir=self.base) as temporary, \
+                    patch.object(self, 'base', Path(temporary)):
+                result = self.status_fixture(state=state, service=service)
+                self.assertEqual(result['service'], service)
+                self.assertEqual(result['application_state'], state)
+                self.assertEqual(result['application_health'], health)
+
+    def test_status_rejects_stale_wrong_release_profile_or_unsafe_application_status(self):
+        for options in ({'alive': False}, {'version': '0.3.0'}, {'wrong_executable': True},
+                        {'mode': 0o644}, {'expected': 'mybot-rv1126b-0.4.1-aarch64'}, {'video': True}):
+            with self.subTest(options=options), tempfile.TemporaryDirectory(dir=self.base) as temporary, \
+                    patch.object(self, 'base', Path(temporary)):
+                result = self.status_fixture(**options)
+                self.assertEqual(result['application_health'], 'not_ready')
+
+    def test_start_health_accepts_verified_offline_state_after_backoff(self):
+        adb = Mock()
+        adb.shell.side_effect = ['service=backoff\napplication_health=not_ready\n',
+                                 'service=running\napplication_verified=yes\napplication_health=degraded\n'
+                                 'application_state=wifi_error\n']
+        with patch.object(deployment.time, 'sleep'):
+            result = deployment.wait_for_application(adb, self.name, False)
+        self.assertIn('application_state=wifi_error', result)
+        self.assertEqual(adb.shell.call_count, 2)
+
+    def test_start_health_times_out_for_supervisor_without_verified_application(self):
+        adb = Mock()
+        adb.shell.return_value = 'service=running\napplication_verified=no\napplication_health=not_ready\n'
+        with self.assertRaisesRegex(RuntimeError, 'verified local startup'):
+            deployment.wait_for_application(adb, self.name, False, timeout=0)
+
+    def test_adb_health_timeout_keeps_sensitive_command_and_input_out_of_error(self):
+        failure = subprocess.TimeoutExpired(['adb', '-s', 'private-serial'], 5,
+                                           output='private-token', stderr='private-password')
+        with patch.object(deployment.subprocess, 'run', side_effect=failure):
+            with self.assertRaisesRegex(RuntimeError, 'timed out') as error:
+                deployment.Adb(serial='private-serial').shell('private-password', timeout=5)
+        self.assertNotIn('private-', str(error.exception))
+
+    def test_status_remains_available_when_deployment_capabilities_are_broken(self):
+        with patch.object(deployment, 'Adb') as adb_class, \
+                patch.object(deployment, 'capability_preflight', side_effect=AssertionError('must not preflight')), \
+                redirect_stdout(io.StringIO()) as output:
+            adb_class.return_value.shell.return_value = 'service=backoff\napplication_state=unavailable\n'
+            self.assertEqual(deployment.main(['status']), 0)
+        self.assertIn('service=backoff', output.getvalue())
+
+    def test_failed_start_health_keeps_transaction_for_inspection(self):
+        path, checksum = self.archive()
+        settings = self.base / 'settings.json'
+        settings.write_text(json.dumps(self.settings))
+        settings.chmod(0o600)
+        with patch.object(deployment, 'Adb') as adb_class, patch.object(deployment, 'receipt') as receipt, \
+                patch.object(deployment, 'wait_for_application', side_effect=RuntimeError('startup failed')) as wait, \
+                patch('sys.stderr', new_callable=io.StringIO):
+            adb = adb_class.return_value
+            adb.shell.return_value = ''
+            with self.assertRaises(SystemExit), redirect_stdout(io.StringIO()):
+                deployment.main(['deploy', '--package', str(path), '--sha256', checksum,
+                                 '--settings', str(settings), '--tag', 'fixture', '--execute', '--start'])
+        wait.assert_called_once_with(adb, self.name, False)
+        self.assertFalse(any(call.args[0] == 'rmdir /run/mybot-deploy.lock\n' for call in adb.shell.call_args_list))
         receipt.assert_not_called()
 
     def test_private_settings_permissions_are_enforced(self):

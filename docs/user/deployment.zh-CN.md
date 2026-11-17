@@ -74,6 +74,8 @@ python3 scripts/deploy-rv1126b.py deploy --serial SERIAL \
 
 预览只输出脱敏计划；不会执行 ADB。确认包和计划后，将 `--dry-run` 改为 `--execute`。首次导入回退包时再提供 `--rollback-package PATH` 与 `--rollback-sha256 SHA256`。默认安装完成后保持服务停止，由操作者检查配置与网络策略后启动；只有显式加 `--start` 才在版本切换后启动，不自动重启设备。
 
+`--start` 最多等待 30 秒核对应用版本、PID 存活、实际可执行路径和装配后的状态，单次 ADB 健康查询最多 5 秒。`ready` 表示可对话，`started` 表示已进入 SDK 启动流程，`degraded` 表示本地应用已启动但仍处于配网、等待网络/时钟、绑定、离线或 `wifi_error` 等状态；后者会如实显示，不强制等待云端 ready。健康检查失败保留部署锁供检查，不会打印成功回执或自动回退。
+
 写入顺序为：只读平台/能力/身份检查 → 设备内完整备份 → 上传及再次校验 → 解包为独立 release → 用选定 profile 执行无硬件访问的 `--version` 加载检查 → 再核对身份 → 停止旧服务 → 安装稳定服务配置 → 原子切换链接。停止命令失败、旧进程仍占用或校验失败时不继续。保留 ALSA 配置文件，不禁用 chronyd、ADB 或电源服务。每次服务启动前，`audio-prepare.sh` 通过 `amixer cset` 设置并读回核对 `ACodec_LP Digital Gain Volume=0`、`ACodec_LP PGA Gain Volume=23` 两项采集控制；这会修改声卡的运行时 mixer 状态，不修改播放控制或写入 ALSA 配置文件。
 
 原 `botstation-device` 配置改为 `BOTSTATION_ENABLED=0`，其 `S99botstation-device` 移入 `/etc/mybot-rv1126b/disabled/`，避免开机重复占用。系统 dnsmasq 配置限制为 `interface=usb0`、`bind-dynamic`，保留现有 USB 监听地址与 DHCP 范围，USB 接口尚无 IPv4 时也不会抢占 AP 地址。dhcpcd 增加 `denyinterfaces mbap*`，防止其接管临时 AP；网络租约 hook 安装到 `/lib/dhcpcd/dhcpcd-hooks/99-mybot-lease`（0644），运行记录目录 `/run/mybot-network/leases` 为 0700。操作者在确认连接条件后分别受控重载：
@@ -93,6 +95,8 @@ adb -s SERIAL shell /etc/init.d/S99mybot start
 hook 原子生成 `/run/mybot-network/leases/wlan0.lease`（0600），记录租约世代、关联与 IPv4 状态，不包含密码、PSK 或 token。每条命令都应成功后再继续；不要全局 kill 网络、授时或系统服务。部署工具的 `--start` 不代替策略重载和租约检查。
 
 ## 状态、回退与故障处理
+
+`status` 分别输出实际 `service` 状态和应用的 version/pid/state、`application_verified`、`application_health`。监督器处于 `backoff` 时不会显示为 running；陈旧状态、错误版本/profile、PID 不存活或执行路径不属于当前 release 时不会通过健康确认。此查询独立于安装能力预检，便于在运行库或板级依赖损坏时诊断。
 
 ```sh
 python3 scripts/deploy-rv1126b.py status --serial SERIAL
