@@ -7,6 +7,7 @@ import gzip
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tarfile
 import tempfile
@@ -29,6 +30,7 @@ DATA_ASSETS = {'assets/service/mybot-rv1126b.conf': 'packaging/service/mybot-rv1
 LICENSES = [
     ("LICENSE", "project-APACHE-2.0.txt"),
     ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
+    ("docs/dependencies/licensing.md", "DEPENDENCY_LICENSING.md"),
     ("vendor/mybot/LICENSE", "mybot-LICENSE.txt"),
     ("vendor/mybot/THIRD_PARTY_NOTICES.md", "mybot-THIRD_PARTY_NOTICES.md"),
     ("vendor/aosl/LICENSE", "aosl-LICENSE.txt"),
@@ -101,6 +103,25 @@ def example_environment(root, language):
             raise ValueError("Expected exactly one " + label + " placeholder in example.env template")
         template = template.replace(placeholder, value)
     return template
+
+
+def runtime_notice(root, name):
+    """Retarget project-owned notice links; retain every original statement."""
+    root = Path(root).resolve()
+    source = root / name
+    packaged = dict(LICENSES)
+
+    def link(match):
+        target = match[1]
+        if target.startswith(("https://", "http://", "#", "mailto:")):
+            return match[0]
+        relative = str((source.parent / target).resolve().relative_to(root))
+        destination = packaged.get(relative)
+        if destination is None:
+            destination = "https://github.com/junlon2006/mybot-rv1126b/blob/dev/" + relative
+        return "](" + destination + ")"
+
+    return re.sub(r"\]\(([^)]+)\)", link, source.read_text())
 
 
 def package(root, args):
@@ -185,10 +206,14 @@ def package(root, args):
         (staging / "run.sh").write_text(launcher)
         (staging / "run.sh").chmod(0o755)
         (staging / "example.env").write_text(environment)
-        shutil.copyfile(root / "packaging/README.zh-CN.md", staging / "README.zh-CN.md")
+        readme = "README.en.md" if args.language == "en-US" else "README.zh-CN.md"
+        shutil.copyfile(root / "packaging" / readme, staging / readme)
         (staging / "licenses").mkdir()
         for source, filename in LICENSES:
-            shutil.copyfile(root / source, staging / "licenses" / filename)
+            if source in ("THIRD_PARTY_NOTICES.md", "docs/dependencies/licensing.md"):
+                (staging / "licenses" / filename).write_text(runtime_notice(root, source))
+            else:
+                shutil.copyfile(root / source, staging / "licenses" / filename)
         checksums = [digest(path) + "  " + str(path.relative_to(staging))
                      for path in sorted(staging.rglob("*")) if path.is_file()]
         (staging / "SHA256SUMS").write_text("\n".join(checksums) + "\n")

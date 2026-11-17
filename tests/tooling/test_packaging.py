@@ -44,6 +44,7 @@ class PackagingTests(unittest.TestCase):
         self.write(self.root / "packaging/run.sh", 'case "${RV1126B_VIDEO:-0}" in\n0) :;;\n1) :;;\nesac\n')
         self.write(self.root / "packaging/example.env", (ROOT / "packaging/example.env").read_text())
         self.write(self.root / "packaging/README.zh-CN.md", "fixture guide\n")
+        self.write(self.root / "packaging/README.en.md", "English fixture guide\n")
         for source in packager.EXECUTABLE_ASSETS.values():
             self.write(self.root / source, "#!/bin/sh\nexit 0\n")
         for source in packager.DATA_ASSETS.values():
@@ -247,6 +248,55 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "valid JSON"):
             packager.package(self.root, self.args)
         self.assertFalse(self.args.output_dir.exists())
+
+    def test_runtime_readme_matches_package_language_and_is_checksummed(self):
+        for language, readme, other in (("zh-CN", "README.zh-CN.md", "README.en.md"),
+                                       ("en-US", "README.en.md", "README.zh-CN.md")):
+            with self.subTest(language=language):
+                self.args.language = language
+                self.args.output_dir = self.base / ("readme-" + language)
+                if language == "en-US":
+                    self.args.voice_build = self.create_build("voice-en", False, language)
+                    self.args.video_build = self.create_build("video-en", True, language)
+                destination, archive, _ = packager.package(self.root, self.args)
+                expected = (self.root / "packaging" / readme).read_bytes()
+                self.assertEqual((destination / readme).read_bytes(), expected)
+                self.assertFalse((destination / other).exists())
+                checksums = dict((name, checksum) for checksum, name in
+                                 (line.split("  ", 1) for line in
+                                  (destination / "SHA256SUMS").read_text().splitlines()))
+                self.assertEqual(checksums[readme], metadata.digest(destination / readme))
+                with tarfile.open(archive) as stream:
+                    self.assertEqual(stream.extractfile(destination.name + "/" + readme).read(), expected)
+
+    def test_packaged_authorization_preserves_text_and_resolves_source_links(self):
+        statement = ('Official statement. [Project](../../LICENSE) and [AOSL](../../vendor/aosl/LICENSE).\n'
+                     '[Notices](../../THIRD_PARTY_NOTICES.md), [RTSA](RTSA_SOURCE.txt), '
+                     '[Provenance](../../VENDORED_SOURCES.md).\n'
+                     '[Business](https://www.shengwang.cn/contact-sales/).\n')
+        self.write(self.root / 'docs/dependencies/licensing.md', statement)
+        root_notice = '[Terms](vendor/aosl/LICENSE), [font inputs](src/ui/fonts/sources.json), [source](VENDORED_SOURCES.md).\n'
+        original_vendor_notice = '[Original upstream link](../aosl/LICENSE).\n'
+        self.write(self.root / 'THIRD_PARTY_NOTICES.md', root_notice)
+        self.write(self.root / 'vendor/mybot/THIRD_PARTY_NOTICES.md', original_vendor_notice)
+        for build in (self.voice, self.video):
+            self.refresh_source_marker(build)
+            self.seal(build)
+        destination, archive, _ = packager.package(self.root, self.args)
+        filename = 'licenses/DEPENDENCY_LICENSING.md'
+        actual = (destination / filename).read_text()
+        strip_targets = lambda text: re.sub(r'\]\([^)]+\)', ']()', text)
+        self.assertEqual(strip_targets(statement), strip_targets(actual))
+        self.assertIn('https://www.shengwang.cn/contact-sales/', actual)
+        self.assertIn('https://github.com/junlon2006/mybot-rv1126b/blob/dev/VENDORED_SOURCES.md', actual)
+        packaged_root_notice = (destination / 'licenses/THIRD_PARTY_NOTICES.md').read_text()
+        self.assertEqual(strip_targets(root_notice), strip_targets(packaged_root_notice))
+        self.assertEqual((destination / 'licenses/mybot-THIRD_PARTY_NOTICES.md').read_text(), original_vendor_notice)
+        for link in re.findall(r'\]\(([^)]+)\)', actual + packaged_root_notice):
+            if not link.startswith('https://'):
+                self.assertTrue((destination / 'licenses' / link).is_file(), link)
+        with tarfile.open(archive) as stream:
+            self.assertEqual(stream.extractfile(destination.name + '/' + filename).read(), actual.encode())
 
     def test_example_environment_matches_each_package_and_is_reproducible(self):
         for language, server in (("zh-CN", "https://botstation.shengwang.cn/api"),
