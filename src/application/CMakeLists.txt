@@ -45,19 +45,10 @@ add_custom_target(mybot-artifacts ALL
         --output "${PROJECT_BINARY_DIR}/abi-report.json"
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/build-manifest.py" --build-dir "${PROJECT_BINARY_DIR}"
     DEPENDS mybot-rv1126b VERBATIM)
-install(TARGETS mybot-rv1126b RUNTIME DESTINATION bin)
-install(TARGETS mybot-supervisor RUNTIME DESTINATION bin)
 add_custom_target(mybot-supervisor-artifacts ALL
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/check-target-elf.py"
         "$<TARGET_FILE:mybot-supervisor>" --library-root "${RV1126B_STAGING}"
         --output "${PROJECT_BINARY_DIR}/abi-report-supervisor.json"
     DEPENDS mybot-supervisor VERBATIM)
-install(FILES "${AGORA_RTC_LIBRARY}" DESTINATION lib)
-install(DIRECTORY "${PROJECT_SOURCE_DIR}/vendor/mybot/assets/locales" DESTINATION assets)
-install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/wifi/udhcpc.script" DESTINATION assets/wifi)
-install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/time/sync-busybox.sh" DESTINATION assets/time)
-install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/network/99-mybot-lease" DESTINATION assets/network)
-install(PROGRAMS "${PROJECT_SOURCE_DIR}/packaging/service/S99mybot"
-    "${PROJECT_SOURCE_DIR}/packaging/service/run-service.sh"
-    "${PROJECT_SOURCE_DIR}/packaging/service/audio-prepare.sh" DESTINATION assets/service)
-install(FILES "${PROJECT_SOURCE_DIR}/packaging/service/mybot-rv1126b.conf" DESTINATION assets/service)
+
+# scripts/package-rv1126b.py owns the complete runtime bundle layout.

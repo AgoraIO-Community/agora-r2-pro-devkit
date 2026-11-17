@@ -14,6 +14,8 @@
 
 ## 生成候选包
 
+完整运行包由 `scripts/package-rv1126b.py` 统一装配和校验，普通 `cmake --install` 不安装应用运行环境。CMake 负责程序与 ABI/构建 manifest，打包脚本负责入口、运行库、资源、许可及摘要，避免维护两套不一致的交付布局。
+
 先执行依赖检查、双语/UBSan、所选目标构建与 ABI 检查，详见[测试](testing.zh-CN.md)。默认中文全配置包：
 
 ```sh
