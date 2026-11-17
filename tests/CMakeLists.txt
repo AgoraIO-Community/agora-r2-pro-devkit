@@ -97,7 +97,7 @@ target_include_directories(test-network-lifecycle PRIVATE support/mocks
 target_link_libraries(test-network-lifecycle PRIVATE mybot::public_headers Threads::Threads)
 add_test(NAME network-lifecycle COMMAND test-network-lifecycle)
 
-foreach(part backend portal service profiles)
+foreach(part backend process portal service profiles)
     add_executable(test-wifi-${part} unit/test_wifi_${part}.c)
     target_include_directories(test-wifi-${part} PRIVATE "${support_dir}"
         "${platform_root}/src/services/wifi")

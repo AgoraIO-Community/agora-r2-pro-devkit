@@ -330,3 +330,11 @@ Wi-Fi 运行实现及对应测试已迁移为 C99。公开 `mybot_platform/wifi.
 | --- | --- |
 | `mybot-rv1126b-0.5.2-aarch64.tar.gz` | `525a1182ab3d707a463ad7a116139bf6e24aa6eee255983eb1dcd78de6dcd212` |
 | `mybot-rv1126b-0.5.2-en-US-aarch64.tar.gz` | `3efe81c883ecc059a3fb7b935561bf8b021da9f378362786d31b3601c108b876` |
+
+## 源码审查修正：Wi-Fi 自有进程组回收（R01）
+
+2026-11-17，Wi-Fi helper 使用 `waitid(WNOWAIT)` 保留组长 PID，发送最终组清理信号后再回收组长。组长自然退出或在 TERM 期间退出时，仍清理同组后代，并保留组长实际退出码；`ECHILD` 表明等待所有权已经丢失时，不再向缓存 PID/PGID 发送信号。
+
+- macOS 中文与 UBSan 均构建 `test-wifi-process`、`test-wifi-backend`，每套对应 CTest 2/2 通过。新增真实进程组夹具覆盖组长先退出、TERM handler 退出、组长和后代忽略 TERM、命令成功/失败后后代清理及退出码保留。信号调用探针确认已被外部回收的 PID 和非子进程句柄不触发任何信号。
+- 固定 clang-format 11 的质量门禁及 `git diff --check` 通过。首次夹具使用 macOS 不存在的 `/bin/true` 导致启动断言失败，改用测试程序自身的退出模式后，两套专项通过。
+- 本轮仅验证主机生命周期逻辑，未交叉构建、访问设备或执行部署，不继承旧包的真机验收。
