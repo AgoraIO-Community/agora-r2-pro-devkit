@@ -13,7 +13,11 @@ extern "C" {
 
 typedef int (*rv1126b_present_fn)(const uint32_t *canvas, const rv1126b_rect_t *area, void *user);
 
-/* One process-wide view. Every function is called by its single owner thread. */
+/* One process-wide view. Every function runs on its single owner thread.
+ * Create returns 0/-1; present/user are borrowed until destroy. Content/status
+ * updates are copied. The canvas is borrowed until destroy and cannot be freed
+ * or modified by callers. Present consumes its borrowed rectangle/canvas during
+ * the call; failures are exposed by failed(). Destroy tolerates partial create. */
 int rv1126b_renderer_create(rv1126b_present_fn present, void *user, uint32_t now);
 
 void rv1126b_renderer_update(const mybot_lcd_content_t *content,

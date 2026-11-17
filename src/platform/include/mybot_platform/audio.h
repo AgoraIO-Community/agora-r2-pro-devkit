@@ -10,6 +10,7 @@ extern "C" {
 
 /* Product prompts and the SDK must hold playback ownership exclusively. */
 const mybot_audio_playback_ops_t *rv1126b_playback_ops(void);
+
 /* Finish accepted prompt PCM before stop drops the device queue. Nonblocking
  * ALSA calls are retried for at most timeout_ms (1..1000); returns 0 or -1.
  * The caller owns the context throughout; start again before further writes. */

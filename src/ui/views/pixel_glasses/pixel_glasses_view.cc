@@ -675,8 +675,8 @@ int mybot_pixel_glasses_replay_expression(mybot_expression_t expression) {
 }
 
 void mybot_lvgl_view_destroy(void) {
-    /* The display owner holds the LVGL lock, excluding timers and drawing while
-     * retained points, event userdata and static-label buffers are released. */
+    /* The owning UI worker serializes timer handling, drawing and destruction.
+     * Remove the timer before releasing retained points and callback data. */
     if (!s_view) {
         return;
     }

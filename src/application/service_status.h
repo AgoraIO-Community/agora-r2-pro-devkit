@@ -2,9 +2,17 @@
 #ifndef RV1126B_SERVICE_STATUS_H
 #define RV1126B_SERVICE_STATUS_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Product-thread-only publication. Unset MYBOT_STATUS_PATH disables all I/O.
  * The parent must be an owned private directory. No device identity or secrets
  * are included. Failure preserves the previous complete record. */
 int rv1126b_service_status(const char *state);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

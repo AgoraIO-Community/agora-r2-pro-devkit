@@ -41,6 +41,7 @@ typedef enum {
 /* Stable uppercase simulator name, or NULL for an invalid ID. The returned
  * storage is immutable and valid for the process lifetime. */
 const char *mybot_expression_name(mybot_expression_t expression);
+
 /* Accept an exact simulator name, ignoring ASCII letter case. */
 int mybot_expression_from_name(const char *name, mybot_expression_t *expression);
 
