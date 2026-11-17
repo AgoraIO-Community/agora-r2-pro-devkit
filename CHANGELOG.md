@@ -5,6 +5,7 @@ Changes to project-maintained code follow Semantic Versioning. Validation eviden
 ## 0.5.2 — Unreleased
 
 - Route manual Wi-Fi setup exclusively through the UI settings menu; remove touch and Menu holds, terminal `w`, and the forced-provisioning CLI option. Automatic offline setup remains available.
+- Select the default service by UI build language: Shengwang for `zh-CN` and Agora for `en-US`, with CLI and environment overrides taking precedence.
 
 ## 0.5.1 — Unreleased
 

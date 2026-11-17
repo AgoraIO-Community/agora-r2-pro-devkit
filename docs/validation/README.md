@@ -53,6 +53,7 @@
 | 0.5.1，设置页独占手动配网 | macOS / Ubuntu / 交叉构建 | 两种宿主中文、英文、UBSan 最终各 24/24，含 181 项工具测试；Ubuntu ASan + UBSan 输入及配置专项 3/3；四套目标构建和双语包检查通过 | 本轮未更新设备，物理长按不进入 AP 与设置页配网待新包真机验收；macOS 英文首轮一项既有计时断言失败，后续复核通过，详情见下文 |
 | 0.5.2，设置页独占手动配网 | 授权设备更新与真机回归 | 安装独立版本并保留 0.5.1 回退；4.2 秒触屏/Menu 合成事件不配网、不切换会话，设置短按进入 AP；当前网络提交保存、关闭热点及 SDK 自动恢复 ready 通过；绑定和网络配置字节保留 | 触屏/按键使用 evdev 注入，HTTP 客户端位于设备本地；未代替手机无线、DHCP/captive browser 或物理手感测试 |
 | 0.5.2，zh-CN/en-US × voice/video | 构建与版本元数据检查 | 四套目标构建、ABI 与双语包 63 项校验通过；版本更新后 macOS 中文、UBSan 输入/配置专项各 3/3 | 功能实现的两宿主完整回归见上一批次；本轮仅中文语音配置在设备运行 |
+| 0.5.2，按构建语言选择默认服务 | macOS 配置与打包专项、四套目标构建 | 中文、英文、UBSan 配置回归及帮助输出通过；32 项打包测试通过；四套目标 ABI、双语包校验与默认地址检查通过 | 本轮未连接设备或验证国际服务实际业务；新包与已部署的同版本包分别记录 |
 | 公共 CI / 其他宿主组合 | CI / 环境 | 以仓库对应提交实际 workflow 运行记录为准 | 配置存在不等于已运行通过 |
 
 ## 保留的基线制品
@@ -313,3 +314,18 @@ Wi-Fi 运行实现及对应测试已迁移为 C99。公开 `mybot_platform/wifi.
 | --- | --- |
 | `mybot-rv1126b-0.5.2-aarch64.tar.gz` | `4850254ae3fec97a3bca34d6b878623c359373f454161dc1d29a0610f55aad5d` |
 | `mybot-rv1126b-0.5.2-en-US-aarch64.tar.gz` | `2dcceccc6d6f5303e301642041424ae936afdeeaf11a08dc52379cb473e958f8` |
+
+## 0.5.2 按构建语言选择默认服务
+
+2026-11-17，未显式配置服务地址时，中文构建默认使用 `https://botstation.shengwang.cn/api`，英文构建默认使用 `https://botstation.agora.io/api`。配置与 `--help` 使用相同默认值，双语包的 `example.env` 按构建语言生成。优先级保持 `--server` > `RV1126B_SERVER` > 构建默认值，运行时 `MYBOT_LOCALE` 不切换服务。
+
+- macOS 的 `build/settings-menu/host-{zh,en,ubsan}` 分别构建 `test-config` 并执行 `app-config`，每套 1/1 通过；另执行测试程序检查帮助中的默认地址。回归覆盖环境变量与 CLI 优先级，以及提示音语言覆盖不影响服务选择。
+- `python3.10 -m unittest discover -s tests/tooling -p test_packaging.py -v` 共 32 项通过，包含双语示例实际导出地址、模板缺失/重复拒绝、归档校验及可重复打包。质量、版本一致性、依赖与 `git diff --check` 通过。
+- 四套 AArch64 构建、ABI 与双语 all-profile 包检查通过。语音依赖 9 项、视频 11 项、监督器 2 项，均无错误；两包各 63 项 SHA256 校验通过，归档与目录内容一致，示例和 ELF 中的默认服务均与构建语言对应。证据保存在 `build/language-server-default/`。
+
+制品位于 `dist/language-server-default/`，来自 `dev@cfc8051` 上的未提交工作区，四套构建来源摘要为 `134cdf22632db6fbcca01040faf63d438a6b5659a2944680df235452262a7f2c`。本节在构建后补充，制品身份以包内 manifest 为准。本轮未连接或更新设备，不继承此前同版本制品的真机验收。
+
+| 归档 | SHA256 |
+| --- | --- |
+| `mybot-rv1126b-0.5.2-aarch64.tar.gz` | `525a1182ab3d707a463ad7a116139bf6e24aa6eee255983eb1dcd78de6dcd212` |
+| `mybot-rv1126b-0.5.2-en-US-aarch64.tar.gz` | `3efe81c883ecc059a3fb7b935561bf8b021da9f378362786d31b3601c108b876` |

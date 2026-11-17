@@ -16,6 +16,11 @@ static const char *environment(const char *name, const char *fallback) {
     return value ? value : fallback;
 }
 
+static const char *default_server(void) {
+    return strcmp(RV1126B_LOCALE, "en-US") == 0 ? "https://botstation.agora.io/api"
+                                                : "https://botstation.shengwang.cn/api";
+}
+
 static int unsigned_value(const char *value, unsigned long max, unsigned int *output) {
     if (!value[0] || strspn(value, "0123456789") != strlen(value))
         return -1;
@@ -31,7 +36,7 @@ static int unsigned_value(const char *value, unsigned long max, unsigned int *ou
 static void usage(const char *program) {
     printf(
         "Usage: %s [options]\n"
-        "  --server HTTPS_URL       default: https://botstation.shengwang.cn/api\n"
+        "  --server HTTPS_URL       default: %s\n"
         "  --device-id ID           explicit identity, at most 32 characters\n"
         "  --identity-interface IF  derive from permanent factory MAC; default: CPU Serial HMAC\n"
         "  --capture-device PCM     default: botstation_capture\n"
@@ -55,7 +60,7 @@ static void usage(const char *program) {
         "RV1126B_WIFI_INTERFACE, MYBOT_ASSETS_DIR, MYBOT_LOCALE,\n"
         "RV1126B_TIME_SYNC_TIMEOUT, RV1126B_TIME_SYNC_HELPER;\n"
         "stdin s/q/p/u/d/e then Enter; open Settings > Wi-Fi setup for manual provisioning.\n",
-        program);
+        program, default_server());
 }
 
 int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out) {
@@ -76,7 +81,7 @@ int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out) {
         .talk_key = RV1126B_BOARD_TALK_KEY,
         .enable_ui = true,
     };
-    const char *server = environment("RV1126B_SERVER", "https://botstation.shengwang.cn/api");
+    const char *server = environment("RV1126B_SERVER", default_server());
     const char *device_id = environment("RV1126B_DEVICE_ID", "");
     const char *identity_interface = "";
     const char *drm = RV1126B_BOARD_DRM;

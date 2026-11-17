@@ -27,7 +27,7 @@ sha256sum -c SHA256SUMS
 
 UI 为 640×480，默认旋转 270°到物理 480×640 屏；调整方向可加 `--rotation 90`。语音启动保留已有可用网络；离线时先尝试已保存网络，失败则进入 AP 配网。手机连接开放热点 `mybot-xxxx`，打开 `http://192.168.4.1/`，选择 2.4 GHz Wi-Fi 或手动输入隐藏 SSID，输入密码并等待连接成功。失败可重试，成功后关闭热点并恢复业务。未绑定时显示并播报配对码。认领后短触（50–999 ms）或 Menu 短按开始/挂断，左右键调音量。手动配网仅通过右上角齿轮中的“设备配网”进入，会先结束会话；等待网络或绑定时也可操作设置。长按触屏或 Menu 键不会启动会话或配网。终端 `s/q/p/u/d/e` 加 Enter 分别为开始、挂断、重新配对、音量增/减和退出；Ctrl-C 也可退出。
 
-默认服务为 `https://botstation.shengwang.cn/api`，`--server HTTPS_URL` 可覆盖。服务地址、身份配置及 KV 路径保持一致时沿用原绑定。默认身份由 CPU Serial 稳定派生；需要显式身份可用 `--device-id` 或首次绑定前设置 `--identity-interface`，不要在升级时随意变更。
+默认服务按 UI 构建语言选择：`zh-CN` 使用 `https://botstation.shengwang.cn/api`，`en-US` 使用 `https://botstation.agora.io/api`。优先级为 `--server HTTPS_URL` > `RV1126B_SERVER` > 构建语言默认值；运行时 `MYBOT_LOCALE` 只切换提示音，不改变默认服务。受监督部署中已显式配置的服务地址继续优先。服务地址、身份配置及 KV 路径保持一致时沿用原绑定。默认身份由 CPU Serial 稳定派生；需要显式身份可用 `--device-id` 或首次绑定前设置 `--identity-interface`，不要在升级时随意变更。
 
 ## 系统时间
 

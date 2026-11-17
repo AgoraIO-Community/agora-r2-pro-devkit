@@ -90,11 +90,17 @@ def deterministic_archive(directory, archive, epoch):
 
 
 def example_environment(root, language):
+    servers = {"zh-CN": "https://botstation.shengwang.cn/api",
+               "en-US": "https://botstation.agora.io/api"}
+    if language not in servers:
+        raise ValueError("Unsupported example.env language: " + str(language))
     template = (Path(root) / "packaging/example.env").read_text()
-    placeholder = "@UI_LANGUAGE@"
-    if template.count(placeholder) != 1:
-        raise ValueError("Expected exactly one UI language placeholder in example.env template")
-    return template.replace(placeholder, language)
+    for placeholder, value, label in (("@UI_LANGUAGE@", language, "UI language"),
+                                      ("@DEFAULT_SERVER@", servers[language], "default server")):
+        if template.count(placeholder) != 1:
+            raise ValueError("Expected exactly one " + label + " placeholder in example.env template")
+        template = template.replace(placeholder, value)
+    return template
 
 
 def package(root, args):
