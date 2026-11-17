@@ -9,6 +9,9 @@ Changes to project-maintained code follow Semantic Versioning. Validation eviden
 - Validate rollback profiles, board prerequisites, startup modes and actual local application health before reporting deployment success.
 - Separate portable build identity from local provenance and current dependency integrity from immutable import history.
 - Centralize product lifecycle, use typed readiness state and document C API ownership and cleanup contracts.
+- Maintain the portal as HTML with fixed failure categories, and generate matching localized runtime/licensing guides.
+- Reproduce bilingual UI images and PDFs using committed fonts and a checked input/output manifest.
+- Enforce complete Conventional Commit messages, document official dependency authorization and add private vulnerability reporting.
 
 This candidate has its own source and artifact identity; it does not replace a differently sourced 0.5.2 installation in place. Hardware acceptance remains separate from host and cross-build checks.
 
