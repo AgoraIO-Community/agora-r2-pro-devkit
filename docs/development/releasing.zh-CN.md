@@ -30,6 +30,8 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 
 中文包附 `README.zh-CN.md`，英文包附 `README.en.md`，分别链接对应语言的完整 PDF。项目自有授权摘要和第三方总声明的包内副本将源码相对链接转换为已附许可文件或 HTTPS 源码链接，正文与官方商务入口保留；vendor 原始许可及 SDK 文档按原字节附带。
 
+部署归档门禁要求应用及监督器 ABI 报告明确包含 `errors=[]`，并将实际 RTSA 运行库逐 profile 与二进制已绑定的 manifest 摘要比较。删除验证结果或替换运行库后重新计算归档摘要，不能代替原有构建/ABI 证据。
+
 归档顺序、所有者和时间固定。默认时间来自 Git HEAD 提交时间（无 Git 时为 0），可用 `SOURCE_DATE_EPOCH` 显式指定。相同输入和时间重复打包应产生相同字节，需选择两个不同且空的输出目录比较，避免覆盖规则影响检查。
 
 ## 正式发布

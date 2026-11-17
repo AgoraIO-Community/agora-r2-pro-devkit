@@ -43,11 +43,13 @@ class DeploymentTests(unittest.TestCase):
                   "board": "rv1126b-test2-rk805b-v10", "ptime_ms": 20}
         source = {"sha256": "a" * 64, "file_count": 1}
         flags = {"c": [], "cxx": [], "exe_link": [], "build_type": "Release"}
+        rtsa = target_elf()
+        dependencies = {"rtsa_sha256": deployment.sha256(rtsa)}
         inputs = {"schema": metadata.MANIFEST_SCHEMA,
                   "config": {**config, "flags_sha256": metadata.json_digest(flags)},
-                  "source": source, "dependencies": {},
+                  "source": source, "dependencies": dependencies,
                   "identity": {"schema": metadata.IDENTITY_SCHEMA, "config": {**config, "flags": flags},
-                               "source": source, "dependencies": {}}}
+                               "source": source, "dependencies": dependencies}}
         marker = ("MYBOT_RV1126B_BUILD_CONFIG:0.4.0;zh-CN;video=0;ptime_ms=20;"
                   "board=rv1126b-test2-rk805b-v10\0MYBOT_RV1126B_SOURCE:" + "a" * 64 +
                   "\0MYBOT_RV1126B_INPUTS:" + metadata.inputs_digest(inputs) + "\0")
@@ -59,7 +61,7 @@ class DeploymentTests(unittest.TestCase):
                     "abi_report_sha256": deployment.sha256(report_bytes),
                     "inputs": inputs}
         self.files = {"bin/mybot-rv1126b": binary, "bin/mybot-supervisor": binary,
-                      "lib/libagora-rtc-sdk.so": target_elf(), "run.sh": b"#!/bin/sh\n",
+                      "lib/libagora-rtc-sdk.so": rtsa, "run.sh": b"#!/bin/sh\n",
                       "abi-report-voice.json": report_bytes,
                       "build-manifest-voice.json": json.dumps(manifest).encode()}
         self.files["abi-report-supervisor.json"] = report_bytes
@@ -171,6 +173,32 @@ class DeploymentTests(unittest.TestCase):
             path, checksum = self.archive(files)
             with self.subTest(filename=filename), self.assertRaises(ValueError):
                 deployment.verify_package(path, checksum)
+
+    def test_abi_reports_require_explicit_empty_error_arrays_after_resealing(self):
+        for report_name, manifest_name in (("abi-report-voice.json", "build-manifest-voice.json"),
+                                           ("abi-report-supervisor.json", "supervisor-manifest.json")):
+            for value in ("missing", None, False):
+                with self.subTest(report=report_name, value=value):
+                    files = dict(self.files)
+                    report = json.loads(files[report_name])
+                    if value == "missing":
+                        report.pop("errors")
+                    else:
+                        report["errors"] = value
+                    files[report_name] = json.dumps(report).encode()
+                    manifest = json.loads(files[manifest_name])
+                    manifest["abi_report_sha256"] = deployment.sha256(files[report_name])
+                    files[manifest_name] = json.dumps(manifest).encode()
+                    path, checksum = self.archive(files)
+                    with self.assertRaisesRegex(ValueError, "ABI"):
+                        deployment.verify_package(path, checksum)
+
+    def test_resealed_archive_cannot_replace_manifest_bound_rtsa_runtime(self):
+        files = dict(self.files)
+        files['lib/libagora-rtc-sdk.so'] += b'replaced runtime'
+        path, checksum = self.archive(files)
+        with self.assertRaisesRegex(ValueError, 'RTSA runtime'):
+            deployment.verify_package(path, checksum)
 
     def test_new_archive_requires_recomputed_portable_inputs_marker(self):
         files = dict(self.files)

@@ -104,7 +104,7 @@ def verify_package(path, expected, legacy=False):
         if report_name not in files:
             raise ValueError("Missing executable ABI report")
         report = json.loads(files[report_name])
-        if (report.get("errors") or report["binary"]["machine"] != 183 or
+        if (report.get("errors") != [] or report["binary"]["machine"] != 183 or
                 report["binary"]["sha256"] != sha256(files[executable]) or
                 "$ORIGIN/../lib" not in report["binary"].get("runpaths", [])):
             raise ValueError("ABI report does not match the AArch64 executable")
@@ -120,6 +120,8 @@ def verify_package(path, expected, legacy=False):
                     manifest["binary_sha256"] != sha256(files[executable]) or
                     manifest["abi_report_sha256"] != sha256(files[report_name])):
                 raise ValueError("Build manifest does not match the selected package")
+            if manifest["inputs"]["dependencies"].get("rtsa_sha256") != sha256(files.get("lib/libagora-rtc-sdk.so", b"")):
+                raise ValueError("RTSA runtime does not match its bound build manifest")
             language = "en-US" if "-en-US-" in root else "zh-CN"
             marker = (f"MYBOT_RV1126B_BUILD_CONFIG:{version};{language};"
                       f"video={int(profile == 'video')};ptime_ms=20;"
@@ -161,7 +163,7 @@ def verify_package(path, expected, legacy=False):
                 source != app_manifest["inputs"]["source"]["sha256"] or
                 manifest["binary_sha256"] != sha256(binary) or
                 manifest["abi_report_sha256"] != sha256(report_bytes) or
-                report.get("errors") or report["binary"]["machine"] != 183 or
+                report.get("errors") != [] or report["binary"]["machine"] != 183 or
                 report["binary"]["sha256"] != sha256(binary) or
                 marker not in binary or source_marker not in binary or
                 inputs_digest(manifest["inputs"], public=True) !=
