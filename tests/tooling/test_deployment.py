@@ -293,6 +293,137 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(calls[-1][1][0], "rmdir /run/mybot-deploy.lock\n")
         self.assertNotIn(self.settings["device_id"], output.getvalue())
 
+    def rollback_fixture(self, *, configured_video=False, requested_video=False,
+                         present_video=False, name=None, version=None, executable_mode=0o755,
+                         symlink=False, configuration_mode=0o600, corrupt=False,
+                         launcher_mode=0o755, exit_status=0):
+        """Execute generated target checks using only a private fake release."""
+        name = name or self.name
+        release = self.base / "releases" / name
+        (release / "bin").mkdir(parents=True)
+        configuration = self.base / "service.conf"
+        configuration.write_text("export RV1126B_VIDEO='" + str(int(configured_video)) + "'\n")
+        configuration.chmod(configuration_mode)
+        launcher = release / "run.sh"
+        launcher.write_text('#!/bin/sh\ncase "${RV1126B_VIDEO:-0}" in\n'
+                            '0) executable=mybot-rv1126b ;;\n'
+                            '1) executable=mybot-rv1126b-video ;;\nesac\n'
+                            'exec "$(dirname "$0")/bin/$executable" "$@"\n')
+        launcher.chmod(launcher_mode)
+        executable = release / "bin" / ("mybot-rv1126b-video" if present_video else "mybot-rv1126b")
+        version = version or ("mybot-rv1126b " + deployment.NAME.fullmatch(name)[1] +
+                              ", MyBot 1.3.0, video=" + str(int(present_video)) + ", UI=zh-CN")
+        executable.write_text("#!/bin/sh\n[ \"$#\" -eq 1 ] && [ \"$1\" = --version ] || exit 91\n"
+                              "printf '%s\\n' " + shlex.quote(version) + "\nexit " + str(exit_status) + "\n")
+        executable.chmod(executable_mode)
+        if symlink:
+            actual = release / "fixture-app"
+            executable.rename(actual)
+            executable.symlink_to(actual)
+        checksums = "".join(deployment.sha256(path.read_bytes()) + "  " +
+                            str(path.relative_to(release)) + "\n"
+                            for path in (launcher, executable))
+        (release / "SHA256SUMS").write_text(checksums)
+        (release / ".archive-sha256").write_text("a" * 64 + "\n")
+        if corrupt:
+            executable.write_text("#!/bin/sh\nexit 92\n")
+        with patch.object(deployment, "DEVICE_ROOT", str(self.base)):
+            script = deployment.rollback_release_check(name, {**self.settings, "video": requested_video})
+        script = script.replace("configuration=/etc/mybot-rv1126b.conf",
+                                "configuration=" + shlex.quote(str(configuration)))
+        # GNU stat is absent on macOS. Emulate target root ownership while still
+        # reading actual fixture permissions; verify checksums using Python.
+        metadata = shlex.quote(sys.executable) + " -c " + shlex.quote(
+            "import os,sys; print('0:%o' % (os.stat(sys.argv[-1]).st_mode & 0o777))")
+        checksum = shlex.quote(sys.executable) + " -c " + shlex.quote(
+            "import hashlib,pathlib,sys; "
+            "entries=[line.split('  ',1) for line in pathlib.Path(sys.argv[-1]).read_text().splitlines()]; "
+            "sys.exit(not all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()==digest "
+            "for digest,name in entries))")
+        prefix = ('set -eu\nstat() { ' + metadata + ' "$@"; }\n'
+                  'sha256sum() { ' + checksum + ' "$@"; }\n')
+        before = {str(path.relative_to(self.base)): path.read_bytes()
+                  for path in self.base.rglob("*") if path.is_file()}
+        result = subprocess.run(["sh", "-s"], input=prefix + script, text=True, capture_output=True)
+        after = {str(path.relative_to(self.base)): path.read_bytes()
+                 for path in self.base.rglob("*") if path.is_file()}
+        self.assertEqual(before, after, "rollback checks must not modify runtime or identity data")
+        self.assertEqual(result.stdout, "", "checks must not expose configuration or version output")
+        return result
+
+    def test_rollback_loads_valid_voice_video_and_legacy_targets_without_writes(self):
+        for video, name in ((False, self.name), (True, self.name + "-video"),
+                            (False, "mybot-rv1126b-0.1.1-aarch64")):
+            with self.subTest(video=video, name=name):
+                result = self.rollback_fixture(configured_video=video, requested_video=video,
+                                               present_video=video, name=name)
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_rollback_rejects_video_configuration_with_voice_only_target(self):
+        result = self.rollback_fixture(configured_video=True, requested_video=True)
+        self.assertEqual(result.returncode, 87, result.stderr)
+
+    def test_rollback_rejects_settings_that_disagree_with_effective_configuration(self):
+        result = self.rollback_fixture(configured_video=True, requested_video=False)
+        self.assertEqual(result.returncode, 86, result.stderr)
+
+    def test_rollback_rejects_unexecutable_or_linked_target(self):
+        for options in ({"executable_mode": 0o644}, {"launcher_mode": 0o644}, {"symlink": True}):
+            with self.subTest(options=options):
+                with tempfile.TemporaryDirectory(dir=self.base) as temporary, \
+                        patch.object(self, "base", Path(temporary)):
+                    result = self.rollback_fixture(**options)
+                self.assertEqual(result.returncode, 87, result.stderr)
+
+    def test_rollback_rejects_unsafe_configuration_before_loading_target(self):
+        result = self.rollback_fixture(configuration_mode=0o644)
+        self.assertEqual(result.returncode, 85, result.stderr)
+
+    def test_rollback_rejects_corrupt_or_wrong_profile_target(self):
+        for options, expected in (({"corrupt": True}, 81),
+                                  ({"exit_status": 1}, 88),
+                                  ({"version": "mybot-rv1126b 0.4.0, MyBot 1.3.0, video=1, UI=zh-CN"}, 88)):
+            with self.subTest(options=options):
+                with tempfile.TemporaryDirectory(dir=self.base) as temporary, \
+                        patch.object(self, "base", Path(temporary)):
+                    result = self.rollback_fixture(**options)
+                self.assertEqual(result.returncode, expected, result.stderr)
+
+    def test_rollback_profile_and_load_check_run_before_backup_and_again_before_stop(self):
+        settings = self.base / "settings.json"
+        settings.write_text(json.dumps(self.settings))
+        settings.chmod(0o600)
+        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt"), \
+                redirect_stdout(io.StringIO()):
+            adb = adb_class.return_value
+            adb.shell.return_value = ""
+            deployment.main(["rollback", "--settings", str(settings), "--release", self.name,
+                             "--tag", "fixture", "--execute"])
+        scripts = [call.args[0] for call in adb.shell.call_args_list]
+        initial = next(i for i, script in enumerate(scripts) if "actual_video=" in script)
+        backup = next(i for i, script in enumerate(scripts) if "tar -C / -czf" in script)
+        switch = next(script for script in scripts if "S99mybot stop" in script)
+        self.assertLess(initial, backup)
+        self.assertLess(switch.index("--version"), switch.index("S99mybot stop"))
+        self.assertLess(switch.index("S99mybot stop"), switch.index(".current-$tag"))
+
+    def test_failed_rollback_precheck_never_backs_up_stops_or_switches(self):
+        settings = self.base / "settings.json"
+        settings.write_text(json.dumps(self.settings))
+        settings.chmod(0o600)
+        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt") as receipt, \
+                patch("sys.stderr", new_callable=io.StringIO):
+            adb = adb_class.return_value
+            adb.shell.side_effect = ["", RuntimeError("target profile mismatch")]
+            with self.assertRaises(SystemExit):
+                deployment.main(["rollback", "--settings", str(settings), "--release", self.name,
+                                 "--tag", "fixture", "--execute"])
+        scripts = [call.args[0] for call in adb.shell.call_args_list]
+        self.assertEqual(len(scripts), 2)
+        self.assertFalse(any("tar -C / -czf" in script or "S99mybot stop" in script or
+                             ".current-$tag" in script for script in scripts))
+        receipt.assert_not_called()
+
     def test_private_settings_permissions_are_enforced(self):
         path = self.base / "settings.json"
         path.write_text(json.dumps(self.settings))
@@ -352,6 +483,7 @@ class DeploymentTests(unittest.TestCase):
         scripts = [deployment.PREFLIGHT, deployment.identity_check(self.settings),
                    deployment.begin_transaction("fixture"), deployment.INSTALL_FILE, deployment.SYSTEM_POLICY,
                    deployment.switch_release(self.name, "mybot-rv1126b-0.1.1-aarch64"),
+                   deployment.rollback_release_check(self.name, self.settings),
                    deployment.status_script()]
         for script in scripts:
             result = subprocess.run(["sh", "-n"], input=script, text=True, capture_output=True)

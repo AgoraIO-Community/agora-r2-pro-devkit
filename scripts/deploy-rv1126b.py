@@ -405,6 +405,44 @@ printf 'current=%s\\n' "$target"
 """
 
 
+def rollback_release_check(name, settings):
+    """Check the preserved service profile and load the target before stopping it."""
+    match = NAME.fullmatch(name)
+    if not match:
+        raise ValueError("Invalid installed release name")
+    video = int(settings.get("video", False))
+    executable = "mybot-rv1126b-video" if video else "mybot-rv1126b"
+    language = "en-US" if "-en-US-" in name else "zh-CN"
+    return f"""
+configuration=/etc/mybot-rv1126b.conf
+[ -f "$configuration" ] && [ ! -L "$configuration" ] &&
+    [ "$(stat -c '%u:%a' "$configuration")" = '0:600' ] || exit 85
+actual_video=$(
+    unset RV1126B_VIDEO
+    . "$configuration"
+    printf '%s\\n' "${{RV1126B_VIDEO:-0}}"
+)
+case "$actual_video" in 0|1) ;; *) exit 86;; esac
+[ "$actual_video" = {video} ] || exit 86
+release={shlex.quote(DEVICE_ROOT + '/releases/' + name)}
+[ -d "$release" ] && [ ! -L "$release" ] || exit 82
+[ -d "$release/bin" ] && [ ! -L "$release/bin" ] || exit 87
+[ -f "$release/.archive-sha256" ] && [ ! -L "$release/.archive-sha256" ] || exit 83
+recorded=$(cat "$release/.archive-sha256")
+[ "${{#recorded}}" = 64 ] || exit 84
+case "$recorded" in *[!0-9a-f]*) exit 84;; esac
+(cd "$release" && sha256sum -c SHA256SUMS >/dev/null) || exit 81
+for executable in "$release/run.sh" "$release/bin/{executable}"; do
+    [ -f "$executable" ] && [ ! -L "$executable" ] && [ -x "$executable" ] || exit 87
+done
+version=$(RV1126B_VIDEO={video} "$release/run.sh" --version 2>/dev/null) || exit 88
+case "$version" in
+    "mybot-rv1126b {match[1]}, MyBot "*", video={video}, UI={language}") ;;
+    *) exit 88;;
+esac
+"""
+
+
 def status_script():
     return f"""
 for item in current previous; do
@@ -490,15 +528,7 @@ def main(argv=None):
                 if not value.startswith("releases/") or not NAME.fullmatch(value[9:]):
                     raise ValueError("No checked previous release is available")
                 rollback_target = value[9:]
-            adb.shell(f"""
-release={shlex.quote(DEVICE_ROOT + '/releases/' + rollback_target)}
-[ -d "$release" ] && [ ! -L "$release" ] || exit 82
-[ -f "$release/.archive-sha256" ] && [ ! -L "$release/.archive-sha256" ] || exit 83
-recorded=$(cat "$release/.archive-sha256")
-[ "${{#recorded}}" = 64 ] || exit 84
-case "$recorded" in *[!0-9a-f]*) exit 84;; esac
-(cd "$release" && sha256sum -c SHA256SUMS >/dev/null) || exit 81
-""")
+            adb.shell(rollback_release_check(rollback_target, settings))
         # Backup completes before uploads, system changes, or link replacement.
         output = adb.shell(begin_transaction(tag))
         if args.action == "deploy":
@@ -533,8 +563,8 @@ install_file "$backup/service.conf.new" /etc/mybot-rv1126b.conf 600
         else:
             rollback_script = f"base={DEVICE_ROOT}\ntag={shlex.quote(tag)}\n"
             rollback_script += identity_check(settings)
+            rollback_script += rollback_release_check(rollback_target, settings)
             rollback_script += f"{SERVICE} stop >/dev/null 2>&1 || exit 80\n"
-            rollback_script += f"(cd {shlex.quote(DEVICE_ROOT + '/releases/' + rollback_target)} && sha256sum -c SHA256SUMS >/dev/null) || exit 81\n"
             rollback_script += switch_release(rollback_target, None, args.start)
             output += adb.shell(rollback_script)
         adb.shell("rmdir /run/mybot-deploy.lock\n")
