@@ -7,6 +7,7 @@ import io
 import json
 from pathlib import Path
 import re
+import shutil
 import shlex
 import struct
 import subprocess
@@ -424,6 +425,99 @@ class DeploymentTests(unittest.TestCase):
                              ".current-$tag" in script for script in scripts))
         receipt.assert_not_called()
 
+    def capability_fixture(self, failure=None):
+        target = self.base / "target"
+        binaries = target / "tools"
+        binaries.mkdir(parents=True)
+        for tool in ("amixer", "ip", "iw", "hostapd", "dnsmasq", "wpa_supplicant", "udhcpc"):
+            executable = binaries / tool
+            executable.write_text("#!/bin/sh\nexit 0\n")
+            executable.chmod(0o755)
+        for tool in ("tr", "awk"):
+            (binaries / tool).symlink_to(shutil.which(tool))
+        amixer = binaries / "amixer"
+        amixer.write_text("#!/bin/sh\nprintf '%s\\n' '; type=INTEGER,access=rw------,values=1,min=0,max=255,step=0'\n")
+        for path in ("sbin/poweroff", "lib/ld-linux-aarch64.so.1"):
+            executable = target / path
+            executable.parent.mkdir(parents=True, exist_ok=True)
+            executable.write_text("fixture executable\n")
+            executable.chmod(0o755)
+        model = target / "proc/device-tree/model"
+        model.parent.mkdir(parents=True)
+        model.write_bytes(b"Rockchip RV1126B TEST2 RK805B V10 Board\0")
+        hooks = target / "lib/dhcpcd/dhcpcd-hooks"
+        hooks.mkdir(parents=True)
+        runtime = target / "lib/libc.so.6"
+        runtime.write_bytes(b"fixture pinned runtime")
+        script = deployment.capability_preflight({"lib/libc.so.6": deployment.sha256(runtime.read_bytes())})
+        if failure == "missing_tool":
+            amixer.unlink()
+        elif failure == "missing_hook":
+            hooks.rmdir()
+        elif failure == "wrong_model":
+            model.write_bytes(b"Another AArch64 device\0")
+        elif failure == "changed_runtime":
+            runtime.write_bytes(b"incompatible runtime")
+        elif failure == "bad_audio_control":
+            amixer.write_text("#!/bin/sh\nprintf '%s\\n' '; type=INTEGER,access=rw------,min=0,max=10'\n")
+        elif failure == "linked_runtime_directory":
+            (target / "run").mkdir()
+            (target / "run/mybot-network").symlink_to(hooks)
+        for prefix in ("/proc/", "/sbin/", "/lib/", "/run/"):
+            script = script.replace(prefix, str(target) + prefix)
+        metadata = shlex.quote(sys.executable) + " -c " + shlex.quote("print(0)")
+        checksum = shlex.quote(sys.executable) + " -c " + shlex.quote(
+            "import hashlib,pathlib,sys; "
+            "entries=[line.strip().split('  ',1) for line in sys.stdin if line.strip()]; "
+            "sys.exit(not all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()==digest "
+            "for digest,name in entries))")
+        prefix = ('set -eu\nPATH=' + shlex.quote(str(binaries)) + '\nstat() { ' + metadata + '; }\n'
+                  'sha256sum() { ' + checksum + '; }\n')
+        before = {str(path.relative_to(target)): path.read_bytes()
+                  for path in target.rglob("*") if path.is_file() and not path.is_symlink()}
+        result = subprocess.run(["sh", "-s"], input=prefix + script, text=True, capture_output=True)
+        after = {str(path.relative_to(target)): path.read_bytes()
+                 for path in target.rglob("*") if path.is_file() and not path.is_symlink()}
+        self.assertEqual(before, after, "capability preflight must remain read-only")
+        return result
+
+    def test_capability_preflight_accepts_only_compatible_target_without_writes(self):
+        result = self.capability_fixture()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "capabilities=ready\n")
+
+    def test_capability_preflight_rejects_each_missing_target_prerequisite(self):
+        for failure, expected in (("missing_tool", 90), ("missing_hook", 93), ("wrong_model", 92),
+                                  ("changed_runtime", 1), ("bad_audio_control", 95),
+                                  ("linked_runtime_directory", 94)):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory(dir=self.base) as temporary, \
+                    patch.object(self, "base", Path(temporary)):
+                result = self.capability_fixture(failure)
+                self.assertEqual(result.returncode, expected, result.stderr)
+
+    def test_invalid_runtime_baseline_is_rejected_before_target_access(self):
+        for runtime in ({}, {"../lib/libc.so.6": "a" * 64}, {"lib/libc.so.6": "bad"}):
+            with self.subTest(runtime=runtime), self.assertRaises(ValueError):
+                deployment.capability_preflight(runtime)
+
+    def test_deploy_load_check_precedes_system_policy_and_failed_probe_never_stops_service(self):
+        path, checksum = self.archive()
+        settings = self.base / "settings.json"
+        settings.write_text(json.dumps(self.settings))
+        settings.chmod(0o600)
+        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt") as receipt, \
+                patch("sys.stderr", new_callable=io.StringIO):
+            adb = adb_class.return_value
+            adb.shell.side_effect = ["", "", RuntimeError("staged load check failed")]
+            with self.assertRaises(SystemExit):
+                deployment.main(["deploy", "--package", str(path), "--sha256", checksum,
+                                 "--settings", str(settings), "--tag", "fixture", "--execute"])
+        scripts = [call.args[0] for call in adb.shell.call_args_list]
+        self.assertIn("capabilities=ready", scripts[0])
+        self.assertIn("--version", scripts[-1])
+        self.assertFalse(any("S99mybot stop" in script for script in scripts))
+        receipt.assert_not_called()
+
     def test_private_settings_permissions_are_enforced(self):
         path = self.base / "settings.json"
         path.write_text(json.dumps(self.settings))
@@ -499,6 +593,7 @@ class DeploymentTests(unittest.TestCase):
 
     def test_generated_shell_is_syntactically_valid(self):
         scripts = [deployment.PREFLIGHT, deployment.identity_check(self.settings),
+                   deployment.capability_preflight(), deployment.release_load_check(self.name, False),
                    deployment.begin_transaction("fixture"), deployment.INSTALL_FILE, deployment.SYSTEM_POLICY,
                    deployment.switch_release(self.name, "mybot-rv1126b-0.1.1-aarch64"),
                    deployment.rollback_release_check(self.name, self.settings),

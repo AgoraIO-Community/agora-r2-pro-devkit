@@ -56,6 +56,8 @@ assets/network/99-mybot-lease
 
 主机需要 Python 3.10+ 和可用的 `adb`。设备需为 AArch64、以 root 连接、已挂载 `/userdata` 并提供 tar/sha256sum/stat/dd/od/awk 等工具。连接多台设备时必须明确指定 `--serial`；只连接一台已授权设备时可省略。以下 `SERIAL` 和 `ARCHIVE_SHA256` 应替换为实际值。
 
+只读预检还会核对准确板型、依赖锁中的 20 项运行库摘要、动态加载器、电源命令、Wi-Fi 工具、dhcpcd hook 目录，以及两项采集 mixer 控制的可写整数范围。预检不设置 mixer、不创建热点，也不要求旧应用释放端口。其他固件必须先按依赖流程登记匹配基线；不能仅凭 AArch64 架构认定兼容。
+
 ```sh
 version=$(python3 scripts/project-version.py)
 
@@ -70,7 +72,7 @@ python3 scripts/deploy-rv1126b.py deploy --serial SERIAL \
 
 预览只输出脱敏计划；不会执行 ADB。确认包和计划后，将 `--dry-run` 改为 `--execute`。首次导入回退包时再提供 `--rollback-package PATH` 与 `--rollback-sha256 SHA256`。默认安装完成后保持服务停止，由操作者检查配置与网络策略后启动；只有显式加 `--start` 才在版本切换后启动，不自动重启设备。
 
-写入顺序为：只读平台/身份检查 → 设备内完整备份 → 上传及再次校验 → 解包为独立 release → 再核对身份 → 停止旧服务 → 安装稳定服务配置 → 原子切换链接。停止命令失败、旧进程仍占用或校验失败时不继续。保留 ALSA 配置文件，不禁用 chronyd、ADB 或电源服务。每次服务启动前，`audio-prepare.sh` 通过 `amixer cset` 设置并读回核对 `ACodec_LP Digital Gain Volume=0`、`ACodec_LP PGA Gain Volume=23` 两项采集控制；这会修改声卡的运行时 mixer 状态，不修改播放控制或写入 ALSA 配置文件。
+写入顺序为：只读平台/能力/身份检查 → 设备内完整备份 → 上传及再次校验 → 解包为独立 release → 用选定 profile 执行无硬件访问的 `--version` 加载检查 → 再核对身份 → 停止旧服务 → 安装稳定服务配置 → 原子切换链接。停止命令失败、旧进程仍占用或校验失败时不继续。保留 ALSA 配置文件，不禁用 chronyd、ADB 或电源服务。每次服务启动前，`audio-prepare.sh` 通过 `amixer cset` 设置并读回核对 `ACodec_LP Digital Gain Volume=0`、`ACodec_LP PGA Gain Volume=23` 两项采集控制；这会修改声卡的运行时 mixer 状态，不修改播放控制或写入 ALSA 配置文件。
 
 原 `botstation-device` 配置改为 `BOTSTATION_ENABLED=0`，其 `S99botstation-device` 移入 `/etc/mybot-rv1126b/disabled/`，避免开机重复占用。系统 dnsmasq 配置限制为 `interface=usb0`、`bind-dynamic`，保留现有 USB 监听地址与 DHCP 范围，USB 接口尚无 IPv4 时也不会抢占 AP 地址。dhcpcd 增加 `denyinterfaces mbap*`，防止其接管临时 AP；网络租约 hook 安装到 `/lib/dhcpcd/dhcpcd-hooks/99-mybot-lease`（0644），运行记录目录 `/run/mybot-network/leases` 为 0700。操作者在确认连接条件后分别受控重载：
 

@@ -267,6 +267,58 @@ printf 'platform=ready\\n'
 """
 
 
+def capability_preflight(runtime=None):
+    """Read target capabilities before any backup, upload or service changes."""
+    if runtime is None:
+        runtime = json.loads((ROOT / "dependencies.lock.json").read_text())["external"]["runtime"]["libraries"]
+    if not isinstance(runtime, dict) or not runtime:
+        raise ValueError("Missing pinned target runtime baseline")
+    for path, expected in runtime.items():
+        if (not isinstance(path, str) or not re.fullmatch(r"(?:lib|usr/lib)/[A-Za-z0-9_.+-]+", path) or
+                not isinstance(expected, str) or not SHA256.fullmatch(expected)):
+            raise ValueError("Invalid pinned target runtime baseline")
+    checksums = "\n".join(expected + "  /" + path for path, expected in sorted(runtime.items()))
+    return """
+for tool in amixer ip iw hostapd dnsmasq wpa_supplicant udhcpc; do
+    command -v "$tool" >/dev/null || exit 90
+done
+[ -x /sbin/poweroff ] && [ -x /lib/ld-linux-aarch64.so.1 ] || exit 91
+[ -r /proc/device-tree/model ] || exit 92
+model=$(tr -d '\\000' < /proc/device-tree/model)
+[ "$model" = 'Rockchip RV1126B TEST2 RK805B V10 Board' ] || exit 92
+[ -d /lib/dhcpcd/dhcpcd-hooks ] && [ ! -L /lib/dhcpcd/dhcpcd-hooks ] &&
+    [ "$(stat -c %u /lib/dhcpcd/dhcpcd-hooks)" = 0 ] || exit 93
+for path in /run/mybot-network /run/mybot-network/leases /run/mybot-rv1126b \\
+    /run/mybot-rv1126b-service; do
+    [ ! -L "$path" ] || exit 94
+    if [ -e "$path" ]; then
+        [ -d "$path" ] && [ "$(stat -c %u "$path")" = 0 ] || exit 94
+    fi
+done
+for setting in 'ACodec_LP Digital Gain Volume:0' 'ACodec_LP PGA Gain Volume:23'; do
+    control=${setting%:*}
+    expected=${setting##*:}
+    information=$(amixer -c 0 cget "name=$control" 2>/dev/null) || exit 95
+    printf '%s\\n' "$information" | awk -F, -v expected="$expected" '
+        /type=INTEGER/ && /access=rw/ {
+            for (i = 1; i <= NF; i++) {
+                field = $i
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", field)
+                if (field ~ /^min=-?[0-9]+$/) { minimum = substr(field, 5); have_minimum = 1 }
+                if (field ~ /^max=-?[0-9]+$/) { maximum = substr(field, 5); have_maximum = 1 }
+            }
+            if (have_minimum && have_maximum && minimum <= expected && maximum >= expected) valid = 1
+        }
+        END { exit !valid }
+    ' || exit 95
+done
+sha256sum -c - >/dev/null <<'MYBOT_RUNTIME_BASELINE'
+""" + checksums + """
+MYBOT_RUNTIME_BASELINE
+printf 'capabilities=ready\\n'
+"""
+
+
 def begin_transaction(tag):
     return f"""
 base={DEVICE_ROOT}
@@ -319,6 +371,28 @@ else
     rmdir "$stage"
 fi
 rm "$archive"
+"""
+
+
+def release_load_check(name, video):
+    """Load only the selected package entry point's information-only command."""
+    match = NAME.fullmatch(name)
+    if not match:
+        raise ValueError("Invalid installed release name")
+    executable = "mybot-rv1126b-video" if video else "mybot-rv1126b"
+    language = "en-US" if "-en-US-" in name else "zh-CN"
+    return f"""
+release={shlex.quote(DEVICE_ROOT + '/releases/' + name)}
+[ -d "$release" ] && [ ! -L "$release" ] || exit 82
+[ -d "$release/bin" ] && [ ! -L "$release/bin" ] || exit 87
+for executable in "$release/run.sh" "$release/bin/{executable}"; do
+    [ -f "$executable" ] && [ ! -L "$executable" ] && [ -x "$executable" ] || exit 87
+done
+version=$(RV1126B_VIDEO={int(video)} "$release/run.sh" --version 2>/dev/null) || exit 88
+case "$version" in
+    "mybot-rv1126b {match[1]}, MyBot "*", video={int(video)}, UI={language}") ;;
+    *) exit 88;;
+esac
 """
 
 
@@ -413,8 +487,6 @@ def rollback_release_check(name, settings):
     if not match:
         raise ValueError("Invalid installed release name")
     video = int(settings.get("video", False))
-    executable = "mybot-rv1126b-video" if video else "mybot-rv1126b"
-    language = "en-US" if "-en-US-" in name else "zh-CN"
     return f"""
 configuration=/etc/mybot-rv1126b.conf
 [ -f "$configuration" ] && [ ! -L "$configuration" ] &&
@@ -434,15 +506,7 @@ recorded=$(cat "$release/.archive-sha256")
 [ "${{#recorded}}" = 64 ] || exit 84
 case "$recorded" in *[!0-9a-f]*) exit 84;; esac
 (cd "$release" && sha256sum -c SHA256SUMS >/dev/null) || exit 81
-for executable in "$release/run.sh" "$release/bin/{executable}"; do
-    [ -f "$executable" ] && [ ! -L "$executable" ] && [ -x "$executable" ] || exit 87
-done
-version=$(RV1126B_VIDEO={video} "$release/run.sh" --version 2>/dev/null) || exit 88
-case "$version" in
-    "mybot-rv1126b {match[1]}, MyBot "*", video={video}, UI={language}") ;;
-    *) exit 88;;
-esac
-"""
+""" + release_load_check(name, bool(video))
 
 
 def status_script():
@@ -516,7 +580,7 @@ def main(argv=None):
             return 0
         adb = Adb(args.adb, args.serial)
         adb.select()
-        output = adb.shell(PREFLIGHT + (identity_check(settings) if settings else ""))
+        output = adb.shell(PREFLIGHT + capability_preflight() + (identity_check(settings) if settings else ""))
         if args.action == "preflight":
             print(output.strip())
             return 0
@@ -538,6 +602,7 @@ def main(argv=None):
             if rollback:
                 staging_script += install_release(adb, rollback, tag)
             staging_script += install_release(adb, package, tag)
+            staging_script += release_load_check(package["name"], settings.get("video", False))
             adb.shell(staging_script)
             config = configuration(package["files"]["assets/service/mybot-rv1126b.conf"], settings)
             deployment = f"base={DEVICE_ROOT}\ntag={shlex.quote(tag)}\nbackup=\"$base/backups/$tag\"\n"
