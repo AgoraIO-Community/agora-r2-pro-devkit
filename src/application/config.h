@@ -4,6 +4,10 @@
 
 #include "mybot_platform/platform.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct {
     rv1126b_platform_config_t platform;
     const char *server;
@@ -14,7 +18,6 @@ typedef struct {
     unsigned int seconds;
     bool demo;
     bool wifi_provisioning;
-    bool force_wifi_provisioning;
     const char *wifi_interface;
     unsigned int time_sync_timeout;
     const char *time_sync_helper;
@@ -23,5 +26,9 @@ typedef struct {
 /* Borrows argv/environment strings for process lifetime. No I/O except help/error
  * output. Returns 0 to run, 1 after --help/--version, -1 for invalid arguments. */
 int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

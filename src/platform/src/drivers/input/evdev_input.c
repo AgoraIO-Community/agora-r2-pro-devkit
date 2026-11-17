@@ -33,7 +33,7 @@ typedef struct {
     rv1126b_touch_t touch_state;
     rv1126b_platform_config_t config;
     bool stopping;
-    bool talk_down, talk_long_sent, talk_settings_owned;
+    bool talk_down, talk_settings_owned;
     uint32_t talk_pressed_at;
 } input_context_t;
 
@@ -233,16 +233,11 @@ static void publish_touch(input_context_t *ctx) {
         ctx->touch_state.poweroff_pending = false;
         __atomic_store_n(&s_poweroff_requested, 1, __ATOMIC_RELEASE);
     }
+    if (rv1126b_touch_wifi_requested(&ctx->touch_state))
+        __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
 }
 
 static void stdin_key(char code) {
-    if (code == 'w') {
-        if (settings_page() != MYBOT_SETTINGS_POWERING_OFF) {
-            rv1126b_input_settings_page(MYBOT_SETTINGS_CLOSED);
-            __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
-        }
-        return;
-    }
     if (settings_page() != MYBOT_SETTINGS_CLOSED)
         return;
     mybot_state_t state = mybot_get_state();
@@ -313,7 +308,6 @@ static int drain_input(input_context_t *ctx, input_source_t *source, bool touch)
         }
         if (input.type == EV_SYN && input.code == SYN_DROPPED) {
             ctx->talk_down = false;
-            ctx->talk_long_sent = false;
         }
         if (input.type != EV_KEY)
             continue;
@@ -324,21 +318,16 @@ static int drain_input(input_context_t *ctx, input_source_t *source, bool touch)
         if (input.code == ctx->config.talk_key) {
             if (input.value == 1 && !ctx->talk_down) {
                 ctx->talk_down = true;
-                ctx->talk_long_sent = false;
                 ctx->talk_settings_owned = settings_page() != MYBOT_SETTINGS_CLOSED;
                 ctx->talk_pressed_at = now_ms();
             } else if (input.value == 0) {
-                if (ctx->talk_down && !ctx->talk_long_sent && !ctx->talk_settings_owned &&
-                    settings_page() == MYBOT_SETTINGS_CLOSED) {
-                    if ((uint32_t)(now_ms() - ctx->talk_pressed_at) >= 3000) {
-                        __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
-                    } else {
-                        mybot_key_event_t event;
-                        if (rv1126b_key_translate(input.code, ctx->config.talk_key,
-                                                  mybot_get_state(), &event))
-                            emit(event);
-                    }
-                }
+                uint32_t duration = now_ms() - ctx->talk_pressed_at;
+                mybot_key_event_t event;
+                if (ctx->talk_down && !ctx->talk_settings_owned && duration >= 50 &&
+                    duration < 1000 && settings_page() == MYBOT_SETTINGS_CLOSED &&
+                    rv1126b_key_translate(input.code, ctx->config.talk_key, mybot_get_state(),
+                                          &event))
+                    emit(event);
                 ctx->talk_down = false;
             }
             continue;
@@ -351,21 +340,6 @@ static int drain_input(input_context_t *ctx, input_source_t *source, bool touch)
     return 0;
 }
 
-static void poll_gestures(input_context_t *ctx) {
-    uint32_t now = now_ms();
-    pthread_mutex_lock(&s_page_lock);
-    rv1126b_touch_settings_page(&ctx->touch_state, s_page);
-    if (rv1126b_touch_provisioning_request(&ctx->touch_state, now))
-        __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
-    pthread_mutex_unlock(&s_page_lock);
-    if (ctx->talk_down && !ctx->talk_long_sent && !ctx->talk_settings_owned &&
-        settings_page() == MYBOT_SETTINGS_CLOSED &&
-        (uint32_t)(now - ctx->talk_pressed_at) >= 3000) {
-        ctx->talk_long_sent = true;
-        __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
-    }
-}
-
 static void *input_worker(void *opaque) {
     input_context_t *ctx = opaque;
     while (!__atomic_load_n(&ctx->stopping, __ATOMIC_ACQUIRE)) {
@@ -373,7 +347,7 @@ static void *input_worker(void *opaque) {
                                 {ctx->stdin_fd, POLLIN, 0},
                                 {ctx->key.fd, POLLIN, 0},
                                 {ctx->touch.fd, POLLIN, 0}};
-        int ret = poll(fds, 4, 100);
+        int ret = poll(fds, 4, -1);
         if (ret < 0 && errno == EINTR)
             continue;
         if (ret < 0 || fds[0].revents || __atomic_load_n(&ctx->stopping, __ATOMIC_ACQUIRE))
@@ -407,7 +381,6 @@ static void *input_worker(void *opaque) {
                     memset(&ctx->touch_state, 0, sizeof(ctx->touch_state));
             }
         }
-        poll_gestures(ctx);
     }
     return NULL;
 }
@@ -476,7 +449,7 @@ int rv1126b_input_start(const rv1126b_platform_config_t *config, unsigned rotati
     s_context = ctx;
     pthread_mutex_unlock(&s_lifecycle_lock);
     AOSL_LOG_NTC("input: product reader ready; settings available before SDK startup; "
-                 "short touch/menu toggles conversation; hold touch/menu 3 s for Wi-Fi");
+                 "short touch/menu toggles conversation; Wi-Fi setup through settings only");
     return 0;
 }
 

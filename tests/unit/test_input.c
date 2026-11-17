@@ -46,7 +46,7 @@ static void check_settings(void) {
     rv1126b_touch_configure(&input, 0, 639, 0, 479, 0);
     click(&input, 596, 44, 100);
     CHECK(input.page == MYBOT_SETTINGS_MENU && input.page_changed);
-    CHECK(!rv1126b_touch_provisioning_request(&input, 5000));
+    CHECK(!rv1126b_touch_wifi_requested(&input));
     click(&input, 200, 270, 1000);
     CHECK(input.page == MYBOT_SETTINGS_CONFIRM_POWEROFF && !input.poweroff_pending);
     click(&input, 200, 330, 2000);
@@ -63,8 +63,8 @@ static void check_settings(void) {
     CHECK(input.page == MYBOT_SETTINGS_MENU);
     click(&input, 200, 180, 7000);
     CHECK(input.page == MYBOT_SETTINGS_CLOSED);
-    CHECK(rv1126b_touch_provisioning_request(&input, 7100));
-    CHECK(!rv1126b_touch_provisioning_request(&input, 7101));
+    CHECK(rv1126b_touch_wifi_requested(&input));
+    CHECK(!rv1126b_touch_wifi_requested(&input));
     click(&input, 596, 44, 8000);
     click(&input, 20, 20, 9000);
     CHECK(input.page == MYBOT_SETTINGS_CLOSED);
@@ -75,14 +75,14 @@ static void check_settings(void) {
     CHECK(!touch(&input, EV_ABS, ABS_Y, 44, 10000, &event));
     CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 1, 10000, &event));
     CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 10000, &event));
-    CHECK(!rv1126b_touch_provisioning_request(&input, 13000));
+    CHECK(!rv1126b_touch_wifi_requested(&input));
     CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 0, 14000, &event));
     CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 14000, &event));
     CHECK(input.page == MYBOT_SETTINGS_CLOSED);
     /* Invalid coordinates must not click a retained button position. */
     click(&input, 640, 44, 15000);
     CHECK(input.page == MYBOT_SETTINGS_CLOSED);
-    CHECK(!rv1126b_touch_provisioning_request(&input, 20000));
+    CHECK(!rv1126b_touch_wifi_requested(&input));
 
     /* Without UI coordinate mapping the gear region remains a normal talk tap. */
     memset(&input, 0, sizeof(input));
@@ -113,7 +113,7 @@ static void check_multitouch(void) {
     CHECK(!touch(&input, EV_ABS, ABS_MT_TRACKING_ID, -1, 150, &event));
     CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 200, &event));
     CHECK(input.page == MYBOT_SETTINGS_CLOSED);
-    CHECK(!rv1126b_touch_provisioning_request(&input, 5000));
+    CHECK(!rv1126b_touch_wifi_requested(&input));
     /* The next single contact may use a different slot, without stale coordinates. */
     CHECK(!touch(&input, EV_ABS, ABS_MT_SLOT, 3, 6000, &event));
     CHECK(!touch(&input, EV_ABS, ABS_MT_TRACKING_ID, 3, 6000, &event));
@@ -136,10 +136,66 @@ static void check_multitouch(void) {
     CHECK(!input.poweroff_pending && input.page == MYBOT_SETTINGS_CONFIRM_POWEROFF);
 }
 
+static void check_ignored_holds(void) {
+    const uint32_t durations[] = {1000, 2999, 3000, 10000};
+    for (size_t i = 0; i < sizeof(durations) / sizeof(durations[0]); ++i) {
+        rv1126b_touch_t input = {0};
+        mybot_key_event_t event;
+        rv1126b_touch_configure(&input, 0, 639, 0, 479, 0);
+        CHECK(!touch(&input, EV_ABS, ABS_X, 200, 100, &event));
+        CHECK(!touch(&input, EV_ABS, ABS_Y, 180, 100, &event));
+        CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 1, 100, &event));
+        CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 100, &event));
+        CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 100 + durations[i], &event));
+        CHECK(!rv1126b_touch_wifi_requested(&input));
+        /* Movement and repeated reports during a long contact stay inert. */
+        CHECK(!touch(&input, EV_ABS, ABS_X, 596, 100 + durations[i], &event));
+        CHECK(!touch(&input, EV_ABS, ABS_Y, 44, 100 + durations[i], &event));
+        CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 0, 100 + durations[i], &event));
+        CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 100 + durations[i], &event));
+        CHECK(!rv1126b_touch_wifi_requested(&input));
+        CHECK(input.page == MYBOT_SETTINGS_CLOSED);
+
+        rv1126b_touch_settings_page(&input, MYBOT_SETTINGS_MENU);
+        CHECK(!touch(&input, EV_ABS, ABS_X, 200, 20000, &event));
+        CHECK(!touch(&input, EV_ABS, ABS_Y, 180, 20000, &event));
+        CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 1, 20000, &event));
+        CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 20000, &event));
+        CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 0, 20000 + durations[i], &event));
+        CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 20000 + durations[i], &event));
+        CHECK(!rv1126b_touch_wifi_requested(&input));
+        CHECK(input.page == MYBOT_SETTINGS_MENU);
+    }
+    rv1126b_touch_t input = {0};
+    mybot_key_event_t event;
+    rv1126b_touch_configure(&input, 0, 639, 0, 479, 0);
+    rv1126b_touch_settings_page(&input, MYBOT_SETTINGS_MENU);
+    CHECK(!touch(&input, EV_ABS, ABS_X, 200, 100, &event));
+    CHECK(!touch(&input, EV_ABS, ABS_Y, 180, 100, &event));
+    CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 1, 100, &event));
+    CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 100, &event));
+    CHECK(!touch(&input, EV_ABS, ABS_X, 300, 150, &event));
+    CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 0, 200, &event));
+    CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 200, &event));
+    CHECK(!rv1126b_touch_wifi_requested(&input));
+    CHECK(input.page == MYBOT_SETTINGS_MENU);
+    CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 1, 1000, &event));
+    CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 1000, &event));
+    CHECK(!touch(&input, EV_SYN, SYN_DROPPED, 0, 1100, &event));
+    CHECK(!touch(&input, EV_KEY, BTN_TOUCH, 0, 5000, &event));
+    CHECK(!touch(&input, EV_SYN, SYN_REPORT, 0, 5000, &event));
+    CHECK(!rv1126b_touch_wifi_requested(&input));
+    CHECK(input.page == MYBOT_SETTINGS_MENU);
+    click(&input, 200, 180, 6000);
+    CHECK(rv1126b_touch_wifi_requested(&input));
+    CHECK(!rv1126b_touch_wifi_requested(&input));
+}
+
 int main(void) {
     check_positions();
     check_settings();
     check_multitouch();
+    check_ignored_holds();
     mybot_key_event_t event;
     CHECK(rv1126b_key_translate(KEY_MENU, KEY_MENU, MYBOT_STATE_READY, &event) == 1);
     CHECK(event == MYBOT_KEY_EVENT_CONVERSATION_START);
@@ -179,20 +235,18 @@ int main(void) {
     memset(&state, 0, sizeof(state));
     CHECK(!touch(&state, EV_KEY, BTN_TOUCH, 1, 100, &event));
     CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 100, &event));
-    CHECK(!rv1126b_touch_provisioning_request(&state, 3099));
-    CHECK(rv1126b_touch_provisioning_request(&state, 3100));
-    CHECK(!rv1126b_touch_provisioning_request(&state, 3200));
+    CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 3100, &event));
+    CHECK(!rv1126b_touch_wifi_requested(&state));
     CHECK(!touch(&state, EV_KEY, BTN_TOUCH, 0, 3300, &event));
     CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 3300, &event));
-    CHECK(!rv1126b_touch_provisioning_request(&state, 3300));
+    CHECK(!rv1126b_touch_wifi_requested(&state));
     CHECK(!touch(&state, EV_KEY, BTN_TOUCH, 1, 4000, &event));
     CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 4000, &event));
     CHECK(!touch(&state, EV_KEY, BTN_TOUCH, 0, 7100, &event));
     CHECK(!touch(&state, EV_SYN, SYN_REPORT, 0, 7100, &event));
-    CHECK(rv1126b_touch_provisioning_request(&state, 7100));
-    CHECK(!rv1126b_touch_provisioning_request(&state, 7101));
+    CHECK(!rv1126b_touch_wifi_requested(&state));
     CHECK(!touch(&state, EV_SYN, SYN_DROPPED, 0, 8000, &event));
-    CHECK(!rv1126b_touch_provisioning_request(&state, 11000));
+    CHECK(!rv1126b_touch_wifi_requested(&state));
     puts("Input state gating, touch boundaries, duplicate edges and dropped events: PASS");
     return 0;
 }

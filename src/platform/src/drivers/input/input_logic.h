@@ -17,7 +17,7 @@ typedef struct {
 
 typedef struct {
     bool button_seen, button_down, down, dropped, await_release, release_seen;
-    bool long_sent, long_pending, blocked, settings_owned, page_changed;
+    bool blocked, settings_owned, page_changed;
     bool single_x_valid, single_y_valid, mt_seen, mapped, invalid_contact;
     bool wifi_pending, poweroff_pending;
     int single_x, single_y, slot, pressed_control, contact_slot;
@@ -43,8 +43,8 @@ void rv1126b_touch_settings_page(rv1126b_touch_t *touch, mybot_settings_page_t p
 int rv1126b_touch_event(rv1126b_touch_t *touch, unsigned type, unsigned code, int value,
                         uint32_t now, mybot_state_t state, mybot_key_event_t *event);
 
-/* Product-level provisioning gesture, deliberately separate from SDK key events. */
-int rv1126b_touch_provisioning_request(rv1126b_touch_t *touch, uint32_t now);
+/* Consumes a completed Settings > Wi-Fi click, separate from SDK key events. */
+int rv1126b_touch_wifi_requested(rv1126b_touch_t *touch);
 
 #ifdef __cplusplus
 }

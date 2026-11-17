@@ -1,6 +1,6 @@
 # 当前验证状态
 
-本页是项目验证状态的唯一现行入口。更新日期：2026-11-16。当前源码版本以根 `CMakeLists.txt` 为准，执行 `python3 scripts/project-version.py` 查看。历史检查保持其原始版本归属，不自动移用于新二进制。
+本页是项目验证状态的唯一现行入口。更新日期：2026-11-17。当前源码版本以根 `CMakeLists.txt` 为准，执行 `python3 scripts/project-version.py` 查看。历史检查保持其原始版本归属，不自动移用于新二进制。
 
 目标基线：**RV1126B TEST2 RK805B V10**、AArch64 Buildroot 2024.02、Linux 6.1.172、glibc 2.41，物理屏幕 480×640。已记录开发主机为 **Intel macOS** 和 **Ubuntu 24.04.4 / GCC 13.3**，交叉编译使用 Zig 0.15.2；其他宿主及远端 CI 以实际运行证据为准。
 
@@ -50,6 +50,9 @@
 | 0.5.1，计划关机 | 设备隔离监督器 | 使用正式二进制及只写标记的假关机命令，SDK READY 和 SDK 启动前 AP 两种场景均正常清理并退出；无 unclean 标记、测试监督器或残留 AP | 未执行真实 poweroff、重启或验证重新上电 |
 | 0.5.1，文档与工具修正 | macOS 与 Ubuntu 24.04 | 中文、英文、UBSan 各 24/24，每套含 181 项工具测试；Ubuntu 按文档安装固定格式工具后自动选择 11，显式使用系统 18 在格式化前被拒绝；版本同步与示例环境回归通过 | Ubuntu 使用隔离源码副本，本轮未连接或更新设备 |
 | 0.5.1，文档与工具修正 | 交叉构建与运行包 | 四套目标构建与 ABI 通过，双语包各 63 项校验通过，语言注释和无版本 helper 路径正确；依赖、质量与锁更新幂等检查通过 | 新包与此前设备部署包的哈希不同，不继承新包真机验收 |
+| 0.5.1，设置页独占手动配网 | macOS / Ubuntu / 交叉构建 | 两种宿主中文、英文、UBSan 最终各 24/24，含 181 项工具测试；Ubuntu ASan + UBSan 输入及配置专项 3/3；四套目标构建和双语包检查通过 | 本轮未更新设备，物理长按不进入 AP 与设置页配网待新包真机验收；macOS 英文首轮一项既有计时断言失败，后续复核通过，详情见下文 |
+| 0.5.2，设置页独占手动配网 | 授权设备更新与真机回归 | 安装独立版本并保留 0.5.1 回退；4.2 秒触屏/Menu 合成事件不配网、不切换会话，设置短按进入 AP；当前网络提交保存、关闭热点及 SDK 自动恢复 ready 通过；绑定和网络配置字节保留 | 触屏/按键使用 evdev 注入，HTTP 客户端位于设备本地；未代替手机无线、DHCP/captive browser 或物理手感测试 |
+| 0.5.2，zh-CN/en-US × voice/video | 构建与版本元数据检查 | 四套目标构建、ABI 与双语包 63 项校验通过；版本更新后 macOS 中文、UBSan 输入/配置专项各 3/3 | 功能实现的两宿主完整回归见上一批次；本轮仅中文语音配置在设备运行 |
 | 公共 CI / 其他宿主组合 | CI / 环境 | 以仓库对应提交实际 workflow 运行记录为准 | 配置存在不等于已运行通过 |
 
 ## 保留的基线制品
@@ -273,3 +276,40 @@ Wi-Fi 运行实现及对应测试已迁移为 C99。公开 `mybot_platform/wifi.
 | --- | --- |
 | `mybot-rv1126b-0.5.1-aarch64.tar.gz` | `5dfb31eaf91221d3502a2fe77b521ad84b6dd6db31e842846d6d85aa8edb1737` |
 | `mybot-rv1126b-0.5.1-en-US-aarch64.tar.gz` | `9e4288297bd71b3f0b7f9bc68191e7e61df0a677c1287a905453443bd8403415` |
+
+## 0.5.1 手动配网入口收敛与证据
+
+2026-11-17，手动配网只通过设置页的“设备配网”进入。删除触屏/Menu 长按、终端 `w` 和 `--wifi-provision` 强制配网参数；长按释放不触发会话切换。短触及 Menu 短按会话、离线自动尝试已保存网络后进入 AP、断网恢复及禁用配网选项保留。物理电源键和系统关机脚本未改动。
+
+- 输入请求只由设置点击产生并消费一次，删除旧长按状态和周期轮询。回归覆盖 1/3/10 秒按住、释放、重复按下/自动重复、移动/丢帧、终端 `w` 无效、短按边界，以及 SDK 启动前和解绑后同一 reader 的设置配网；配置回归确认旧强制配网参数被拒绝。
+- macOS 使用 `build/settings-menu/host-{zh,en,ubsan}`，最终三套各 24/24，每套含 181 项工具测试。首次并行运行的英文 `wifi-service` 在未修改的 250 ms 时限断言处失败；保存首轮日志为 `build/settings-only-wifi/host-en-initial-ctest.log`。单项复测通过，其他本地构建结束后整套英文再跑 24/24，通过时未修改测试阈值或 Wi-Fi 服务代码。主机构建日志位于 `build/settings-only-wifi/host-*-build.log`。
+- Ubuntu 24.04.4 / GCC 13.3 在新隔离副本运行中文、英文、UBSan，各 24/24；固定工具、依赖、doctor 与单独 181 项工具测试通过。GCC ASan + UBSan 与泄漏检测的输入语义、输入 worker、配置共 3/3；测试后 1264 个快照文件逐字节复核一致。结果与日志位于 `build/settings-only-wifi/ubuntu-validation-20261117/`，远端原始仓库源码未修改。
+- 四套目标构建使用已有 `build/settings-menu/rv1126b-{voice,video}-{zh,en}` 更新，日志为 `build/settings-only-wifi/target-builds.log`；manifest 来源摘要一致为 `6d54da8f4d6ae8c7f9787f797c248096cc575c2ef12164a22a2572513d9eb5e5`，ABI 语音 9、视频 11、监督器 2 项依赖，均无错误。目标二进制的 CLI/输入提示不再包含原快捷配网说明。
+- 双语包各 63 项 SHA256 校验通过，包内指南只说明设置页手动配网。质量、版本一致性、依赖与锁更新幂等检查通过；没有修改字库或 UI 图像基线。本轮未连接或部署设备，不将主机模拟事件当成真机验证。
+
+制品位于 `dist/settings-only-wifi/`，来自 `dev@44f3085` 上的未提交工作区。本节在打包后补充，制品身份以包内 manifest 为准。
+
+| 归档 | SHA256 |
+| --- | --- |
+| `mybot-rv1126b-0.5.1-aarch64.tar.gz` | `ac54bf6b1f1b127918e48ca984cc203e812649afaceb09dfd229476606f5fe68` |
+| `mybot-rv1126b-0.5.1-en-US-aarch64.tar.gz` | `1f143cb41ae9c16cb10b835527615e447ca67013d43cedc47982642a48eb6439` |
+
+## 0.5.2 设备更新与设置配网验收
+
+2026-11-17，为避免覆盖设备既有 0.5.1，使用版本同步工具将候选更新为 0.5.2，并重新构建四套目标及双语运行包。输入实现与上一批设置页独占配网的完整主机回归一致；版本元数据更新后，macOS 中文与 UBSan 的输入语义、输入 worker、应用配置专项各 3/3 通过。构建、ABI、打包证据保存在 `build/settings-only-wifi/rollout-052/`，四套来源摘要一致为 `145dd5699bb118955f22bf0ea07b316afc55c5b68973cff220b7b3c664489240`。
+
+- 使用部署工具安装并启动中文语音 0.5.2。设备内备份为 `/userdata/mybot/backups/20261117-settings-only-052/original.tar.gz`，`current` 指向 0.5.2，`previous` 保留更新前的 0.5.1。部署身份预检匹配，安装目录全部 SHA256 校验通过。
+- 实际 evdev 注入只使用触屏 `BTN_TOUCH` 与 Menu 合成键，未注入 `KEY_POWER`。分别在普通区域、齿轮、设置页配网按钮按住 4200 ms，并验证 Menu 长按；按住超过原 3 秒门槛时和松手后均不进入 AP、不触发会话。增量日志没有瞬时 SDK/AP/设置切换，进程 PID 保持一致。旧 `--wifi-provision` 参数被明确拒绝。
+- 齿轮短按打开设置，配网项长按保持当前菜单，短按才进入 AP；本地访问门户返回 HTTP 200，AP 中的设置返回操作正常。首次仅检查页面后，通过正常服务重启清理 AP，恢复 ready，并确认配置字节保留。
+- 在用户明确授权后，设备 C 客户端从已有系统配置读取凭据，并通过本机 supplicant 状态匹配当前同一个网络；凭据只在设备内存及本机配网接口使用，未导出或放入 argv/日志。再次经设置进入 AP，AP 期间长按仍不产生额外请求，随后提交返回 202，轮询得到 connected，退出请求返回 202；日志观察到 AP → CONNECTING → VERIFYING → ONLINE → SDK READY。客户端记录的 33903 ms 包含等待 UI 和测试触发信号，不能作为纯联网耗时。
+- 完整配网后，在同一应用进程内打开设置并返回，再次长按屏幕，随后连续观察 ready、同一 PID 和无 AP，均通过。最终恰好一个应用、一个监督器，测试客户端已退出，无 unclean 标记；清理测试二进制、触发文件和含临时门户 token 的页面，保留脱敏状态证据。
+- 在设备内逐字节比较 `device_auth`、`wpa_supplicant.conf`、`dhcpcd.conf` 和 `dnsmasq.conf`，均与本次部署前备份一致。系统电源键脚本及事件配置的 SHA256 与先前只读副本完全一致。本轮没有执行系统关机或重启，设备最终保持 `version=0.5.2` / `state=ready`。
+
+脱敏检查结果和枚举状态分别为 `build/settings-only-wifi/rollout-052/device-verification.json`、`device-state-transitions.log`。本节在构建和部署后补充；制品来自当时的未提交工作区，身份以包内 manifest 为准。
+
+制品位于 `dist/settings-only-wifi-052/`：
+
+| 归档 | SHA256 |
+| --- | --- |
+| `mybot-rv1126b-0.5.2-aarch64.tar.gz` | `4850254ae3fec97a3bca34d6b878623c359373f454161dc1d29a0610f55aad5d` |
+| `mybot-rv1126b-0.5.2-en-US-aarch64.tar.gz` | `2dcceccc6d6f5303e301642041424ae936afdeeaf11a08dc52379cb473e958f8` |

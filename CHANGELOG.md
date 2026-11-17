@@ -2,6 +2,10 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.5.2 — Unreleased
+
+- Route manual Wi-Fi setup exclusively through the UI settings menu; remove touch and Menu holds, terminal `w`, and the forced-provisioning CLI option. Automatic offline setup remains available.
+
 ## 0.5.1 — Unreleased
 
 - Keep current documentation versions synchronized with CMake, render package language examples, and enforce the pinned formatter before quality checks.

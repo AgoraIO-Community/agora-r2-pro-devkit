@@ -278,7 +278,6 @@ int main(int argc, char **argv) {
     const char *wifi_runtime = getenv("MYBOT_WIFI_RUNTIME_DIR");
     const rv1126b_wifi_config_t wifi = {
         .enabled = options.wifi_provisioning,
-        .force_ap = options.force_wifi_provisioning,
         .interface_name = options.wifi_interface,
         .storage_directory = getenv("MYBOT_KV_STORE_DIR"),
         .runtime_directory = wifi_runtime ? wifi_runtime : "/run/mybot-rv1126b-wifi",
@@ -290,7 +289,7 @@ int main(int argc, char **argv) {
         goto cleanup;
     }
     wifi_started = true;
-    bool require_provisioning = options.force_wifi_provisioning;
+    bool require_provisioning = false;
     for (;;) {
         const mybot_lcd_content_t waiting = {MYBOT_LCD_SCREEN_WIFI_PROVISIONING, {0}, 0};
         rv1126b_ui_set_state(MYBOT_STATE_WIFI_PROVISIONING);
