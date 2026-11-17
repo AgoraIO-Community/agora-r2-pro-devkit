@@ -24,7 +24,7 @@
 
 ```mermaid
 flowchart TD
-    app[application: config / identity / guard / lifecycle] --> platform[platform module]
+    app[application: main / controller / config / identity / guard] --> platform[platform module]
     app --> sdk[MyBot public API]
     platform --> sdk
     platform --> display[Linux display worker / DRM]
@@ -40,13 +40,16 @@ flowchart TD
 
 | 位置 | 职责 / 资源 |
 | --- | --- |
-| `src/application/main.c` | 组织启动、信号/定时退出与统一清理，保持 SDK/UI 关闭顺序 |
+| `src/application/main.c` | 配置和稳定身份装配、信号、运行锁、环境/私有存储准备及最终退出码 |
+| `src/application/controller.*` | 单一产品生命周期 owner，串行处理网络/授时门槛、SDK/配网切换、提示音、设置关机及服务回收 |
+| `src/application/service_status.*` | 类型化应用状态与稳定 wire 名称映射，原子发布私有 `application.status` |
 | `src/application/config.*` | 环境/CLI 解析、范围校验和覆盖优先级；help/version 不触发运行资源 |
 | `src/application/runtime_guard.*` | 旧服务/单实例互斥、私有存储准备与锁生命周期 |
 | `src/application/device_identity.*` | CPU Serial / 永久 MAC 的稳定身份派生 |
 | `src/platform/boards/rv1126b-test2-rk805b-v10/` | 唯一已记录板型的屏幕、旋转、ALSA、输入和相机默认值 |
 | `src/platform/src/drivers/` | ALSA、evdev、DRM、像素旋转及可选视频硬件边界 |
 | `src/platform/src/services/` | 网络监测、显示 worker 等 Linux 服务 |
+| `src/platform/src/services/network_route.*` | 共用只读 IPv4 地址/默认路由检查；不接管关联、DHCP 或恢复策略 |
 | `src/platform/src/services/audio_volume.c` | 输出音量状态、私有持久化和 MyBot 设备音量适配；播放驱动在写入 ALSA 前应用一次增益 |
 | `src/platform/src/services/audio_prompt.c` | SDK 停机期间的独立 PCM 播放 worker、取消和声卡回收；不接管业务会话 |
 | `src/platform/src/services/time_sync.c` | 网络就绪后的时间合理性检查、单调超时、既有服务检测及可选自有 helper 生命周期 |
@@ -66,7 +69,7 @@ UI 通过 present 回调交付画布，不依赖 DRM、ALSA、MPP 或 pthread。
 
 ## 生命周期契约
 
-启动先解析并验证配置，再取得互斥、准备私有存储，启动显示与平台，最后接入 SDK 生命周期。失败走对应清理路径；已获得的线程/回调资源在销毁前等待完成。输入发送 SDK 控制动作或设置页配网请求，不拥有会话状态。手动配网仅由设置页“设备配网”触发；触屏和 Menu 长按不发布配网或会话事件，终端没有配网命令。应用主循环先关闭 SDK，再请求 Wi-Fi 服务进入 AP；UI 通过有界快照显示热点、地址与连接进度。
+main 先解析配置和稳定身份、取得互斥并准备环境/私有存储，再交由 controller 持有显示、输入、音量、授时、Wi-Fi、提示音和 SDK 的完整启停。失败走对应清理路径；已获得的线程/回调资源在销毁前等待完成。输入发送 SDK 控制动作或设置页配网请求，不拥有会话状态。手动配网仅由设置页“设备配网”触发；触屏和 Menu 长按不发布配网或会话事件，终端没有配网命令。controller 先关闭 SDK，再请求 Wi-Fi 服务进入 AP；UI 通过有界快照显示热点、地址与连接进度。
 
 显示 worker 在自身执行上下文调用 LVGL；renderer 接收有界状态副本。DRM backend 拥有 fd、buffers 和原显示状态，失败/正常退出时释放并恢复已保存的原输出。音频采集与播放维持各自生命周期，不能释放仍被回调使用的对象。视频初始化与启动分开，停止后不继续提交借用帧。
 
@@ -81,6 +84,10 @@ AP 提示音由产品生命周期通过 `mybot_platform/prompt.h` 触发，只�
 平台时间服务通过 `mybot_platform/time_sync.h` 接受主循环轮询，网络就绪且不在 AP 中时才开始单调计时。系统实时时钟达到 2026-01-01 只表示合理，不代表精确授时。默认不修改时间，仅等待 OS 服务；显式 helper 也只在时钟无效且 `/proc` 确认没有现成时间 daemon 时启动，检测失败不冒险并行校时。helper 以独立进程组前台运行，网络丢失/AP 切换/退出时取消并回收自有进程组、重置等待窗口，不停止系统服务。超时或 helper 失败经 UI/标准错误报告并阻止 SDK 启动；helper 退出但时钟仍无效同样失败。TLS 验证保持开启。
 
 原厂 `botstation-device` 和本应用共享硬件；进程检查与锁共同阻止并行占用。设备现有 ISP、时间及外部网络管理服务不归本应用销毁。Wi-Fi 后端只停止本应用创建的子进程/虚拟接口，已附着的外部 supplicant 不被全局停止。`/userdata/mybot-rv1126b` 保留绑定凭据，与版本解包目录分离。
+
+应用状态由 `rv1126b_app_state_t` 及一个 wire 名称表发布；它描述本进程的产品阶段，不复制 SDK 会话状态机，也不代表监督器状态。时钟展示采用 `mybot_display_clock_state_t`，避免跨模块传递含义分散的整数。现有状态文件字符串保持兼容。
+
+网络观察器、Wi-Fi 控制服务及 Linux 后端共用 `network_route` 的基础地址/路由检查。后端额外排除本应用热点地址 `192.168.4.1`，关联状态、选定 profile、新租约代次和路由 fingerprint 继续由 Wi-Fi 后端核验，不能用通用“路由可用”替代凭据提交条件。SDK 网络观察器只产生连接事件，controller 持有产品恢复/SDK 停机策略。
 
 ## Wi-Fi 配网边界
 

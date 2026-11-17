@@ -271,7 +271,7 @@ int main(void) {
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);
         CHECK(hash(rv1126b_renderer_canvas()) == waiting_network);
-        status.clock_state = 1;
+        status.clock_state = MYBOT_DISPLAY_CLOCK_WAITING;
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);
         CHECK(rv1126b_renderer_canvas());
@@ -283,7 +283,7 @@ int main(void) {
         check_visible_labels(ap_root);
         uint64_t time_waiting = hash(rv1126b_renderer_canvas());
         CHECK(time_waiting != waiting_network);
-        status.clock_state = 2;
+        status.clock_state = MYBOT_DISPLAY_CLOCK_FAILED;
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);
         CHECK(rv1126b_renderer_canvas());
@@ -293,7 +293,7 @@ int main(void) {
         CHECK(find_label(ap_root, "> state: time_failed"));
         check_visible_labels(ap_root);
         CHECK(hash(rv1126b_renderer_canvas()) != time_waiting);
-        status.clock_state = 0;
+        status.clock_state = MYBOT_DISPLAY_CLOCK_INACTIVE;
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);
         CHECK(hash(rv1126b_renderer_canvas()) == waiting_network);
@@ -322,7 +322,7 @@ int main(void) {
         check_settings(&now);
         /* The product gate must also suppress a stale face/expression override,
          * and clearing it must restore the ordinary state-driven view. */
-        status.clock_state = 1;
+        status.clock_state = MYBOT_DISPLAY_CLOCK_WAITING;
         rv1126b_renderer_update(&ready, &status, now += 100);
         CHECK(rv1126b_renderer_expression(MYBOT_EXPRESSION_HAPPY) == 0);
         rv1126b_renderer_step(now += 500);
@@ -330,7 +330,7 @@ int main(void) {
         time_title = find_label(ap_root, "System time");
         CHECK(time_title && lv_obj_is_visible(time_title));
         check_visible_labels(ap_root);
-        status.clock_state = 0;
+        status.clock_state = MYBOT_DISPLAY_CLOCK_INACTIVE;
         rv1126b_renderer_update(&ready, &status, now += 100);
         CHECK(rv1126b_renderer_expression(-1) == 0);
         rv1126b_renderer_step(now += 1000);

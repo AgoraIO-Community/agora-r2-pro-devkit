@@ -93,6 +93,7 @@ static int fixture_ferror(FILE *file);
 #define fopen fixture_fopen
 #define fclose fixture_fclose
 #define ferror fixture_ferror
+#include "../../src/platform/src/services/network_route.c"
 #include "../../src/platform/src/services/network_monitor.c"
 #undef calloc
 #undef free
@@ -191,6 +192,10 @@ static void test_ready_requires_usable_address_and_default_route(void) {
         fixture.ip = invalid[i];
         check_readiness(0);
     }
+    fixture.ip = "192.168.4.1";
+    CHECK(rv1126b_network_route_ready("eth0", 0xc0a80401U) == 0);
+    CHECK(rv1126b_network_ready("eth0") == 1);
+    check_released();
     fixture.ip = "10.0.0.2";
     fixture.flags = IFF_UP;
     check_readiness(0);

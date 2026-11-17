@@ -14,6 +14,8 @@ target_compile_options(mybot_prompt PRIVATE -Wall -Wextra -Werror)
 add_library(mybot_time_sync STATIC src/services/time_sync.c)
 target_include_directories(mybot_time_sync PUBLIC include)
 target_compile_options(mybot_time_sync PRIVATE -Wall -Wextra -Werror)
+add_library(mybot_network_route STATIC src/services/network_route.c)
+target_compile_options(mybot_network_route PRIVATE -Wall -Wextra -Werror)
 find_package(OpenSSL REQUIRED)
 add_library(mybot_wifi STATIC src/services/wifi/wifi_common.c
     src/services/wifi/wifi_backend.c src/services/wifi/wifi_credentials.c
@@ -22,7 +24,7 @@ add_library(mybot_wifi STATIC src/services/wifi/wifi_common.c
     src/services/wifi/wifi_service.c src/services/wifi/system_wifi_profile.c)
 set_target_properties(mybot_wifi PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 target_include_directories(mybot_wifi PUBLIC include PRIVATE src/services/wifi)
-target_link_libraries(mybot_wifi PUBLIC Threads::Threads OpenSSL::Crypto)
+target_link_libraries(mybot_wifi PUBLIC Threads::Threads OpenSSL::Crypto PRIVATE mybot_network_route)
 target_compile_options(mybot_wifi PRIVATE -Wall -Wextra -Werror)
 add_library(mybot_power STATIC src/services/power.c)
 target_include_directories(mybot_power PUBLIC include)
@@ -49,7 +51,7 @@ target_include_directories(mybot_platform PUBLIC include PRIVATE src/internal
     "${RV1126B_BOARD_INCLUDE}" "${RV1126B_ALSA_INCLUDE}")
 target_compile_options(mybot_platform PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(mybot_platform PUBLIC mybot::sdk mybot_linux_display
-    PRIVATE mybot_linux_services mybot_wifi mybot_volume mybot_prompt mybot_time_sync mybot_power "${RV1126B_ALSA_LIBRARY}" Threads::Threads)
+    PRIVATE mybot_linux_services mybot_wifi mybot_volume mybot_prompt mybot_time_sync mybot_power mybot_network_route "${RV1126B_ALSA_LIBRARY}" Threads::Threads)
 if(MYBOT_ENABLE_VIDEO)
     find_path(RV1126B_MPP_INCLUDE rk_mpi.h PATH_SUFFIXES rockchip REQUIRED)
     find_library(RV1126B_MPP_LIBRARY rockchip_mpp REQUIRED)

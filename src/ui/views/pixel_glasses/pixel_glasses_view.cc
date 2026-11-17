@@ -238,10 +238,10 @@ void update_runtime_terminal(const mybot_lcd_content_t &content,
     const bool conversation = !status.wifi_failed && !status.clock_state &&
                               status.in_conversation &&
                               content.screen == MYBOT_LCD_SCREEN_IN_CONVERSATION;
-    const char *state = status.wifi_failed        ? "wifi_error"
-                        : status.clock_state == 1 ? "waiting_time"
-                        : status.clock_state == 2 ? "time_failed"
-                                                  : status.state;
+    const char *state = status.wifi_failed                                  ? "wifi_error"
+                        : status.clock_state == MYBOT_DISPLAY_CLOCK_WAITING ? "waiting_time"
+                        : status.clock_state == MYBOT_DISPLAY_CLOCK_FAILED  ? "time_failed"
+                                                                            : status.state;
     const char *voiceprint = "";
     if (conversation) {
         /* A malformed multi-phase mask has a deterministic display priority. */
@@ -574,7 +574,8 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
         }
         copied_status.in_conversation = status->in_conversation;
         copied_status.wifi_failed = status->wifi_failed;
-        if (status->clock_state == 1 || status->clock_state == 2)
+        if (status->clock_state == MYBOT_DISPLAY_CLOCK_WAITING ||
+            status->clock_state == MYBOT_DISPLAY_CLOCK_FAILED)
             copied_status.clock_state = status->clock_state;
     }
     if (!copied_status.state[0]) {
@@ -617,7 +618,7 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
         set_text(s_view->detail, "");
         set_hidden(s_view->detail, true);
     } else if (workflow_changed && copied_status.clock_state) {
-        if (copied_status.clock_state == 1)
+        if (copied_status.clock_state == MYBOT_DISPLAY_CLOCK_WAITING)
             show_guide({"System time", "Checking system time", kGreeting});
         else
             show_guide({"Time unavailable", "Check time service; restart", kError});

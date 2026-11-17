@@ -149,21 +149,21 @@ int main(void) {
         rv1126b_ui_wifi_failed(false);
         wait_for_wifi_failure(false, before);
         before = rendered();
-        rv1126b_ui_time_status(1);
+        rv1126b_ui_time_status(MYBOT_DISPLAY_CLOCK_WAITING);
         wait_for_clock(1, before);
         before = rendered();
-        rv1126b_ui_time_status(2);
+        rv1126b_ui_time_status(MYBOT_DISPLAY_CLOCK_FAILED);
         wait_for_clock(2, before);
         before = rendered();
         rv1126b_ui_wifi_failed(true);
         wait_for_wifi_failure(true, before);
         before = rendered();
-        rv1126b_ui_time_status(-1);
-        rv1126b_ui_time_status(3);
+        rv1126b_ui_time_status((mybot_display_clock_state_t)-1);
+        rv1126b_ui_time_status((mybot_display_clock_state_t)3);
         rv1126b_ui_show(&content);
         wait_for_clock(2, before);
         before = rendered();
-        rv1126b_ui_time_status(0);
+        rv1126b_ui_time_status(MYBOT_DISPLAY_CLOCK_INACTIVE);
         wait_for_clock(0, before);
         pthread_mutex_lock(&test_lock);
         int previous_settings = settings_updates;
@@ -179,7 +179,7 @@ int main(void) {
         rv1126b_ui_settings(MYBOT_SETTINGS_CLOSED);
         /* Stop with an active gate; the next display lifecycle resets it. */
         before = rendered();
-        rv1126b_ui_time_status(2);
+        rv1126b_ui_time_status(MYBOT_DISPLAY_CLOCK_FAILED);
         wait_for_clock(2, before);
         rv1126b_ui_lcd_ops()->destroy(ctx);
         CHECK(rv1126b_ui_stop() == 0);

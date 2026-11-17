@@ -5,6 +5,7 @@
 #endif
 #define _POSIX_C_SOURCE 200809L
 #include "wifi_backend_internal.h"
+#include "../network_route.h"
 #include "system_wifi_profile.h"
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -128,45 +129,8 @@ static bool has_address(const char *interface_name, const char *expected) {
 static bool online(void *context) {
 #ifdef __linux__
     linux_backend_t *backend = context;
-    if (!backend->interface_name[0])
-        return false;
-    FILE *routes = fopen("/proc/net/route", "r");
-    if (!routes)
-        return false;
-    char line[1024];
-    bool routed = false;
-    while (fgets(line, sizeof(line), routes)) {
-        char name[IFNAMSIZ] = "";
-        unsigned long destination = 0, gateway = 0, flags = 0, mask = 0;
-        if (sscanf(line, "%15s %lx %lx %lx %*u %*u %*u %lx", name, &destination, &gateway, &flags,
-                   &mask) == 5 &&
-            !strcmp(name, backend->interface_name) && !destination && !mask && (flags & 1UL) &&
-            !(flags & 0x200UL)) {
-            routed = true;
-            break;
-        }
-    }
-    fclose(routes);
-    if (!routed)
-        return false;
-    struct ifaddrs *addresses = NULL;
-    if (getifaddrs(&addresses))
-        return false;
-    bool found = false;
-    for (struct ifaddrs *item = addresses; item; item = item->ifa_next) {
-        if (!item->ifa_addr || item->ifa_addr->sa_family != AF_INET ||
-            strcmp(item->ifa_name, backend->interface_name) || !(item->ifa_flags & IFF_UP) ||
-            !(item->ifa_flags & IFF_RUNNING) || (item->ifa_flags & IFF_LOOPBACK))
-            continue;
-        uint32_t address = ntohl(((const struct sockaddr_in *)item->ifa_addr)->sin_addr.s_addr);
-        if (address && (address >> 24) != 127 && (address >> 16) != 0xa9fe &&
-            (address >> 28) < 14 && address != 0xc0a80401U) {
-            found = true;
-            break;
-        }
-    }
-    freeifaddrs(addresses);
-    return found;
+    return backend->interface_name[0] &&
+           rv1126b_network_route_ready(backend->interface_name, 0xc0a80401U) > 0;
 #else
     (void)context;
     return false;

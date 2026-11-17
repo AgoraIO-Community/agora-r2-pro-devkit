@@ -134,3 +134,12 @@ target_link_libraries(test-video-lifecycle PRIVATE Threads::Threads)
 target_compile_options(test-video-lifecycle PRIVATE -Wall -Wextra -Werror -UNDEBUG)
 add_test(NAME video-lifecycle COMMAND test-video-lifecycle)
 set_tests_properties(video-lifecycle PROPERTIES TIMEOUT 30)
+
+add_executable(test-controller integration/test_controller.c ../src/application/network_gate.c)
+target_include_directories(test-controller PRIVATE ../src/application "${support_dir}"
+    "${platform_root}/include")
+target_compile_definitions(test-controller PRIVATE MYBOT_ENABLE_VIDEO=1)
+target_link_libraries(test-controller PRIVATE mybot::public_headers mybot_ui_contract)
+target_compile_options(test-controller PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME product-controller COMMAND test-controller)
+set_tests_properties(product-controller PROPERTIES TIMEOUT 30)

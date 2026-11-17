@@ -17,7 +17,7 @@ endforeach()
 configure_file("${PROJECT_SOURCE_DIR}/cmake/build-config.json.in" "${PROJECT_BINARY_DIR}/build-config.json" @ONLY)
 configure_file("${PROJECT_SOURCE_DIR}/cmake/build_identity.c.in" "${CMAKE_CURRENT_BINARY_DIR}/build_identity.c" @ONLY)
 configure_file("${PROJECT_SOURCE_DIR}/cmake/build_identity.h.in" "${CMAKE_CURRENT_BINARY_DIR}/build_identity.h" @ONLY)
-add_executable(mybot-rv1126b main.c config.c runtime_guard.c device_identity.c service_status.c network_gate.c
+add_executable(mybot-rv1126b main.c controller.c config.c runtime_guard.c device_identity.c service_status.c network_gate.c
     "${CMAKE_CURRENT_BINARY_DIR}/build_identity.c" "${PROJECT_BINARY_DIR}/build_source_identity.c")
 set_source_files_properties("${PROJECT_BINARY_DIR}/build_source_identity.c" PROPERTIES GENERATED TRUE)
 target_include_directories(mybot-rv1126b PRIVATE "${RV1126B_BOARD_INCLUDE}" "${CMAKE_CURRENT_BINARY_DIR}")
