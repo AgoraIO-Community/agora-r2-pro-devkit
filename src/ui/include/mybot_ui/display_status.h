@@ -10,6 +10,8 @@ typedef struct {
     char state[MYBOT_DISPLAY_STATE_CAPACITY];
     bool in_conversation;
     char provisioning_ssid[33];
+    /* Product-owned setup failure; renderer shows fixed, local retry guidance. */
+    bool wifi_failed;
     /* Product startup clock gate: 0 inactive, 1 waiting, 2 failed. */
     int clock_state;
 } mybot_display_runtime_status_t;

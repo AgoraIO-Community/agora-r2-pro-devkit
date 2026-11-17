@@ -1268,8 +1268,8 @@
     "ui/include/mybot_platform/display_status.h": {
       "path": "src/ui/include/mybot_ui/display_status.h",
       "original_sha256": "fe2c1d976fd852db69a43292506253b7909d05206ea4ea5ff183f8145cb56283",
-      "result_sha256": "bcf27360bd3cd619d5c4f9e6300ddf82b133cc1706ab1a3a1aea25bd1da2491a",
-      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable. Group maintained UI sources and assets under src/ui while preserving public include namespaces and generated font bytes. Add product-owned AP provisioning status and show hotspot guidance only while its portal is active. Add a product clock-readiness waiting/failure presentation while preserving existing UI frames and generated fonts.",
+      "result_sha256": "12be6490fce8ffe25f80479e9a7b441648fa07a7cdeb24180d035a65006534eb",
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable. Group maintained UI sources and assets under src/ui while preserving public include namespaces and generated font bytes. Add product-owned AP provisioning status and show hotspot guidance only while its portal is active. Add a product clock-readiness waiting/failure presentation while preserving existing UI frames and generated fonts. Present recoverable Wi-Fi setup faults with fixed bilingual settings-retry guidance while preserving normal frame baselines.",
       "previous_paths": [
         "components/mybot_ui/include/mybot_ui/display_status.h"
       ]
@@ -1349,8 +1349,8 @@
     "ui/view/pixel_glasses_view.cc": {
       "path": "src/ui/views/pixel_glasses/pixel_glasses_view.cc",
       "original_sha256": "c128562e29bbd41a7b57556c0adc986cf0800ed89743122460624328050cad57",
-      "result_sha256": "608d39252d455a7513843831b7409cf11126c6ab472f257b2e947761b1c6491e",
-      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable. Group maintained UI sources and assets under src/ui while preserving public include namespaces and generated font bytes. Add product-owned AP provisioning status and show hotspot guidance only while its portal is active. Add a product clock-readiness waiting/failure presentation while preserving existing UI frames and generated fonts.",
+      "result_sha256": "c1ffc343803d9f548fe3d98c1f4b1e508d1626c1b27276bd599b0a6c0ee27844",
+      "reason": "Native 640x480 Linux view adaptation and component/header relocation; original imported hashes remain immutable. Group maintained UI sources and assets under src/ui while preserving public include namespaces and generated font bytes. Add product-owned AP provisioning status and show hotspot guidance only while its portal is active. Add a product clock-readiness waiting/failure presentation while preserving existing UI frames and generated fonts. Present recoverable Wi-Fi setup faults with fixed bilingual settings-retry guidance while preserving normal frame baselines.",
       "previous_paths": [
         "components/mybot_ui/views/pixel_glasses/pixel_glasses_view.cc"
       ]
@@ -9518,7 +9518,7 @@
         "src/ui/views/pixel_glasses/pixel_expression_shapes.h": "53e5ba308227615afd759567d55075ac22e81bbac1947e9f74982d4c5e155004",
         "src/ui/views/pixel_glasses/pixel_expressions.c": "edaa31dafdee7a6e801b558b9a311bafea3a1d32eea75a0d81ee9a1933fa8b5e",
         "src/ui/views/pixel_glasses/pixel_glasses.h": "9cd9d810d89030ecabd3fac3cddf3087b8425295435114b915726f1a7303dab7",
-        "src/ui/views/pixel_glasses/pixel_glasses_view.cc": "608d39252d455a7513843831b7409cf11126c6ab472f257b2e947761b1c6491e"
+        "src/ui/views/pixel_glasses/pixel_glasses_view.cc": "c1ffc343803d9f548fe3d98c1f4b1e508d1626c1b27276bd599b0a6c0ee27844"
       }
     }
   ],

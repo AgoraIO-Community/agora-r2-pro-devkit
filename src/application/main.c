@@ -295,6 +295,7 @@ int main(int argc, char **argv) {
         rv1126b_ui_set_state(MYBOT_STATE_WIFI_PROVISIONING);
         rv1126b_ui_show(&waiting);
         rv1126b_ui_time_status(0);
+        rv1126b_ui_wifi_failed(false);
         int last_wifi_state = -1;
         /* One announcement per setup session, including single-radio retries
          * that temporarily stop and then restore the same AP. */
@@ -338,12 +339,15 @@ int main(int argc, char **argv) {
                 last_wifi_state = (int)status.state;
             }
             rv1126b_ui_provisioning(status.ap_active ? status.ssid : NULL);
+            const bool wifi_failed = status.state == RV1126B_WIFI_ERROR && !status.ap_active;
+            rv1126b_ui_wifi_failed(wifi_failed);
             int ready = rv1126b_network_ready(platform.network_interface);
-            if (ready < 0 || (platform.enable_ui && rv1126b_ui_failed()) ||
-                (require_provisioning && status.state == RV1126B_WIFI_ERROR && !status.ap_active)) {
+            if (ready < 0 || (platform.enable_ui && rv1126b_ui_failed())) {
                 failed = 1;
                 goto cleanup;
             }
+            /* A setup fault keeps the settings retry available in this process.
+             * The gate still requires successful manually requested setup. */
             rv1126b_network_gate_action_t network_action =
                 rv1126b_network_gate_poll(&network_gate, options.wifi_provisioning,
                                           require_provisioning, sdk_started, ready, &status);
@@ -364,6 +368,7 @@ int main(int argc, char **argv) {
             }
             rv1126b_ui_time_status(time_state == RV1126B_TIME_WAIT_CLOCK ? 1 : 0);
             publish_status(status.ap_active                        ? "ap"
+                           : wifi_failed                           ? "wifi_error"
                            : time_state == RV1126B_TIME_WAIT_CLOCK ? "waiting_clock"
                                                                    : "waiting_network");
             if (time_state == RV1126B_TIME_FAILED || time_state == RV1126B_TIME_TIMEOUT) {
@@ -396,6 +401,7 @@ int main(int argc, char **argv) {
         if (s_exit || monotonic_ms() >= deadline)
             goto cleanup;
         rv1126b_ui_provisioning(NULL);
+        rv1126b_ui_wifi_failed(false);
         rv1126b_ui_time_status(0);
         rv1126b_prompt_stop();
         if (mybot_start(&config) < 0) {

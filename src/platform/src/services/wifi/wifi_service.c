@@ -15,6 +15,8 @@
 #include <string.h>
 #include <time.h>
 
+#define AP_HEALTH_INTERVAL_MS 250
+
 typedef enum { ACTION_NONE, ACTION_CONNECT, ACTION_DELETE, ACTION_SET_DEFAULT } action_kind_t;
 typedef struct {
     action_kind_t kind;
@@ -39,7 +41,7 @@ struct wifi_service {
     wifi_credentials_t saved;
     action_t pending;
     bool busy, manual, recovery, initialized, portal_started, finish_requested, connected;
-    uint64_t pending_at, finish_at, connected_at, next_scan, offline_since;
+    uint64_t pending_at, finish_at, connected_at, next_scan, next_health, offline_since;
 };
 
 static void copy_text(char *out, size_t capacity, const char *text) {
@@ -335,14 +337,23 @@ static bool initialize(wifi_service_t *s) {
 }
 
 static void ap_failed(wifi_service_t *s, const char *error) {
-    s->portal.ops->stop(s->portal.context);
-    s->backend.ops->stop_ap(s->backend.context);
+    /* Withdraw guidance before joins/driver cleanup, which can take time. */
     pthread_mutex_lock(&s->mutex);
     s->portal_started = false;
     s->public_status.ap_active = false;
+    s->public_status.ssid[0] = '\0';
+    s->public_status.state = RV1126B_WIFI_ERROR;
+    copy_text(s->public_status.error, sizeof(s->public_status.error), error);
+    s->portal_status.ssid[0] = '\0';
+    copy_text(s->portal_status.state, sizeof(s->portal_status.state), "error");
+    copy_text(s->portal_status.error, sizeof(s->portal_status.error), error);
     s->busy = false;
+    s->connected = false;
+    s->finish_requested = false;
+    memset(&s->pending, 0, sizeof(s->pending));
     pthread_mutex_unlock(&s->mutex);
-    set_state(s, RV1126B_WIFI_ERROR, "error", error);
+    s->portal.ops->stop(s->portal.context);
+    s->backend.ops->stop_ap(s->backend.context);
 }
 
 static bool enter_ap(wifi_service_t *s, const char *previous_error) {
@@ -376,6 +387,7 @@ static bool enter_ap(wifi_service_t *s, const char *previous_error) {
     set_state(s, RV1126B_WIFI_AP_READY, previous_error && previous_error[0] ? "error" : "ap",
               previous_error);
     s->next_scan = wifi_now_ms();
+    s->next_health = wifi_now_ms() + AP_HEALTH_INTERVAL_MS;
     return true;
 }
 
@@ -554,7 +566,7 @@ static void control(wifi_service_t *s) {
     }
     while (!stopping(s)) {
         action_t action = {0};
-        bool manual = false, recovery = false, finish = false, scan = false;
+        bool manual = false, recovery = false, finish = false, scan = false, health = false;
         pthread_mutex_lock(&s->mutex);
         const uint64_t now = wifi_now_ms();
         if (s->manual) {
@@ -582,6 +594,9 @@ static void control(wifi_service_t *s) {
                                         : now >= s->connected_at + s->timing.success_hold_ms)) {
             s->connected = false;
             finish = true;
+        } else if (s->portal_started && s->public_status.ap_active && !s->connected && !s->busy &&
+                   now >= s->next_health) {
+            health = true;
         } else if (s->portal_started && !s->connected && !s->busy && now >= s->next_scan) {
             scan = true;
         } else {
@@ -620,6 +635,10 @@ static void control(wifi_service_t *s) {
             s->busy = false;
             pthread_mutex_unlock(&s->mutex);
             set_state(s, RV1126B_WIFI_ONLINE, "connected", "");
+        } else if (health) {
+            s->next_health = wifi_now_ms() + AP_HEALTH_INTERVAL_MS;
+            if (!s->backend.ops->ap_running(s->backend.context))
+                ap_failed(s, "Wi-Fi access point stopped; open settings and retry Wi-Fi setup");
         } else if (scan)
             refresh_scan(s);
     }

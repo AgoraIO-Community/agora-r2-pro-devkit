@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #ifndef RV1126B_UI_H
 #define RV1126B_UI_H
+#include <stdbool.h>
 #include <mybot/mybot.h>
 #include <mybot/platform/mybot_lcd.h>
 #include <mybot_ui/settings.h>
@@ -24,6 +25,9 @@ void rv1126b_ui_show(const mybot_lcd_content_t *content);
 
 /* Show actual AP guidance only after the portal has started. NULL clears it. */
 void rv1126b_ui_provisioning(const char *ssid);
+
+/* Copies a setup failure flag; settings remain available for an explicit retry. */
+void rv1126b_ui_wifi_failed(bool failed);
 
 /* Product startup clock gate: 0 clears, 1 waits, 2 reports failure.
  * Readiness means the supported clock range, not proof of NTP synchronization.

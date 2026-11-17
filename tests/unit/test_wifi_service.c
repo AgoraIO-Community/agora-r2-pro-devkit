@@ -342,6 +342,74 @@ static void test_ap_and_portal_rollback(void) {
     CHECK(!snapshot(service).ap_active);
     close_service(service, s);
 }
+
+static void test_ap_exit_withdraws_guidance_before_cleanup_and_allows_retry(void) {
+    fake_state_t *s = new_state();
+    add_profile(s, "retained");
+    wifi_service_timing_t deadlines = timing();
+    deadlines.scan_interval_ms = 60000;
+    wifi_service_t *service = make_service(s, true, true, false, &deadlines);
+    CHECK(wifi_service_start(service));
+    wait_ap(service);
+    AWAIT(GET(s, scans) == 1);
+    SET(s, block_portal_stop, 1);
+    SET(s, ap, 0);
+    AWAIT(GET(s, portal_stops) == 1);
+    const rv1126b_wifi_status_t failed = snapshot(service);
+    const wifi_portal_status_t portal = status(service);
+    CHECK(failed.state == RV1126B_WIFI_ERROR && !failed.ap_active && !failed.ssid[0]);
+    CHECK(!strcmp(portal.state, "error") && !portal.busy && !portal.ssid[0]);
+    CHECK(failed.error[0] && !strcmp(failed.error, portal.error));
+    CHECK(GET(s, ap_stops) == 0 && GET(s, scans) == 1);
+    CHECK(first_name(service, "retained") && GET(s, saves) == 0);
+    char error[WIFI_ERROR_CAPACITY] = "";
+    CHECK(!wifi_service_submit(service, "new", "password123", error));
+    CHECK(!wifi_service_saved_action(service, "delete", 0, "retained", error));
+    CHECK(!wifi_service_finish(service, error));
+    SET(s, block_portal_stop, 0);
+    AWAIT(GET(s, ap_stops) == 1);
+    wifi_sleep_ms(350);
+    CHECK(GET(s, ap_starts) == 1 && snapshot(service).state == RV1126B_WIFI_ERROR);
+
+    SET(s, ap_ok, 0);
+    wifi_service_request_provisioning(service);
+    AWAIT(GET(s, ap_starts) == 2 && snapshot(service).state == RV1126B_WIFI_ERROR);
+    wifi_sleep_ms(350);
+    CHECK(GET(s, ap_starts) == 2 && !snapshot(service).ap_active);
+    SET(s, ap_ok, 1);
+    wifi_service_request_provisioning(service);
+    wait_ap(service);
+    CHECK(GET(s, ap_starts) == 3 && GET(s, portal_starts) == 2);
+    CHECK(first_name(service, "retained") && GET(s, saves) == 0);
+    close_service(service, s);
+}
+
+static void test_single_interface_connect_and_verify_do_not_require_ap(void) {
+    fake_state_t *s = new_state();
+    SET(s, concurrent, 0);
+    SET(s, connection_ok, 1);
+    SET(s, block_connect, 1);
+    wifi_service_timing_t deadlines = timing();
+    deadlines.connect_budget_ms = deadlines.attempt_ms = 1000;
+    deadlines.success_hold_ms = 5000;
+    wifi_service_t *service = make_service(s, true, true, false, &deadlines);
+    CHECK(wifi_service_start(service));
+    wait_ap(service);
+    char error[WIFI_ERROR_CAPACITY] = "";
+    CHECK(wifi_service_submit(service, "test", "password123", error));
+    AWAIT(GET(s, connections) == 1 && !snapshot(service).ap_active);
+    wifi_sleep_ms(350);
+    CHECK(snapshot(service).state == RV1126B_WIFI_CONNECTING && GET(s, ap_stops) == 0);
+    SET(s, block_connect, 0);
+    AWAIT(snapshot(service).state == RV1126B_WIFI_VERIFYING);
+    wifi_sleep_ms(350);
+    CHECK(snapshot(service).state == RV1126B_WIFI_VERIFYING && !snapshot(service).ap_active);
+    CHECK(GET(s, ap_stops) == 0 && GET(s, ap_starts) == 1);
+    CHECK(wifi_service_finish(service, error));
+    AWAIT(snapshot(service).state == RV1126B_WIFI_ONLINE);
+    close_service(service, s);
+}
+
 static void test_saved_attempts_and_deadline(void) {
     fake_state_t *s = new_state();
     add_profile(s, "one");
@@ -639,6 +707,8 @@ int main(void) {
     test_disabled_and_existing_network();
     test_offline_recovery_requires_sdk_acknowledgement();
     test_ap_and_portal_rollback();
+    test_ap_exit_withdraws_guidance_before_cleanup_and_allows_retry();
+    test_single_interface_connect_and_verify_do_not_require_ap();
     test_saved_attempts_and_deadline();
     test_candidate_failure_then_success_and_grace();
     test_requires_routed_ip_and_single_interface_recovery();

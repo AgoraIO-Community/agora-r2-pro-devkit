@@ -245,6 +245,32 @@ int main(void) {
         CHECK(rv1126b_renderer_canvas());
         check_no_unimplemented_portal(ap_root);
         uint64_t waiting_network = hash(rv1126b_renderer_canvas());
+        status.wifi_failed = true;
+        rv1126b_renderer_update(&provisioning, &status, now += 100);
+        rv1126b_renderer_step(now += 500);
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+        CHECK(find_visible_label(ap_root, "配网失败"));
+        CHECK(find_visible_label(ap_root, "请在设置中重试"));
+#else
+        CHECK(find_visible_label(ap_root, "Wi-Fi setup failed"));
+        CHECK(find_visible_label(ap_root, "Open settings to retry"));
+#endif
+        CHECK(find_visible_label(ap_root, "> state: wifi_error"));
+        CHECK(!find_visible_label(ap_root, "mybot-abcd"));
+        CHECK(!find_visible_label(ap_root, "http://192.168.4.1"));
+        check_visible_labels(ap_root);
+        CHECK(hash(rv1126b_renderer_canvas()) != waiting_network);
+        rv1126b_renderer_settings(MYBOT_SETTINGS_MENU);
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+        CHECK(find_visible_label(ap_root, "返回"));
+#else
+        CHECK(find_visible_label(ap_root, "Back"));
+#endif
+        rv1126b_renderer_settings(MYBOT_SETTINGS_CLOSED);
+        status.wifi_failed = false;
+        rv1126b_renderer_update(&provisioning, &status, now += 100);
+        rv1126b_renderer_step(now += 500);
+        CHECK(hash(rv1126b_renderer_canvas()) == waiting_network);
         status.clock_state = 1;
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);

@@ -179,6 +179,15 @@ void rv1126b_ui_provisioning(const char *ssid) {
     pthread_mutex_unlock(&s_ui.lock);
 }
 
+void rv1126b_ui_wifi_failed(bool failed) {
+    pthread_mutex_lock(&s_ui.lock);
+    if (s_ui.status.wifi_failed != failed) {
+        s_ui.status.wifi_failed = failed;
+        s_ui.pending = true;
+    }
+    pthread_mutex_unlock(&s_ui.lock);
+}
+
 void rv1126b_ui_time_status(int status) {
     if (status < 0 || status > 2)
         return;

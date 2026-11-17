@@ -62,6 +62,7 @@ AP 配网期间不启动授时 helper，也不消耗授时等待窗口。完成�
 | No nl80211 Wi-Fi interface | 检查驱动/固件和 `iw dev`，用 `--wifi-interface` 指定真实无线接口 |
 | Driver cannot create an AP+STA interface | 查看驱动并发组合和现有接口；若外部管理服务拥有 STA，需要人工移交，应用不会抢占 |
 | hostapd did not enable the AP | 检查监管域、2.4 GHz 信道、驱动和工具兼容性；现有 STA 位于 5/6 GHz 时先改用 2.4 GHz |
+| 配网失败 / Wi-Fi setup failed | AP 辅助进程退出或热点无法启动时，撤销热点引导并保留设置菜单。检查对应错误日志和工具后，在设置中重新选择“设备配网”；应用不会无限自动重启热点，已保存网络保持不变。应用状态为 `wifi_error` |
 | Cannot bind Wi-Fi portal sockets | 检查 `192.168.4.1` 已配置、80/53 端口占用与权限；避免与另一门户/DNS 服务抢占相同地址 |
 | 热点可见但手机拿不到地址 | 检查 dnsmasq、驱动和手机 DHCP；这需要设备证据，主机测试不能代替 |
 | 手机不弹页面 | 连接热点后手动打开 HTTP 地址，确认没有因“无互联网”提示自动切换回其他网络 |
