@@ -350,7 +350,9 @@ fi
 for comm in /proc/[0-9]*/comm; do
     [ -r "$comm" ] || continue
     IFS= read -r name < "$comm" || continue
-    case "$name" in botstation-devi|botstation-device|mybot-rv1126b) exit 52;; esac
+    # Linux comm contains at most 15 characters; retain both full names and
+    # their truncated forms. This check refuses deployment without signaling.
+    case "$name" in botstation-devi|botstation-device|mybot-rv1126b|mybot-rv1126b-v|mybot-rv1126b-video) exit 52;; esac
 done
 mkdir -p /etc/mybot-rv1126b/disabled
 chmod 755 /etc/mybot-rv1126b /etc/mybot-rv1126b/disabled

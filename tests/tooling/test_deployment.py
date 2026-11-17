@@ -479,6 +479,24 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn('BOTSTATION_ENABLED=1', saved)
         self.assertIn('OTHER_SETTING=keep\n', saved)
 
+    def test_instance_check_rejects_voice_and_linux_truncated_video_names(self):
+        start = deployment.SYSTEM_POLICY.index('for comm in ')
+        end = deployment.SYSTEM_POLICY.index('\ndone\n', start) + len('\ndone\n')
+        script = deployment.SYSTEM_POLICY[start:end]
+        self.assertNotIn('kill', script)
+        process = self.base / 'proc/123'
+        process.mkdir(parents=True)
+        script = script.replace('/proc/[0-9]*/comm', str(self.base / 'proc/[0-9]*/comm'))
+        for name, expected in (('mybot-rv1126b', 52), ('mybot-rv1126b-video'[:15], 52),
+                               ('mybot-rv1126b-video', 52), ('botstation-device'[:15], 52),
+                               ('botstation-device', 52), ('mybot-superviso', 0), ('other', 0)):
+            with self.subTest(name=name):
+                (process / 'comm').write_text(name + '\n')
+                result = subprocess.run(['sh', '-s'], input='set -eu\n' + script,
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode, expected, result.stderr)
+                self.assertEqual((process / 'comm').read_text(), name + '\n')
+
     def test_generated_shell_is_syntactically_valid(self):
         scripts = [deployment.PREFLIGHT, deployment.identity_check(self.settings),
                    deployment.begin_transaction("fixture"), deployment.INSTALL_FILE, deployment.SYSTEM_POLICY,
