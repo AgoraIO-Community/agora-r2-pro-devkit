@@ -16,6 +16,11 @@ static const char *environment(const char *name, const char *fallback) {
     return value ? value : fallback;
 }
 
+static const char *default_server(void) {
+    return strcmp(RV1126B_LOCALE, "en-US") == 0 ? "https://botstation.agora.io/api"
+                                                : "https://botstation.shengwang.cn/api";
+}
+
 static int unsigned_value(const char *value, unsigned long max, unsigned int *output) {
     if (!value[0] || strspn(value, "0123456789") != strlen(value))
         return -1;
@@ -31,14 +36,13 @@ static int unsigned_value(const char *value, unsigned long max, unsigned int *ou
 static void usage(const char *program) {
     printf(
         "Usage: %s [options]\n"
-        "  --server HTTPS_URL       default: https://botstation.shengwang.cn/api\n"
+        "  --server HTTPS_URL       default: %s\n"
         "  --device-id ID           explicit identity, at most 32 characters\n"
         "  --identity-interface IF  derive from permanent factory MAC; default: CPU Serial HMAC\n"
         "  --capture-device PCM     default: botstation_capture\n"
         "  --playback-device PCM    default: botstation_playback\n"
         "  --interface IF           network interface filter (default: routed IPv4)\n"
         "  --wifi-interface IF      Wi-Fi station interface (default: auto)\n"
-        "  --wifi-provision         enter AP Wi-Fi setup before starting services\n"
         "  --no-wifi-provisioning   monitor existing networking without AP setup\n"
         "  --time-sync-timeout N    clock readiness timeout, 1..300 seconds (default: 30)\n"
         "  --time-sync-helper PATH optional absolute one-shot helper; default: system service\n"
@@ -55,8 +59,8 @@ static void usage(const char *program) {
         "RV1126B_INPUT_DEVICE, RV1126B_TOUCH_DEVICE, MYBOT_KV_STORE_DIR,\n"
         "RV1126B_WIFI_INTERFACE, MYBOT_ASSETS_DIR, MYBOT_LOCALE,\n"
         "RV1126B_TIME_SYNC_TIMEOUT, RV1126B_TIME_SYNC_HELPER;\n"
-        "stdin s/q/p/u/d/w/e then Enter; hold touch/menu 3 s for Wi-Fi setup.\n",
-        program);
+        "stdin s/q/p/u/d/e then Enter; open Settings > Wi-Fi setup for manual provisioning.\n",
+        program, default_server());
 }
 
 int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out) {
@@ -77,13 +81,13 @@ int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out) {
         .talk_key = RV1126B_BOARD_TALK_KEY,
         .enable_ui = true,
     };
-    const char *server = environment("RV1126B_SERVER", "https://botstation.shengwang.cn/api");
+    const char *server = environment("RV1126B_SERVER", default_server());
     const char *device_id = environment("RV1126B_DEVICE_ID", "");
     const char *identity_interface = "";
     const char *drm = RV1126B_BOARD_DRM;
     unsigned int rotation = RV1126B_BOARD_ROTATION, seconds = 0;
     bool demo = false;
-    bool wifi_provisioning = true, force_wifi_provisioning = false;
+    bool wifi_provisioning = true;
     const char *wifi_interface = environment("RV1126B_WIFI_INTERFACE", "");
     const char *time_timeout_text = environment("RV1126B_TIME_SYNC_TIMEOUT", "30");
     const char *time_helper = environment("RV1126B_TIME_SYNC_HELPER", "");
@@ -95,7 +99,6 @@ int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out) {
         OPT_PLAYBACK,
         OPT_INTERFACE,
         OPT_WIFI_INTERFACE,
-        OPT_WIFI_PROVISION,
         OPT_NO_WIFI_PROVISION,
         OPT_TIME_TIMEOUT,
         OPT_TIME_HELPER,
@@ -118,7 +121,6 @@ int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out) {
         {"playback-device", required_argument, NULL, OPT_PLAYBACK},
         {"interface", required_argument, NULL, OPT_INTERFACE},
         {"wifi-interface", required_argument, NULL, OPT_WIFI_INTERFACE},
-        {"wifi-provision", no_argument, NULL, OPT_WIFI_PROVISION},
         {"no-wifi-provisioning", no_argument, NULL, OPT_NO_WIFI_PROVISION},
         {"time-sync-timeout", required_argument, NULL, OPT_TIME_TIMEOUT},
         {"time-sync-helper", required_argument, NULL, OPT_TIME_HELPER},
@@ -156,9 +158,6 @@ int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out) {
             break;
         case OPT_WIFI_INTERFACE:
             wifi_interface = optarg;
-            break;
-        case OPT_WIFI_PROVISION:
-            force_wifi_provisioning = true;
             break;
         case OPT_NO_WIFI_PROVISION:
             wifi_provisioning = false;
@@ -217,8 +216,7 @@ int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out) {
     if (strlen(wifi_interface) >= IFNAMSIZ ||
         strspn(wifi_interface,
                "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_.-") !=
-            strlen(wifi_interface) ||
-        (!wifi_provisioning && force_wifi_provisioning) || (demo && force_wifi_provisioning))
+            strlen(wifi_interface))
         goto invalid;
     if (!platform.talk_key || platform.talk_key == KEY_VOLUMEUP ||
         platform.talk_key == KEY_VOLUMEDOWN || platform.talk_key == KEY_LEFT ||
@@ -234,7 +232,6 @@ int rv1126b_app_config_parse(int argc, char **argv, rv1126b_app_config_t *out) {
         .seconds = seconds,
         .demo = demo,
         .wifi_provisioning = wifi_provisioning,
-        .force_wifi_provisioning = force_wifi_provisioning,
         .wifi_interface = wifi_interface,
         .time_sync_timeout = time_timeout,
         .time_sync_helper = time_helper,

@@ -10,7 +10,7 @@ case "${RV1126B_VIDEO:-0}" in
     *) echo 'RV1126B_VIDEO must be 0 or 1' >&2; exit 2 ;;
 esac
 if [ ! -x "$executable" ]; then
-    echo "Missing test executable: $executable" >&2
+    echo "Missing application executable: $executable" >&2
     exit 1
 fi
 exec "$executable" "$@"

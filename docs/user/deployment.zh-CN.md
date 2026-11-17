@@ -2,6 +2,8 @@
 
 `scripts/deploy-rv1126b.py` 是显式 ADB 部署入口，面向已授权修改的 RV1126B TEST2 RK805B V10。构建与打包不会调用它。`deploy`、`rollback` 默认只生成计划，不访问设备；只有 `--execute` 才写设备。`preflight` 和 `status` 只读访问选定设备，不重启或启动业务。
 
+直接解包执行 `run.sh` 不安装系统服务，也不修改 ALSA 配置文件；本指南的受监督部署会安装 `S99mybot`、禁用原厂业务自启动，并写入下述板级网络策略。每次服务启动另通过 `amixer` 应用采集 mixer 设置，保留 ALSA 配置文件。安装策略与重载网络服务是两个独立步骤，后者由操作者确认连接条件后执行。
+
 ## 布局与保护边界
 
 | 路径 | 用途 |
@@ -55,18 +57,20 @@ assets/network/99-mybot-lease
 主机需要 Python 3.10+ 和可用的 `adb`。设备需为 AArch64、以 root 连接、已挂载 `/userdata` 并提供 tar/sha256sum/stat/dd/od/awk 等工具。连接多台设备时必须明确指定 `--serial`；只连接一台已授权设备时可省略。以下 `SERIAL` 和 `ARCHIVE_SHA256` 应替换为实际值。
 
 ```sh
+version=$(python3 scripts/project-version.py)
+
 python3 scripts/deploy-rv1126b.py preflight --serial SERIAL \
   --settings local/deployment-settings.json
 
 python3 scripts/deploy-rv1126b.py deploy --serial SERIAL \
   --settings local/deployment-settings.json \
-  --package dist/mybot-rv1126b-0.4.4-aarch64.tar.gz \
+  --package "dist/mybot-rv1126b-${version}-aarch64.tar.gz" \
   --sha256 ARCHIVE_SHA256 --dry-run
 ```
 
 预览只输出脱敏计划；不会执行 ADB。确认包和计划后，将 `--dry-run` 改为 `--execute`。首次导入回退包时再提供 `--rollback-package PATH` 与 `--rollback-sha256 SHA256`。默认安装完成后保持服务停止，由操作者检查配置与网络策略后启动；只有显式加 `--start` 才在版本切换后启动，不自动重启设备。
 
-写入顺序为：只读平台/身份检查 → 设备内完整备份 → 上传及再次校验 → 解包为独立 release → 再核对身份 → 停止旧服务 → 安装稳定服务配置 → 原子切换链接。停止命令失败、旧进程仍占用或校验失败时不继续。保留 ALSA 配置，板级输出准备由服务处理，不禁用 chronyd、ADB 或电源服务。
+写入顺序为：只读平台/身份检查 → 设备内完整备份 → 上传及再次校验 → 解包为独立 release → 再核对身份 → 停止旧服务 → 安装稳定服务配置 → 原子切换链接。停止命令失败、旧进程仍占用或校验失败时不继续。保留 ALSA 配置文件，不禁用 chronyd、ADB 或电源服务。每次服务启动前，`audio-prepare.sh` 通过 `amixer cset` 设置并读回核对 `ACodec_LP Digital Gain Volume=0`、`ACodec_LP PGA Gain Volume=23` 两项采集控制；这会修改声卡的运行时 mixer 状态，不修改播放控制或写入 ALSA 配置文件。
 
 原 `botstation-device` 配置改为 `BOTSTATION_ENABLED=0`，其 `S99botstation-device` 移入 `/etc/mybot-rv1126b/disabled/`，避免开机重复占用。系统 dnsmasq 配置限制为 `interface=usb0`、`bind-dynamic`，保留现有 USB 监听地址与 DHCP 范围，USB 接口尚无 IPv4 时也不会抢占 AP 地址。dhcpcd 增加 `denyinterfaces mbap*`，防止其接管临时 AP；网络租约 hook 安装到 `/lib/dhcpcd/dhcpcd-hooks/99-mybot-lease`（0644），运行记录目录 `/run/mybot-network/leases` 为 0700。操作者在确认连接条件后分别受控重载：
 

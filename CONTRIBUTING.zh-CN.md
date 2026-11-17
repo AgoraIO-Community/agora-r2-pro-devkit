@@ -16,11 +16,12 @@
 
 ## 检查
 
-需要 Python 3.10+、CMake 3.25+、OpenSSL 与 libdrm 开发文件。macOS 头文件配置见[构建指南](docs/user/build.zh-CN.md)。
+需要 Python 3.10+、CMake 3.25+、OpenSSL 与 libdrm 开发文件。依次执行 `python3 -m venv local/dev-tools` 和 `local/dev-tools/bin/python -m pip install -r requirements-dev.txt` 安装固定格式工具；质量检查自动选择它并校验版本。Ubuntu 24.04 依赖安装与 macOS 头文件配置见[构建指南](docs/user/build.zh-CN.md)。
 
 ```sh
 python3 scripts/doctor.py --host
 python3 scripts/check-dependencies.py
+python3 scripts/check-quality.py
 cmake --preset host-zh
 cmake --build --preset host-zh
 ctest --preset host-zh

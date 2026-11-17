@@ -88,11 +88,19 @@ int main(int argc, char **argv) {
     rv1126b_renderer_step(now += 1000);
     if (!failed)
         failed = save(argv[1], "physical-270", 270) < 0;
+    const char *settings_names[] = {"settings-menu", "settings-confirm", "settings-powering-off",
+                                    "settings-error"};
+    for (int page = MYBOT_SETTINGS_MENU; page <= MYBOT_SETTINGS_POWEROFF_ERROR && !failed; ++page) {
+        rv1126b_renderer_settings((mybot_settings_page_t)page);
+        rv1126b_renderer_step(now += 1000);
+        failed = save(argv[1], settings_names[page - 1], 0) < 0;
+    }
     rv1126b_renderer_destroy();
     if (failed)
         perror("preview");
     else
-        printf("Rendered 10 workflow pages, 23 expressions and physical orientation to %s\n",
-               argv[1]);
+        printf(
+            "Rendered 10 workflow pages, 23 expressions, 4 settings pages and orientation to %s\n",
+            argv[1]);
     return failed ? 1 : 0;
 }

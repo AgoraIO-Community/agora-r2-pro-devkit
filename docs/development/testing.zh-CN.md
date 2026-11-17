@@ -4,7 +4,15 @@
 
 ## 标准主机门禁
 
-格式工具基线为 clang-format 11（CI 使用 `requirements-dev.txt` 固定版本）；可在忽略的 `local/dev-tools` 虚拟环境安装该依赖。准备环境后，在仓库根目录执行：
+格式工具基线为 clang-format 11，准确版本由 `requirements-dev.txt` 固定。Ubuntu 24.04 系统自带的其他版本不能替代该基线。在仓库根目录准备忽略的虚拟环境，CI 也安装同一份固定依赖：
+
+```sh
+sudo apt install python3-venv
+python3 -m venv local/dev-tools
+local/dev-tools/bin/python -m pip install -r requirements-dev.txt
+```
+
+`check-quality.py` 自动选择 `local/dev-tools/bin/clang-format`，无需激活虚拟环境；没有该工具时再查找 PATH。显式 `--clang-format PATH` 可指定其他安装位置，但所选工具版本仍必须匹配固定基线，否则检查失败并显示修复方式。准备环境后，在仓库根目录执行：
 
 ```sh
 python3 scripts/doctor.py --host
@@ -26,7 +34,7 @@ macOS 需要时为 doctor 加 `--drm-include PATH`，为 configure 加 `-DRV1126
 
 现有检查覆盖像素旋转/dirty rectangle/pitch、输入语义和关闭、真实 LVGL 流程/表情/字形/文字边界、稳定身份 HMAC、显示 worker、DRM 失败清理与原输出恢复。治理增加配置/运行保护、ALSA 与网络失败清理/线程退出，以及工具链/制品一致性的边界检查。Wi-Fi 增加控制器模拟后端测试和真实 loopback HTTP/DNS 协议测试，覆盖异步提交、错误密码重试、成功后保存、队列冲突、已有网络保留及取消停止；后端纯逻辑覆盖扫描/接口解析、凭据校验和私有存储。门户测试包括 Host/Origin/CSRF、请求长度/重复 framing、UTF-8/JSON 转义、DNS 标签/压缩/截断及慢客户端关闭。主机测试不启动真实 hostapd 或变更网络接口，loopback socket 需获运行环境允许。准确测试名称以 `ctest --preset host-zh -N` 和测试报告为准，不把测试数量当作验收标准。
 
-UI 测试保留配对码前导零、最长状态行、23 种表情、双语文案以及禁止重新引入整帧 2×2 放大的像素检查。`ui-baseline` 会在临时目录生成中/英文对应的 34 帧，并与已验收 0.1.1 的 SHA256 清单逐一比较，防止迁移时误换字体、宏或资源。
+UI 测试保留配对码前导零、最长状态行、23 种表情、双语文案以及禁止重新引入整帧 2×2 放大的像素检查。`ui-baseline` 会在临时目录生成中/英文对应的 38 帧，并与 SHA256 清单逐一比较，覆盖主界面齿轮、设置、关机确认与失败页面，防止误换字体、宏或资源。
 
 ## 目标与制品检查
 
@@ -46,7 +54,7 @@ UI 测试保留配对码前导零、最长状态行、23 种表情、双语文�
 
 候选包真机回归由授权设备操作者按[上手指南](../user/getting-started.zh-CN.md)执行：校验/version、UI 字体/方向、旧绑定复用、配对、双向语音、输入/音量、重复开始/挂断、退出与再次启动。涉及视频时另验首帧/接收、方向/颜色、启停及并发；音质/AEC 和长期稳定性需专项场景。
 
-AP 配网真机测试按[专门步骤](../user/wifi-provisioning.zh-CN.md#设备验证)执行：无缓存、错误密码重试、连接后重启、已有网络不触发 AP、会话中长按进入配网、captive browser 与退出清理。需要分别确认驱动 AP+STA 和实际使用的单接口路径；主机协议和控制器模拟通过不能证明设备工具、驱动、DHCP 或射频工作。
+AP 配网真机测试按[专门步骤](../user/wifi-provisioning.zh-CN.md#设备验证)执行：无缓存、错误密码重试、连接后重启、已有网络不触发 AP、会话中通过设置进入配网、长按与终端 `w` 不进入配网、captive browser 与退出清理。需要分别确认驱动 AP+STA 和实际使用的单接口路径；主机协议和控制器模拟通过不能证明设备工具、驱动、DHCP 或射频工作。
 
 记录版本/commit、包 SHA256、语言/profile、板型/系统、命令、执行者、结果及限制。不得将旧版本用户验收、host 预览或 ABI 通过写成新包真机通过。
 

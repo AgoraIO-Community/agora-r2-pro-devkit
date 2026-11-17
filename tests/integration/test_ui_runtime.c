@@ -9,6 +9,8 @@
 
 static pthread_mutex_t test_lock = PTHREAD_MUTEX_INITIALIZER;
 static int failure, started, stopped, renders, last_clock_state;
+static mybot_settings_page_t last_settings;
+static int settings_updates;
 static char last_code[16];
 static char last_ssid[33];
 int rv1126b_drm_start(const char *path, unsigned rotation) {
@@ -44,6 +46,26 @@ void rv1126b_renderer_update(const mybot_lcd_content_t *content,
     ++renders;
     pthread_mutex_unlock(&test_lock);
 }
+void rv1126b_renderer_settings(mybot_settings_page_t page) {
+    pthread_mutex_lock(&test_lock);
+    last_settings = page;
+    ++settings_updates;
+    pthread_mutex_unlock(&test_lock);
+}
+
+static void wait_settings(mybot_settings_page_t expected, int previous) {
+    const struct timespec pause = {.tv_sec = 0, .tv_nsec = 1000000};
+    bool observed = false;
+    for (int attempt = 0; attempt < 1000 && !observed; ++attempt) {
+        pthread_mutex_lock(&test_lock);
+        observed = last_settings == expected && settings_updates > previous;
+        pthread_mutex_unlock(&test_lock);
+        if (!observed)
+            nanosleep(&pause, NULL);
+    }
+    CHECK(observed);
+}
+
 void rv1126b_renderer_step(uint32_t now) {
     (void)now;
 }
@@ -118,6 +140,18 @@ int main(void) {
         before = rendered();
         rv1126b_ui_time_status(0);
         wait_for_clock(0, before);
+        pthread_mutex_lock(&test_lock);
+        int previous_settings = settings_updates;
+        pthread_mutex_unlock(&test_lock);
+        rv1126b_ui_settings(MYBOT_SETTINGS_MENU);
+        wait_settings(MYBOT_SETTINGS_MENU, previous_settings);
+        pthread_mutex_lock(&test_lock);
+        previous_settings = settings_updates;
+        pthread_mutex_unlock(&test_lock);
+        rv1126b_ui_lcd_ops()->destroy(ctx);
+        /* SDK teardown only updates the background, never the product overlay. */
+        wait_settings(MYBOT_SETTINGS_MENU, previous_settings);
+        rv1126b_ui_settings(MYBOT_SETTINGS_CLOSED);
         /* Stop with an active gate; the next display lifecycle resets it. */
         before = rendered();
         rv1126b_ui_time_status(2);

@@ -2,6 +2,22 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.5.2 — Unreleased
+
+- Route manual Wi-Fi setup exclusively through the UI settings menu; remove touch and Menu holds, terminal `w`, and the forced-provisioning CLI option. Automatic offline setup remains available.
+- Select the default service by UI build language: Shengwang for `zh-CN` and Agora for `en-US`, with CLI and environment overrides taking precedence.
+
+## 0.5.1 — Unreleased
+
+- Keep current documentation versions synchronized with CMake, render package language examples, and enforce the pinned formatter before quality checks.
+- Clarify direct application execution versus supervised system deployment and correct lifecycle diagnostics.
+- Add a persistent settings entry with Wi-Fi setup, poweroff confirmation, cancellation and failure pages in both UI languages.
+- Place settings navigation at the top left and retain multitouch slot coordinates across contacts for repeated taps.
+- Keep product input available before and across SDK sessions, normalize touchscreen coordinates and isolate menu gestures from conversation controls.
+- Request planned poweroff through an authenticated supervisor transaction; shut down only after successful application and descendant cleanup.
+
+Actual device power removal and restart behavior require hardware acceptance.
+
 ## 0.4.4 — Unreleased
 
 - Implement the Wi-Fi backend, profile storage, captive portal and controller in C99 with explicit resource ownership and pthread synchronization.

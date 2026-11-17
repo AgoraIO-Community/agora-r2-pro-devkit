@@ -4,29 +4,40 @@
 
 A Linux application for running agent-studio-device-firmware 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides AP Wi-Fi setup with voice guidance, HTTPS pairing, bidirectional voice, persistent device identity and output volume, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
 
-The current source is the **0.4.4 deployment candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. AP Wi-Fi setup, voice guidance, persistent volume and time handling require device testing; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
+The current source is the **<!-- project-version -->0.5.2<!-- /project-version --> deployment candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. AP Wi-Fi setup, voice guidance, persistent volume and time handling require device testing; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
 
 ## Platform and behavior
 
 The recorded device baseline is AArch64 Buildroot 2024.02, Linux 6.1, glibc 2.41, ALSA, DRM/KMS and a physical 480×640 DSI screen. The UI renders at 640×480 with a default 270° rotation and statically linked LVGL 9.5. Audio uses 16 kHz mono signed-16 PCM, 20 ms frames and Cloud AEC.
 
-Output volume is saved in the private runtime directory and restored across application restarts and manual Wi-Fi setup. The existing keys, terminal commands and cloud volume controls use the same 0–100 scale; 100 preserves the previous output level. The platform applies playback gain once, without changing capture gain or system mixer settings. See [configuration](docs/user/configuration.zh-CN.md).
+Output volume is saved in the private runtime directory and restored across application restarts and manual Wi-Fi setup. The existing keys, terminal commands and cloud volume controls use the same 0–100 scale; 100 preserves the previous output level. Application volume controls apply playback gain once and do not adjust capture gain or system mixer settings. See [configuration](docs/user/configuration.zh-CN.md).
 
-The application preserves an existing usable network and the system's ALSA configuration. When offline, it tries saved Wi-Fi networks for up to 30 seconds, then starts an open `mybot-xxxx` hotspot. Connect a phone and open `http://192.168.4.1/` to select a 2.4 GHz network or enter a hidden SSID. The bilingual page supports saved networks, connection progress and retries. A short touch or Menu key starts/stops a conversation; hold either for 3 seconds to configure Wi-Fi, or use `w` in the foreground terminal. The application stops agent-studio-device-firmware before manual Wi-Fi setup and restarts it after setup completes. [Wi-Fi setup guide](docs/user/wifi-provisioning.zh-CN.md).
+The application preserves an existing usable network and the system's ALSA configuration. When offline, it tries saved Wi-Fi networks for up to 30 seconds, then starts an open `mybot-xxxx` hotspot. Connect a phone and open `http://192.168.4.1/` to select a 2.4 GHz network or enter a hidden SSID. The bilingual page supports saved networks, connection progress and retries. A short touch or short Menu press starts/stops a conversation. To configure Wi-Fi manually, open the top-right settings gear and choose “设备配网” (Wi-Fi setup); this is the only manual entry point and is available before the SDK starts. Holding the screen or Menu key does not start a conversation or Wi-Fi setup. The application stops agent-studio-device-firmware before manual Wi-Fi setup and restarts it after setup completes. [Wi-Fi setup guide](docs/user/wifi-provisioning.zh-CN.md).
 
 Once the hotspot and portal are ready, the application plays the bundled setup guidance once per setup session, using `MYBOT_LOCALE` and the saved output volume. Muting also silences guidance. Leaving setup or exiting cancels playback and releases the audio device before agent-studio-device-firmware resumes; a guidance failure is reported while the portal remains available.
 
 Before starting agent-studio-device-firmware, the application waits up to 30 seconds for plausible system time after the network is ready and AP setup has ended. It uses existing OS time services by default; an optional foreground helper must be selected explicitly. A timeout or helper failure reports the cause and exits with a nonzero status. The 2026-01-01 threshold only rejects obviously invalid dates and does not establish accurate NTP synchronization. See the [time setup guide](docs/user/time-sync.zh-CN.md).
 
-AP setup requires target-side `iw`, `hostapd`, `dnsmasq`, `wpa_supplicant`, `udhcpc`, `ip` and a driver with nl80211 AP support. These programs are supplied by the target system; only the DHCP hook is bundled. AP+STA is preferred; a single-interface fallback requires application ownership of the station. Existing network managers are never globally stopped. `--no-wifi-provisioning` retains network monitoring only. The application does not install firmware, autostart, OTA, wakeword/NPU, video downlink or a local camera preview. Runtime data defaults to `/userdata/mybot-rv1126b`; upgrades preserve pairing when server and identity configuration stay the same.
+AP setup requires target-side `iw`, `hostapd`, `dnsmasq`, `wpa_supplicant`, `udhcpc`, `ip` and a driver with nl80211 AP support. These programs are supplied by the target system; only the DHCP hook is bundled. AP+STA is preferred; a single-interface fallback requires application ownership of the station. Existing network managers are never globally stopped. `--no-wifi-provisioning` retains network monitoring only. The application does not include firmware installation, OTA, wakeword/NPU, video downlink or a local camera preview. Runtime data defaults to `/userdata/mybot-rv1126b`; upgrades preserve pairing when server and identity configuration stay the same.
+
+Directly running `run.sh` does not install startup services or modify system ALSA configuration files. Explicit [supervised deployment](docs/user/deployment.zh-CN.md) installs `/etc/init.d/S99mybot`, disables the original application startup, and updates `dnsmasq`/`dhcpcd` policies and a lease hook. Each service launch applies the board's capture mixer settings through `amixer`; it preserves ALSA configuration files. The operator reloads network policies separately after checking the connection conditions.
 
 ## Build and test
 
-Use **Python 3.10+**, **CMake 3.25+**, a C/C++ compiler, OpenSSL development files and libdrm development headers. Host UI/tests do not load the target RTSA library or require a target SDK. On Debian/Ubuntu, the development packages include `build-essential`, `pkg-config`, `libssl-dev` and `libdrm-dev`.
+Use **Python 3.10+**, **CMake 3.25+**, a C/C++ compiler, OpenSSL development files and libdrm development headers. Host UI/tests do not load the target RTSA library or require a target SDK. On Ubuntu 24.04, install the development packages and the pinned formatting tool in an ignored virtual environment:
+
+```sh
+sudo apt install build-essential pkg-config libssl-dev libdrm-dev cmake python3 python3-venv
+python3 -m venv local/dev-tools
+local/dev-tools/bin/python -m pip install -r requirements-dev.txt
+```
+
+The quality check automatically selects `local/dev-tools/bin/clang-format` and verifies its version; activating the virtual environment is not required.
 
 ```sh
 python3 scripts/doctor.py --host
 python3 scripts/check-dependencies.py
+python3 scripts/check-quality.py
 cmake --preset host-zh
 cmake --build --preset host-zh
 ctest --preset host-zh
@@ -72,3 +83,5 @@ Project-maintained modules live under `src/`; pinned dependency snapshots live u
 Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. agent-studio-device-firmware/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. The bundled RTSA package retains its vendor terms and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.
 
 Versioned installation, system Wi-Fi integration, service controls and rollback are described in the [device deployment guide](docs/user/deployment.zh-CN.md). Build and packaging scripts never deploy to a device.
+
+The top-right settings entry opens Wi-Fi setup and poweroff confirmation; see the [settings guide](docs/user/settings.zh-CN.md).

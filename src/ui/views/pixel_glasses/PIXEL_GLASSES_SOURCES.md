@@ -22,4 +22,4 @@ The [font manifest](../../fonts/sources.json) records inputs, character coverage
 
 Keep the [MIT notice](LICENSE.MIT.txt), file-level notices and [font licenses](../../fonts/licenses/) when redistributing the view or assets. Font families retain their required derived names and respective terms.
 
-Host checks exercise workflow pages, all expressions, visible text bounds, glyph coverage, leading-zero pairing codes and repeated view destruction. The preview baseline compares 34 frames per language with the accepted native layout. Physical display and concurrent audio/video behavior are tracked separately in the [validation matrix](../../../../docs/validation/README.md).
+Host checks exercise workflow pages, all expressions, visible text bounds, glyph coverage, leading-zero pairing codes and repeated view destruction. The preview baseline compares 38 frames per language: 10 workflow pages, 23 expressions, four settings pages and one physical-orientation frame. Physical display and concurrent audio/video behavior are tracked separately in the [validation matrix](../../../../docs/validation/README.md).
