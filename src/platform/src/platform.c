@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-#define _DEFAULT_SOURCE
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE 1
+#endif
 #include "platform_internal.h"
 #include "linux_platform_adapters.h"
 #include "mybot_platform/display.h"

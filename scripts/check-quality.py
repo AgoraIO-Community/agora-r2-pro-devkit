@@ -99,6 +99,11 @@ def main():
                                  *map(str, formatted)], capture_output=True, text=True)
         if result.returncode:
             errors.append(result.stderr.strip())
+    # Formatting may change a manual input; validate the resulting source bytes.
+    manual = subprocess.run([sys.executable, str(ROOT / 'scripts/check-device-manual.py'), '--check'],
+                            capture_output=True, text=True)
+    if manual.returncode:
+        errors.append(manual.stderr.strip() or manual.stdout.strip())
     if errors:
         print('\n'.join(errors))
         raise SystemExit(1)

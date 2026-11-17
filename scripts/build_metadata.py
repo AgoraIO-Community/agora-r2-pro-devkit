@@ -10,6 +10,8 @@ import shlex
 import subprocess
 
 SCHEMA = 1
+MANIFEST_SCHEMA = 2
+IDENTITY_SCHEMA = 1
 BOARD = "rv1126b-test2-rk805b-v10"
 RPATH = "$ORIGIN/../lib"
 
@@ -78,14 +80,31 @@ def source_snapshot(root):
 
 def tree_snapshot(path):
     path = Path(path)
+    if path.is_symlink():
+        raise ValueError("Directory dependency symlinks are unsupported; provide a materialized snapshot")
     if not path.is_dir():
         raise ValueError("Missing dependency directory: " + str(path))
+    root = path.resolve()
     entries = []
     for child in sorted(path.rglob("*")):
-        if child.is_file():
-            entries.append([str(child.relative_to(path)), digest(child)])
-        elif child.is_symlink() and not child.exists():
-            raise ValueError("Broken dependency symlink: " + str(child))
+        relative = str(child.relative_to(path))
+        if child.is_symlink():
+            link = str(child.readlink())
+            if Path(link).is_absolute():
+                raise ValueError("Absolute dependency symlink is unsupported: " + relative)
+            try:
+                target = child.resolve(strict=True)
+            except (OSError, RuntimeError) as error:
+                raise ValueError("Broken or cyclic dependency symlink: " + relative) from error
+            if not target.is_relative_to(root):
+                raise ValueError("Symlink leaves dependency snapshot: " + relative)
+            if target.is_dir():
+                raise ValueError("Directory dependency symlinks are unsupported: " + relative)
+            if not target.is_file():
+                raise ValueError("Unsupported dependency symlink target: " + relative)
+            entries.append([relative, "symlink", link, digest(target)])
+        elif child.is_file():
+            entries.append([relative, digest(child)])
     if not entries:
         raise ValueError("Empty dependency directory: " + str(path))
     return {"sha256": json_digest(entries), "file_count": len(entries)}
@@ -128,6 +147,71 @@ def load_config(root, build):
     return config
 
 
+def known_paths(root, build, config):
+    """Assign stable roles only to explicitly configured build locations."""
+    paths = {str(Path(root).resolve()): "<SOURCE>", str(Path(root)): "<SOURCE>",
+             str(Path(build).resolve()): "<BUILD>", str(Path(build)): "<BUILD>"}
+    for group, fields in (("sdk", ("sdk_dir", "staging_dir", "sysroot", "runtime_manifest", "rtsa_library")),
+                          ("toolchain", ("file", "c_compiler", "cxx_compiler"))):
+        for field in fields:
+            if config[group].get(field):
+                paths[str(Path(config[group][field]).resolve())] = "<" + group.upper() + ":" + field + ">"
+                paths[str(config[group][field])] = "<" + group.upper() + ":" + field + ">"
+    return sorted(((path, role) for path, role in paths.items() if path.startswith("/") and path != "/"),
+                  key=lambda entry: len(entry[0]), reverse=True)
+
+
+def portable_path(value, paths):
+    for path, role in paths:
+        if value == path or value.startswith(path + "/"):
+            return role + value[len(path):]
+    return value
+
+
+def portable_flags(flags, paths):
+    """Normalize path arguments, preserving option order and unknown semantics."""
+    result, expecting_path = [], False
+    separate = ("-I", "-L", "-B", "-isystem", "-iquote", "-idirafter", "-include", "-imacros",
+                "-isysroot", "--sysroot")
+    attached = ("--sysroot=", "-isystem", "-iquote", "-idirafter", "-include", "-imacros", "-isysroot",
+                "-I", "-L", "-B")
+    for token in shlex.split(flags):
+        if expecting_path:
+            result.append(portable_path(token, paths))
+            expecting_path = False
+        elif token in separate:
+            result.append(token)
+            expecting_path = True
+        elif token.startswith(("-ffile-prefix-map=", "-fdebug-prefix-map=", "-fmacro-prefix-map=")):
+            option, mapping = token.split("=", 1)
+            before, separator, after = mapping.partition("=")
+            result.append(option + "=" + portable_path(before, paths) + separator + after)
+        elif token.startswith("-Wl,"):
+            parts, path_next = token.split(","), False
+            for index in range(1, len(parts)):
+                if path_next:
+                    parts[index] = portable_path(parts[index], paths)
+                    path_next = False
+                elif parts[index] in ("-rpath-link", "--rpath-link", "-L", "--library-path"):
+                    path_next = True
+                elif parts[index].startswith("-L"):
+                    parts[index] = "-L" + portable_path(parts[index][2:], paths)
+            result.append(",".join(parts))
+        else:
+            for prefix in attached:
+                if token.startswith(prefix) and len(token) > len(prefix):
+                    token = prefix + portable_path(token[len(prefix):], paths)
+                    break
+            result.append(token)
+    return result
+
+
+def portable_text(text, paths):
+    for path, role in paths:
+        text = re.sub(re.escape(path) + r"(?=$|[/\s\"';)])", lambda _match: role, text)
+    return text
+
+
 def compiler_snapshot(path):
     compiler = Path(path)
     result = {"sha256": digest(compiler)}
@@ -135,13 +219,43 @@ def compiler_snapshot(path):
     with compiler.open("rb") as stream:
         is_script = stream.read(2) == b"#!"
     if is_script:
-        for line in compiler.read_text().splitlines():
-            if line.startswith("exec "):
-                words = shlex.split(line)
+        lines = compiler.read_text().splitlines()
+        wrapped_executable = None
+        for line in lines:
+            if line.lstrip().startswith("exec "):
+                words = shlex.split(line.lstrip())
                 executable = Path(words[1])
                 if executable.is_absolute() and executable.is_file():
                     result["wrapped_executable_sha256"] = digest(executable)
+                    wrapped_executable = str(executable)
                 break
+        # Generated Zig wrappers contain host-specific executable and cache
+        # paths. Canonicalize these fields while retaining every other line and
+        # argument, and independently bind the actual compiler's bytes.
+        cache_keys = ("ZIG_GLOBAL_CACHE_DIR", "ZIG_LOCAL_CACHE_DIR")
+        if (all(any(line.startswith("export " + key + "=") for line in lines) for key in cache_keys)
+                and "wrapped_executable_sha256" in result):
+            normalized = []
+            for line in lines:
+                words = shlex.split(line.lstrip())
+                if (words and words[0] == "exec" and len(words) > 2 and
+                        words[1] == wrapped_executable and words[2] in ("cc", "c++")):
+                    prefix = line[:len(line) - len(line.lstrip())] + "exec "
+                    executable = shlex.quote(wrapped_executable)
+                    if line.startswith(prefix + executable + " "):
+                        line = prefix + "<WRAPPED_COMPILER>" + line[len(prefix + executable):]
+                    normalized.append(line)
+                elif any(line.startswith("export " + key + "=") for key in cache_keys):
+                    assignment = shlex.split(line)[1:]
+                    if len(assignment) == 1:
+                        key, value = assignment[0].split("=", 1)
+                        if Path(value).is_absolute() and line == "export " + key + "=" + shlex.quote(value):
+                            line = "export " + key + "=<CACHE>"
+                    normalized.append(line)
+                else:
+                    normalized.append(line)
+            result["portable_sha256"] = json_digest(normalized)
+    result.setdefault("portable_sha256", result["sha256"])
     return result
 
 
@@ -159,8 +273,47 @@ def build_inputs(root, build):
             dependencies[key + "_sha256"] = digest(sdk[key])
     if sdk.get("sysroot"):
         dependencies["sysroot"] = tree_snapshot(sdk["sysroot"])
-    return {"schema": SCHEMA, "config": config, "source": source_snapshot(root),
-            "dependencies": dependencies}
+    source = source_snapshot(root)
+    paths = known_paths(root, build, config)
+    portable_config = json.loads(json.dumps(config))
+    for group, fields in (("sdk", ("sdk_dir", "staging_dir", "sysroot", "runtime_manifest", "rtsa_library")),
+                          ("toolchain", ("file", "c_compiler", "cxx_compiler"))):
+        for field in fields:
+            if portable_config[group].get(field):
+                portable_config[group][field] = portable_path(portable_config[group][field], paths)
+    # Hash complete normalized argument lists: unrecognized flags remain bound,
+    # but their literal values need not expose local paths in public manifests.
+    portable_config["flags"] = {key: value if key == "build_type" else
+                                {"sha256": json_digest(portable_flags(value, paths))}
+                                for key, value in config["flags"].items()}
+    portable_dependencies = json.loads(json.dumps(dependencies))
+    for key in ("compiler", "cxx_compiler"):
+        portable_dependencies[key]["sha256"] = portable_dependencies[key].pop("portable_sha256")
+    portable_dependencies["toolchain_file_sha256"] = json_digest(
+        portable_text(Path(toolchain["file"]).read_text(), paths))
+    identity = {"schema": IDENTITY_SCHEMA, "config": portable_config,
+                "source": {key: source[key] for key in ("sha256", "file_count")},
+                "dependencies": portable_dependencies}
+    return {"schema": MANIFEST_SCHEMA, "config": config, "source": source,
+            "dependencies": dependencies, "identity": identity}
+
+
+def inputs_digest(inputs, *, public=False):
+    """The portable identity is shared by emitted markers and package checks."""
+    identity = inputs.get("identity", {})
+    if inputs.get("schema") != MANIFEST_SCHEMA or identity.get("schema") != IDENTITY_SCHEMA:
+        raise ValueError("Portable inputs identity is missing or obsolete; reconfigure and rebuild")
+    for field in ("version", "language", "video", "ptime_ms", "board"):
+        if identity["config"][field] != inputs["config"][field]:
+            raise ValueError("Portable inputs identity does not match configuration")
+    if any(identity["source"][key] != inputs["source"][key] for key in ("sha256", "file_count")):
+        raise ValueError("Portable inputs identity does not match source")
+    if public and (inputs["config"]["flags_sha256"] != json_digest(identity["config"]["flags"]) or
+                   inputs["dependencies"] != identity["dependencies"] or
+                   any(value != identity["config"]["toolchain"][key]
+                       for key, value in inputs["config"].get("toolchain", {}).items())):
+        raise ValueError("Portable inputs identity does not match public metadata")
+    return json_digest(identity)
 
 
 def verified_abi(build, config, source_sha256, inputs_sha256, *,
@@ -210,7 +363,7 @@ def verified_abi(build, config, source_sha256, inputs_sha256, *,
 def verify_manifest(root, build, language, video):
     build = Path(build)
     manifest = read_json(build / "build-manifest.json")
-    if manifest.get("schema") != SCHEMA:
+    if manifest.get("schema") != MANIFEST_SCHEMA:
         raise ValueError("Unsupported build manifest; rebuild")
     current = build_inputs(root, build)
     if manifest.get("inputs") != current:
@@ -218,7 +371,7 @@ def verify_manifest(root, build, language, video):
     config = current["config"]
     if config["language"] != language or config["video"] != video:
         raise ValueError("Build profile/language does not match requested package")
-    report = verified_abi(build, config, current["source"]["sha256"], json_digest(current))
+    report = verified_abi(build, config, current["source"]["sha256"], inputs_digest(current))
     if (manifest.get("binary_sha256") != digest(build / "mybot-rv1126b") or
             manifest.get("abi_report_sha256") != digest(build / "abi-report.json")):
         raise ValueError("Build binary or ABI report differs from manifest")
@@ -241,8 +394,9 @@ def public_manifest(manifest):
                            for key in ("c_compiler_id", "c_compiler_version", "cxx_compiler_id",
                                        "cxx_compiler_version", "target")}
     flags = config.pop("flags")
-    config["flags_sha256"] = json_digest(flags)
+    config["flags_sha256"] = json_digest(result["inputs"]["identity"]["config"]["flags"])
     config["build_type"] = flags["build_type"]
+    result["inputs"]["dependencies"] = result["inputs"]["identity"]["dependencies"]
     # This hash binds the local ABI report; the package separately checksums its
     # public, path-normalized report in SHA256SUMS.
     return result

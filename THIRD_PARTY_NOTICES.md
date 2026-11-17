@@ -5,11 +5,12 @@ Project-maintained application and Linux integration code uses [Apache-2.0](LICE
 | Component | Source / terms | Retained notices |
 | --- | --- | --- |
 | agent-studio-device-firmware 1.3.0 | `AgoraIO-Community/agent-studio-device-firmware@4c36cbee4fe8908b37ccee12dcebc0b17bc436f1`; Apache-2.0 except file-level notices | [LICENSE](vendor/mybot/LICENSE), [upstream notices](vendor/mybot/THIRD_PARTY_NOTICES.md) |
-| cJSON-derived code | Namespaced implementation retains Dave Gamble copyright and MIT terms | `vendor/mybot/src/support/mybot_json.c` and `src/internal/mybot_json.h` |
+| cJSON-derived code | Namespaced implementation retains Dave Gamble copyright and MIT terms | [Complete MIT terms](docs/dependencies/cjson-LICENSE.txt); original notices in `vendor/mybot/src/support/mybot_json.c` and `vendor/mybot/src/internal/mybot_json.h` |
 | AOSL | Recorded `84e086084ebcd0ae2455a0ce5721950c5fe2e656`; Apache-2.0-based license **with additional restrictive conditions** | [complete AOSL license](vendor/aosl/LICENSE) |
 | LVGL 9.5.0 production subset | MIT and source-specific notices | [LICENCE.txt](vendor/lvgl/LICENCE.txt), [COPYRIGHTS.md](vendor/lvgl/COPYRIGHTS.md) |
 | DejaVu terminal and signature fonts | Renamed 18/20 px subsets; DejaVu/Bitstream Vera terms and notices | [terminal font license](src/ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt), [inputs](src/ui/fonts/sources.json) |
 | Source Han Sans Chinese subset | SIL OFL 1.1 | [Chinese font license](src/ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt) |
+| PDF manual fonts | MyBot Manual Sans is a renamed Source Han Sans derivative under SIL OFL 1.1; DejaVu Sans Mono Bold is unmodified under DejaVu/Bitstream Vera terms | [Sources and derivation](docs/user/assets/fonts/sources.json), [OFL](docs/user/assets/fonts/MyBotManualSans-OFL.txt), [DejaVu notices](docs/user/assets/fonts/DejaVuSansMono-LICENSE.txt) |
 | Montserrat / Font Awesome glyphs | SIL OFL and respective retained notices | [Montserrat](vendor/lvgl/scripts/built_in_font/font_license/Montserrat/OFL.txt), [Font Awesome](vendor/lvgl/scripts/built_in_font/font_license/FontAwesome5/LICENSE.txt) |
 | Agora RTSA 1.10.1 | Complete official package; separate vendor use/distribution terms | [Bundled package](vendor/rtsa/README.en.md), [RTSA_SOURCE.txt](docs/dependencies/RTSA_SOURCE.txt) |
 
@@ -20,3 +21,5 @@ The complete RTSA package is retained in `vendor/rtsa/` with its original notice
 Target ALSA, OpenSSL, libdrm, MPP and libc remain system dependencies. They are not copied over device system libraries by this application. Their own notices and the board firmware's distribution terms apply to the respective system contents.
 
 The LVGL snapshot carries the [mask callback signature patch](docs/dependencies/patches/lvgl-mask-callbacks.patch). Linux allocation/configuration lives outside the snapshot in `src/ui/`. The pixel-glasses view and font generator retain their file-level MIT / Apache-2.0 notices; see the [view license](src/ui/views/pixel_glasses/LICENSE.MIT.txt). Generated inputs, tool versions and hashes are recorded in the font manifest; derived font names retain required license restrictions.
+
+This is an official Agora project. The maintainer confirms authorization for the required AOSL and RTSA dependencies in this project. For commercial cooperation and downstream product terms, contact [Agora business](https://www.shengwang.cn/contact-sales/). This statement does not replace the original terms or grant downstream rights; see [dependency authorization](docs/dependencies/licensing.md).

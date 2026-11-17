@@ -91,7 +91,7 @@ ABI 对应的 [Agora RTSA SDK](https://doc.shengwang.cn/doc/rtsa/c/landing-page)
 ## 集成到宿主工程
 
 父工程通过 `AOSL_DIR` 指定平级的固定 AOSL 源码，无嵌套 submodule。
-[SDK 集成](../../cmake/dependencies/sdk.cmake)继续由 MyBot 创建唯一的 `aosl` target。
+[SDK 集成](../../cmake/dependencies/sdk.cmake)继续由 agent-studio-device-firmware 创建唯一的 `aosl` target。
 宿主为目标架构准备匹配的 Agora RTSA 头文件及共享库或静态库；此快照仅保留 Linux。
 
 也支持已安装包：`cmake --install` 会导出 `mybot::sdk`（及随附的 `mybot::aosl`），消费工程将
@@ -122,13 +122,13 @@ target_link_libraries(device_firmware PRIVATE mybot::sdk)
 注册入口。完整实现顺序、最小代码、线程约束和验收清单见
 [docs/PORTING.zh-CN.md](docs/PORTING.zh-CN.md)。
 
-产品先完成配网，再启动 MyBot；重新进入配网前先停止 MyBot。SDK 负责的设备服务配对
+产品先完成配网，再启动 agent-studio-device-firmware；重新进入配网前先停止 agent-studio-device-firmware。SDK 负责的设备服务配对
 和会话与网络配网相互独立。集成顺序与代码示例见
 [PORTING：启动与停止](docs/PORTING.zh-CN.md#第-6-步启动与停止)，
 API 契约以 [mybot.h](include/mybot/mybot.h) 为准。
 
 Agora RTSA 位于源码快照之外。共享库使用方通过应用打包流程部署 `libagora-rtc-sdk.so`，
-并通过 RPATH 或运行时加载器确保系统能够找到它；MyBot 的 CMake 安装目标不会安装该依赖。
+并通过 RPATH 或运行时加载器确保系统能够找到它；agent-studio-device-firmware 的 CMake 安装目标不会安装该依赖。
 
 ## 构建配置
 

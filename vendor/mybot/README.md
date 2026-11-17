@@ -115,7 +115,7 @@ integration fixes `MYBOT_BUILD_EXAMPLES=OFF` and `MYBOT_BUILD_TESTS=OFF`.
 
 The parent application provides the pinned sibling AOSL source tree through `AOSL_DIR`;
 there are no nested submodules. Its [SDK integration](../../cmake/dependencies/sdk.cmake)
-creates one `aosl` target through MyBot. The host supplies Agora RTSA headers and a
+creates one `aosl` target through agent-studio-device-firmware. The host supplies Agora RTSA headers and a
 shared or static library matching the target architecture. This snapshot retains Linux only.
 
 An installed package is also supported: `cmake --install` exports `mybot::sdk` (and the bundled
@@ -148,14 +148,14 @@ creating any platform resources. Every platform is submitted through this one de
 full implementation order, minimal code, threading constraints, and acceptance checklist, see
 [docs/PORTING.md](docs/PORTING.md).
 
-The product completes network provisioning before starting MyBot and stops MyBot before entering
+The product completes network provisioning before starting agent-studio-device-firmware and stops agent-studio-device-firmware before entering
 provisioning again. The SDK owns device-service pairing and conversations, independently of that
 network setup. See [PORTING: start and stop](docs/PORTING.md#step-6-start-and-stop) for the
 integration sequence and example, and [mybot.h](include/mybot/mybot.h) for the API contract.
 
 Agora RTSA is external to this source snapshot. Shared-library consumers must deploy
 `libagora-rtc-sdk.so` through the application packaging flow and make it discoverable through
-RPATH or the runtime loader; the MyBot CMake install target does not install that dependency.
+RPATH or the runtime loader; the agent-studio-device-firmware CMake install target does not install that dependency.
 
 ## Build configuration
 

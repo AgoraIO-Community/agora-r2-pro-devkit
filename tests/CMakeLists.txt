@@ -97,7 +97,7 @@ target_include_directories(test-network-lifecycle PRIVATE support/mocks
 target_link_libraries(test-network-lifecycle PRIVATE mybot::public_headers Threads::Threads)
 add_test(NAME network-lifecycle COMMAND test-network-lifecycle)
 
-foreach(part backend portal service profiles)
+foreach(part backend process portal service profiles)
     add_executable(test-wifi-${part} unit/test_wifi_${part}.c)
     target_include_directories(test-wifi-${part} PRIVATE "${support_dir}"
         "${platform_root}/src/services/wifi")
@@ -126,3 +126,20 @@ add_test(NAME ui-baseline COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/integration/check_ui_preview.py"
     --binary "$<TARGET_FILE:mybot-ui-preview>" --language "${RV1126B_LANGUAGE}")
 set_tests_properties(ui-baseline PROPERTIES TIMEOUT 30)
+
+# Include the real worker in the fixture to inject pthread creation failures.
+add_executable(test-video-lifecycle unit/test_video_lifecycle.c)
+target_include_directories(test-video-lifecycle PRIVATE "${platform_root}/src/drivers/video")
+target_link_libraries(test-video-lifecycle PRIVATE Threads::Threads)
+target_compile_options(test-video-lifecycle PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME video-lifecycle COMMAND test-video-lifecycle)
+set_tests_properties(video-lifecycle PROPERTIES TIMEOUT 30)
+
+add_executable(test-controller integration/test_controller.c ../src/application/network_gate.c)
+target_include_directories(test-controller PRIVATE ../src/application "${support_dir}"
+    "${platform_root}/include")
+target_compile_definitions(test-controller PRIVATE MYBOT_ENABLE_VIDEO=1)
+target_link_libraries(test-controller PRIVATE mybot::public_headers mybot_ui_contract)
+target_compile_options(test-controller PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME product-controller COMMAND test-controller)
+set_tests_properties(product-controller PROPERTIES TIMEOUT 30)

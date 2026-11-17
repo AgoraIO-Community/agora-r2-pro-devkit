@@ -245,7 +245,33 @@ int main(void) {
         CHECK(rv1126b_renderer_canvas());
         check_no_unimplemented_portal(ap_root);
         uint64_t waiting_network = hash(rv1126b_renderer_canvas());
-        status.clock_state = 1;
+        status.wifi_failed = true;
+        rv1126b_renderer_update(&provisioning, &status, now += 100);
+        rv1126b_renderer_step(now += 500);
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+        CHECK(find_visible_label(ap_root, "配网失败"));
+        CHECK(find_visible_label(ap_root, "请在设置中重试"));
+#else
+        CHECK(find_visible_label(ap_root, "Wi-Fi setup failed"));
+        CHECK(find_visible_label(ap_root, "Open settings to retry"));
+#endif
+        CHECK(find_visible_label(ap_root, "> state: wifi_error"));
+        CHECK(!find_visible_label(ap_root, "mybot-abcd"));
+        CHECK(!find_visible_label(ap_root, "http://192.168.4.1"));
+        check_visible_labels(ap_root);
+        CHECK(hash(rv1126b_renderer_canvas()) != waiting_network);
+        rv1126b_renderer_settings(MYBOT_SETTINGS_MENU);
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+        CHECK(find_visible_label(ap_root, "返回"));
+#else
+        CHECK(find_visible_label(ap_root, "Back"));
+#endif
+        rv1126b_renderer_settings(MYBOT_SETTINGS_CLOSED);
+        status.wifi_failed = false;
+        rv1126b_renderer_update(&provisioning, &status, now += 100);
+        rv1126b_renderer_step(now += 500);
+        CHECK(hash(rv1126b_renderer_canvas()) == waiting_network);
+        status.clock_state = MYBOT_DISPLAY_CLOCK_WAITING;
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);
         CHECK(rv1126b_renderer_canvas());
@@ -257,7 +283,7 @@ int main(void) {
         check_visible_labels(ap_root);
         uint64_t time_waiting = hash(rv1126b_renderer_canvas());
         CHECK(time_waiting != waiting_network);
-        status.clock_state = 2;
+        status.clock_state = MYBOT_DISPLAY_CLOCK_FAILED;
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);
         CHECK(rv1126b_renderer_canvas());
@@ -267,7 +293,7 @@ int main(void) {
         CHECK(find_label(ap_root, "> state: time_failed"));
         check_visible_labels(ap_root);
         CHECK(hash(rv1126b_renderer_canvas()) != time_waiting);
-        status.clock_state = 0;
+        status.clock_state = MYBOT_DISPLAY_CLOCK_INACTIVE;
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);
         CHECK(hash(rv1126b_renderer_canvas()) == waiting_network);
@@ -296,7 +322,7 @@ int main(void) {
         check_settings(&now);
         /* The product gate must also suppress a stale face/expression override,
          * and clearing it must restore the ordinary state-driven view. */
-        status.clock_state = 1;
+        status.clock_state = MYBOT_DISPLAY_CLOCK_WAITING;
         rv1126b_renderer_update(&ready, &status, now += 100);
         CHECK(rv1126b_renderer_expression(MYBOT_EXPRESSION_HAPPY) == 0);
         rv1126b_renderer_step(now += 500);
@@ -304,7 +330,7 @@ int main(void) {
         time_title = find_label(ap_root, "System time");
         CHECK(time_title && lv_obj_is_visible(time_title));
         check_visible_labels(ap_root);
-        status.clock_state = 0;
+        status.clock_state = MYBOT_DISPLAY_CLOCK_INACTIVE;
         rv1126b_renderer_update(&ready, &status, now += 100);
         CHECK(rv1126b_renderer_expression(-1) == 0);
         rv1126b_renderer_step(now += 1000);

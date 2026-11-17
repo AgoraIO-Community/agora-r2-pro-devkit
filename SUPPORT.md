@@ -2,6 +2,8 @@
 
 [English](SUPPORT.md) | [简体中文](SUPPORT.zh-CN.md)
 
+For suspected security vulnerabilities, use the private channel in [SECURITY.md](SECURITY.md).
+
 Start with [getting started](docs/user/getting-started.zh-CN.md), [troubleshooting](docs/user/troubleshooting.zh-CN.md) and the [validation matrix](docs/validation/README.md). This repository targets one recorded RV1126B board/system baseline; a successful host build does not establish compatibility with another firmware image.
 
 For a bug report, use the repository issue template and include:

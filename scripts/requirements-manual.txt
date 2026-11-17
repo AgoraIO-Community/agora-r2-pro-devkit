@@ -1,0 +1,5 @@
+# Optional tools for generating and inspecting the device operations PDF.
+reportlab==4.4.3
+Pillow==11.3.0
+PyMuPDF==1.26.4
+fonttools==4.60.1

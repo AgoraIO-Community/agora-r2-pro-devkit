@@ -236,36 +236,42 @@ class OfflineTargetTests(unittest.TestCase):
 
 class ProvenanceTests(unittest.TestCase):
     def setUp(self):
-        self.temporary = tempfile.TemporaryDirectory(prefix='mybot-provenance-test-')
-        self.addCleanup(self.temporary.cleanup)
-        self.root = Path(self.temporary.name)
-        self.put('vendor/source.c', b'original\nwrapper\n')
-        self.put('vendor/LICENSE', b'license')
+        temporary = tempfile.TemporaryDirectory(prefix='mybot-provenance-test-')
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        self.put('vendor/README.md', b'vendor index')
+        self.put('vendor/dep/source.c', b'original\nwrapper\n')
+        self.put('vendor/dep/LICENSE', b'license')
         self.put('component/header.h', b'public header')
+        self.put('assets/view.c', b'project view')
         self.put('docs/fix.patch', b'patch input')
         self.put('fonts/font.c', b'generated glyphs')
         self.put('tools/generate.py', b'font generator')
-        self.fonts = {'generator': 'tools/generate.py', 'fonts': {'fixture.ttf': {'sha256': digest(b'font input'), 'url': 'https://example.invalid/font'}}}
+        self.fonts = {'generator': 'tools/generate.py', 'fonts': {
+            'fixture.ttf': {'sha256': digest(b'font input'), 'url': 'https://example.invalid/font'}},
+            'pillow_version': 'fixture', 'freetype_version': 'fixture'}
         self.put_json('fonts/sources.json', self.fonts)
-        imports = {'imported_files': {'vendor/source.c': digest(b'original\n'),
-            'vendor/LICENSE': digest(b'license'), 'old/header.h': digest(b'public header')}}
-        self.put_json('docs/imported.json', imports)
-        self.lock = {'schema_version': 1,
-            'original_import': {'manifest': 'docs/imported.json', 'sha256': self.hash('docs/imported.json')},
-            'snapshots': [{'directory': 'vendor', 'files': {
-                'vendor/source.c': self.hash('vendor/source.c'), 'vendor/LICENSE': self.hash('vendor/LICENSE')}}],
-            'import_adaptations': {
-                'vendor/source.c': {'path': 'vendor/source.c', 'original_sha256': digest(b'original\n'),
-                    'result_sha256': self.hash('vendor/source.c'), 'reason': 'typed callback wrapper'},
-                'old/header.h': {'path': 'component/header.h', 'original_sha256': digest(b'public header'),
-                    'result_sha256': self.hash('component/header.h'), 'reason': 'header relocation'}},
+        self.put_json('docs/imported.json', {'imported_files': {'old/source.c': digest(b'original\n')}})
+        self.put_json('docs/lock-v1.json', {'schema_version': 1, 'original_import': {
+            'manifest': 'docs/imported.json', 'sha256': self.hash('docs/imported.json')},
+            'import_adaptations': {'old/source.c': {'path': 'obsolete/project/source.c'}}})
+        self.lock = {'schema_version': 2, 'vendor_root': 'vendor',
+            'history': {
+                'dependency_lock_v1': {'path': 'docs/lock-v1.json', 'sha256': self.hash('docs/lock-v1.json')},
+                'original_import': {'path': 'docs/imported.json', 'sha256': self.hash('docs/imported.json')}},
+            'snapshots': [{'name': 'dep', 'directory': 'vendor/dep', 'revision': 'fixed',
+                'source': 'https://example.invalid/dep', 'files': {
+                    'vendor/dep/source.c': self.hash('vendor/dep/source.c'),
+                    'vendor/dep/LICENSE': self.hash('vendor/dep/LICENSE')}}],
             'local_patches': [{'path': 'docs/fix.patch', 'sha256': self.hash('docs/fix.patch'),
-                'original_path': 'vendor/source.c', 'original_sha256': digest(b'original\n'),
-                'result_path': 'vendor/source.c', 'result_sha256': self.hash('vendor/source.c')}],
+                'original_path': 'old/source.c', 'original_sha256': digest(b'original\n'),
+                'result_path': 'vendor/dep/source.c', 'result_sha256': self.hash('vendor/dep/source.c')}],
             'generated_fonts': {'manifest': 'fonts/sources.json', 'manifest_sha256': self.hash('fonts/sources.json'),
                 'generator': 'tools/generate.py', 'generator_sha256': self.hash('tools/generate.py'),
-                'inputs': self.fonts['fonts'], 'outputs': {'fonts/font.c': self.hash('fonts/font.c')}},
-            'retained_licenses': {'vendor/LICENSE': self.hash('vendor/LICENSE')}}
+                'pillow_version': 'fixture', 'freetype_version': 'fixture',
+                'inputs': copy.deepcopy(self.fonts['fonts']), 'outputs': {'fonts/font.c': self.hash('fonts/font.c')}},
+            'retained_licenses': {'vendor/dep/LICENSE': self.hash('vendor/dep/LICENSE')},
+            'required_inputs': {'component/header.h': self.hash('component/header.h')}}
 
     def put(self, name, content):
         path = self.root / name
@@ -281,482 +287,195 @@ class ProvenanceTests(unittest.TestCase):
     def verify(self):
         return dependencies.verify(self.root, self.lock)
 
-    def test_current_snapshot_and_relocated_history_pass(self):
+    def test_current_integrity_and_archived_mappings_are_not_live(self):
         self.assertEqual(self.verify(), [])
+        self.put('obsolete/project/source.c', b'ordinary maintained code')
+        self.put('src/application/new.c', b'maintained source')
+        self.assertEqual(self.verify(), [])
+        self.put('src/application/new.c', b'edited maintained source')
+        self.put('src/ui/views/pixel_glasses/view.c', b'edited maintained UI view')
+        self.assertEqual(updater.refresh(self.root, self.lock), (self.lock, []))
 
-    def test_rejects_unlocked_vendor_addition(self):
-        self.put('vendor/unreviewed.c', b'new')
-        self.assertIn('unlocked dependency file: vendor/unreviewed.c', self.verify())
+    def test_live_historical_mapping_keys_are_rejected(self):
+        for key in ('import_adaptations', 'import_omissions', 'path_migrations', 'original_import', 'managed_assets'):
+            with self.subTest(key=key):
+                self.lock[key] = {}
+                with self.assertRaisesRegex(ValueError, 'only in the immutable history'):
+                    self.verify()
+                del self.lock[key]
 
-    def test_rejects_vendor_modification(self):
-        self.put('vendor/source.c', b'changed without provenance')
-        self.assertIn('SHA256 mismatch: vendor/source.c', self.verify())
+    def test_rejects_unlocked_missing_and_changed_vendor_files(self):
+        self.put('vendor/dep/new.c', b'new')
+        self.assertIn('unlocked dependency file: vendor/dep/new.c', self.verify())
+        (self.root / 'vendor/dep/new.c').unlink()
+        self.put('vendor/dep/source.c', b'changed')
+        self.assertIn('SHA256 mismatch: vendor/dep/source.c', self.verify())
+        (self.root / 'vendor/dep/source.c').unlink()
+        self.assertIn('missing snapshot file: vendor/dep/source.c', self.verify())
 
-    def test_rejects_rewritten_history(self):
-        self.put_json('docs/imported.json', {'imported_files': {}})
-        self.assertIn('SHA256 mismatch: docs/imported.json', self.verify())
-        self.assertTrue(any('not the historical import' in value for value in self.verify()))
+    def test_rejects_unregistered_vendor_root_member(self):
+        self.put('vendor/unregistered/thing.c', b'new dependency')
+        self.assertIn('unregistered vendor entry: vendor/unregistered', self.verify())
 
-    def test_rejects_missing_patch(self):
+    def test_rejects_empty_or_overlapping_dependency_groups(self):
+        self.lock['snapshots'][0]['files'] = {}
+        with self.assertRaisesRegex(ValueError, 'must not be empty'):
+            self.verify()
+        self.lock['snapshots'][0]['files'] = {'vendor/dep/source.c': self.hash('vendor/dep/source.c')}
+        self.lock['snapshots'].append({'name': 'nested', 'source': 'fixture', 'revision': 'fixed',
+            'directory': 'vendor/dep/nested', 'files': {'vendor/dep/nested/api.h': digest(b'header')}})
+        with self.assertRaisesRegex(ValueError, 'overlap'):
+            self.verify()
+
+    def test_rejects_history_change_and_refuses_to_refresh_it(self):
+        for name in ('docs/imported.json', 'docs/lock-v1.json'):
+            with self.subTest(name=name):
+                before = (self.root / name).read_bytes()
+                self.put_json(name, {})
+                self.assertIn('SHA256 mismatch: ' + name, self.verify())
+                with self.assertRaisesRegex(ValueError, 'immutable dependency history changed'):
+                    updater.refresh(self.root, self.lock)
+                self.put(name, before)
+
+    def test_history_references_are_cross_checked(self):
+        archived = json.loads((self.root / 'docs/lock-v1.json').read_text())
+        archived['original_import']['manifest'] = 'different.json'
+        self.put_json('docs/lock-v1.json', archived)
+        self.lock['history']['dependency_lock_v1']['sha256'] = self.hash('docs/lock-v1.json')
+        self.assertIn('historical lock and original import reference differ', self.verify())
+
+    def test_missing_patch_and_result_pin_are_checked(self):
         (self.root / 'docs/fix.patch').unlink()
         self.assertIn('missing dependency input: docs/fix.patch', self.verify())
+        self.put('docs/fix.patch', b'patch input')
+        self.lock['local_patches'][0]['result_sha256'] = digest(b'other result')
+        self.assertIn('patch result differs from the current snapshot: vendor/dep/source.c', self.verify())
 
-    def test_rejects_unrecorded_font_regeneration(self):
-        self.put('fonts/font.c', b'new glyphs')
-        self.assertIn('SHA256 mismatch: fonts/font.c', self.verify())
-
-    def test_rejects_unrecorded_generator_change(self):
-        self.put('tools/generate.py', b'changed generator')
-        self.assertIn('SHA256 mismatch: tools/generate.py', self.verify())
-
-    def test_rejects_changed_font_input(self):
-        changed = copy.deepcopy(self.fonts)
-        changed['fonts']['fixture.ttf']['sha256'] = digest(b'another font')
-        self.put_json('fonts/sources.json', changed)
-        self.assertIn('font source identities differ from the lock', self.verify())
-
-    def test_rejects_retained_license_modification(self):
-        self.put('vendor/LICENSE', b'license changed')
-        self.assertIn('SHA256 mismatch: vendor/LICENSE', self.verify())
-
-    def test_refresh_preserves_history_and_existing_reasons(self):
+    def test_refresh_requires_explicit_vendor_and_patch_acceptance(self):
+        self.put('vendor/dep/source.c', b'new reviewed wrapper')
+        with self.assertRaisesRegex(ValueError, 'select --snapshot dep'):
+            updater.refresh(self.root, self.lock)
+        with self.assertRaisesRegex(ValueError, 'select --patch docs/fix.patch'):
+            updater.refresh(self.root, self.lock, snapshots=['dep'])
+        self.put('docs/fix.patch', b'reviewed replacement patch')
         before = copy.deepcopy(self.lock)
-        self.put('vendor/source.c', b'original\nnew reviewed wrapper\n')
-        updated, modified = updater.refresh(self.root, self.lock)
+        updated, delta = updater.refresh(self.root, self.lock, snapshots=['dep'], patches=['docs/fix.patch'])
         self.assertEqual(self.lock, before)
-        self.assertEqual(updated['original_import'], before['original_import'])
-        self.assertEqual(updated['import_adaptations']['vendor/source.c']['original_sha256'], digest(b'original\n'))
-        self.assertEqual(updated['import_adaptations']['vendor/source.c']['reason'], 'typed callback wrapper')
-        self.assertTrue(modified)
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-        again, additional = updater.refresh(self.root, updated)
-        self.assertEqual(again, updated)
-        self.assertEqual(additional, [])
-
-    def test_refresh_rejects_rewritten_historical_manifest(self):
-        self.put_json('docs/imported.json', {'imported_files': {}})
-        with self.assertRaisesRegex(ValueError, 'historical import manifest changed'):
-            updater.refresh(self.root, self.lock)
-
-    def test_refresh_rejects_rewritten_revision_identity(self):
-        self.lock['original_import']['revisions'] = {'mybot_commit': 'rewritten'}
-        with self.assertRaisesRegex(ValueError, 'revisions were rewritten'):
-            updater.refresh(self.root, self.lock)
-        self.assertIn('historical import revisions differ from the original manifest', self.verify())
-
-    def test_refresh_rejects_rewritten_original_hash(self):
-        self.lock['import_adaptations']['vendor/source.c']['original_sha256'] = digest(b'rewritten')
-        with self.assertRaisesRegex(ValueError, 'original hash was rewritten'):
-            updater.refresh(self.root, self.lock)
-
-    def test_refresh_rejects_new_adaptation_without_reason(self):
-        self.put('vendor/LICENSE', b'local adaptation')
-        with self.assertRaisesRegex(ValueError, 'new adaptation requires --reason'):
-            updater.refresh(self.root, self.lock)
-        updated, modified = updater.refresh(self.root, self.lock, reasons={'vendor/LICENSE': 'reviewed notice correction'})
-        self.assertTrue(modified)
-        self.assertEqual(updated['import_adaptations']['vendor/LICENSE']['original_sha256'], digest(b'license'))
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-
-    def test_refresh_requires_reason_for_a_new_mapping(self):
-        self.put('moved/header.h', b'public header')
-        mapping = {'old/header.h': 'moved/header.h'}
-        with self.assertRaisesRegex(ValueError, 'new adaptation requires --reason'):
-            updater.refresh(self.root, self.lock, mappings=mapping)
-        (self.root / 'component/header.h').unlink()
-        updated, _ = updater.refresh(self.root, self.lock, mappings=mapping, reasons={'old/header.h': 'public include migration'})
-        self.assertEqual(updated['import_adaptations']['old/header.h']['path'], 'moved/header.h')
-
-    def add_historical(self, name, content):
-        history = json.loads((self.root / 'docs/imported.json').read_text())
-        history['imported_files'][name] = digest(content)
-        self.put_json('docs/imported.json', history)
-        self.lock['original_import']['sha256'] = self.hash('docs/imported.json')
-
-    def register_extra_snapshot(self, **options):
-        self.put('vendor-extra/include/api.h', b'independent public header')
-        return updater.refresh(self.root, self.lock, add_snapshots=[{
-            'name': 'extra', 'directory': 'vendor-extra', 'revision': 'fixed-revision',
-            'source': 'https://example.invalid/extra'}], **options)
-
-    def test_independent_snapshot_registration_preserves_import_history(self):
-        before = (self.root / 'docs/imported.json').read_bytes()
-        updated, modified = self.register_extra_snapshot()
-        self.assertTrue(modified)
-        self.assertEqual(updated['snapshots'][1]['revision'], 'fixed-revision')
-        self.assertIn('vendor-extra/include/api.h', updated['snapshots'][1]['files'])
-        self.assertEqual((self.root / 'docs/imported.json').read_bytes(), before)
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-        again, delta = updater.refresh(self.root, updated, add_snapshots=[{
-            'name': 'extra', 'directory': 'vendor-extra', 'revision': 'fixed-revision',
-            'source': 'https://example.invalid/extra'}])
-        self.assertEqual(again, updated)
-        self.assertEqual(delta, [])
-
-    def test_independent_snapshot_requires_fixed_identity(self):
-        with self.assertRaisesRegex(ValueError, 'requires name, directory, revision and source'):
-            updater.refresh(self.root, self.lock, add_snapshots=[{'name': 'extra', 'directory': 'vendor-extra'}])
-
-    def test_snapshot_directories_cannot_overlap(self):
-        self.lock['snapshots'].append({'directory': 'vendor/subdir', 'files': {}})
-        with self.assertRaisesRegex(ValueError, 'directories overlap'):
-            self.verify()
-
-    def test_snapshot_file_cannot_claim_another_group(self):
-        self.lock['snapshots'][0]['files']['component/header.h'] = self.hash('component/header.h')
-        with self.assertRaisesRegex(ValueError, 'outside its declared directory'):
-            self.verify()
-
-    def test_vendor_root_rejects_unregistered_entries(self):
-        self.put('dependencies/README.md', b'vendor index')
-        self.put('dependencies/unregistered/source.c', b'unknown source')
-        self.lock['vendor_root'] = 'dependencies'
-        self.lock['snapshots'] = []
-        self.assertIn('unregistered vendor entry: dependencies/unregistered', self.verify())
-        self.put('dependencies/extra.md', b'undocumented root entry')
-        self.assertIn('unregistered vendor entry: dependencies/extra.md', self.verify())
-
-    def test_vendor_root_rejects_missing_readme(self):
-        (self.root / 'dependencies').mkdir()
-        self.lock['vendor_root'] = 'dependencies'
-        self.lock['snapshots'] = []
-        self.assertIn('missing vendor entry: dependencies/README.md', self.verify())
-
-    def test_project_assets_are_hashed_separately_from_snapshots(self):
-        self.put('assets/geometry.c', b'project geometry')
-        self.lock['snapshots'].append({'name': 'view', 'source': 'project-maintained',
-            'directory': 'assets', 'files': {}})
-        updated, _ = updater.refresh(self.root, self.lock)
-        self.assertEqual(len(updated['snapshots']), 1)
-        self.assertEqual(updated['managed_assets'][0]['name'], 'view')
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-        self.put('assets/geometry.c', b'unreviewed project geometry')
-        self.assertIn('SHA256 mismatch: assets/geometry.c', dependencies.verify(self.root, updated))
-
-    def test_prefix_mapping_expands_each_file_and_removes_old_paths(self):
-        self.put('moved/header.h', b'public header')
-        (self.root / 'component/header.h').unlink()
-        updated, _ = updater.refresh(self.root, self.lock, prefix_mappings={'component': 'moved'},
-            prefix_reasons={'component': 'public include migration'})
-        entry = updated['import_adaptations']['old/header.h']
-        self.assertEqual(entry['path'], 'moved/header.h')
-        self.assertEqual(entry['previous_paths'], ['component/header.h'])
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-
-    def test_prefix_mapping_rejects_residual_old_target(self):
-        self.put('moved/header.h', b'public header')
-        with self.assertRaisesRegex(ValueError, 'obsolete mapped input remains: component/header.h'):
-            updater.refresh(self.root, self.lock, prefix_mappings={'component': 'moved'},
-                prefix_reasons={'component': 'public include migration'})
-
-    def test_explicit_file_reason_takes_priority_over_prefix_migration_reason(self):
-        self.put('moved/header.h', b'public header with documented adaptation')
-        (self.root / 'component/header.h').unlink()
-        updated, _ = updater.refresh(self.root, self.lock, prefix_mappings={'component': 'moved'},
-            prefix_reasons={'component': 'public include migration'},
-            reasons={'old/header.h': 'relocated header and documented its public contract'})
-        self.assertEqual(updated['import_adaptations']['old/header.h']['reason'],
-            'relocated header and documented its public contract')
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-
-    def test_prefix_mapping_rejects_overlapping_or_cyclic_rules(self):
-        for mappings in ({'vendor': 'vendor/new'}, {'vendor': 'x', 'x': 'vendor'},
-                         {'vendor': 'x', 'vendor/sub': 'y'}):
-            with self.subTest(mappings=mappings), self.assertRaisesRegex(ValueError, 'overlap|cycle'):
-                updater.refresh(self.root, self.lock, prefix_mappings=mappings,
-                    prefix_reasons={name: 'reviewed move' for name in mappings})
-
-    def test_prefix_mapping_requires_reason_and_rejects_unknown_prefix(self):
-        with self.assertRaisesRegex(ValueError, 'requires --reason-prefix'):
-            updater.refresh(self.root, self.lock, prefix_mappings={'component': 'moved'})
-        with self.assertRaisesRegex(ValueError, 'matches no historical inputs'):
-            updater.refresh(self.root, self.lock, prefix_mappings={'unknown': 'moved'},
-                prefix_reasons={'unknown': 'reviewed move'})
-
-    def relocate(self, prefixes=None, **options):
-        return updater.refresh(self.root, self.lock,
-            relocation_prefixes=prefixes or {'vendor': 'dependencies'},
-            relocation_reasons=options.pop('relocation_reasons', {'vendor': 'separate maintained code and dependency snapshots'}),
-            **options)
-
-    def test_current_path_relocation_preserves_history_patches_and_licenses(self):
-        history = (self.root / 'docs/imported.json').read_bytes()
-        before = copy.deepcopy(self.lock)
-        self.lock['required_inputs'] = {'vendor/source.c': self.hash('vendor/source.c')}
-        (self.root / 'vendor').rename(self.root / 'dependencies')
-        updated, delta = self.relocate()
         self.assertTrue(delta)
-        self.assertEqual((self.root / 'docs/imported.json').read_bytes(), history)
-        self.assertEqual(updated['original_import'], before['original_import'])
-        self.assertEqual(set(updated['import_adaptations']), {'vendor/source.c', 'vendor/LICENSE', 'old/header.h'})
-        entry = updated['import_adaptations']['vendor/source.c']
-        self.assertEqual(entry['path'], 'dependencies/source.c')
-        self.assertEqual(entry['original_sha256'], before['import_adaptations']['vendor/source.c']['original_sha256'])
-        self.assertIn('typed callback wrapper', entry['reason'])
-        self.assertEqual(updated['local_patches'][0]['original_path'], 'vendor/source.c')
-        self.assertEqual(updated['local_patches'][0]['result_path'], 'dependencies/source.c')
-        self.assertIn('dependencies/source.c', updated['required_inputs'])
-        self.assertIn('dependencies/LICENSE', updated['retained_licenses'])
-        self.assertEqual(updated['snapshots'][0]['directory'], 'dependencies')
+        self.assertEqual(updated['history'], before['history'])
+        self.assertEqual(updated['local_patches'][0]['original_sha256'], digest(b'original\n'))
         self.assertEqual(dependencies.verify(self.root, updated), [])
-        again, delta = updater.refresh(self.root, updated)
-        self.assertEqual(again, updated)
-        self.assertEqual(delta, [])
-        repeated, delta = updater.refresh(self.root, updated,
-            relocation_prefixes={'vendor': 'dependencies'},
-            relocation_reasons={'vendor': 'separate maintained code and dependency snapshots'})
-        self.assertEqual(repeated, updated)
-        self.assertEqual(delta, [])
+        self.assertEqual(updater.refresh(self.root, updated), (updated, []))
 
-    def test_relocation_updates_nonimported_assets_fonts_and_prior_destinations(self):
-        self.lock['managed_assets'] = [{'name': 'view', 'directory': 'component',
-            'source': 'project-maintained', 'files': {'component/header.h': self.hash('component/header.h')}}]
-        (self.root / 'src').mkdir()
-        (self.root / 'component').rename(self.root / 'src/core')
-        (self.root / 'fonts').rename(self.root / 'src/fonts')
-        updated, _ = self.relocate({'component': 'src/core', 'fonts': 'src/fonts'},
-            relocation_reasons={'component': 'group maintained sources', 'fonts': 'group UI assets'})
-        self.assertEqual(updated['managed_assets'][0]['directory'], 'src/core')
-        self.assertIn('src/core/header.h', updated['managed_assets'][0]['files'])
-        self.assertEqual(updated['generated_fonts']['manifest'], 'src/fonts/sources.json')
-        self.assertIn('src/fonts/font.c', updated['generated_fonts']['outputs'])
-        self.assertEqual(updated['import_adaptations']['old/header.h']['previous_paths'], ['component/header.h'])
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-
-    def test_relocation_preserves_omission_history_verbatim(self):
-        name = 'vendor/unused.txt'
-        self.add_historical(name, b'unused')
-        omitted, _ = updater.refresh(self.root, self.lock, omissions={name: 'outside production scope'})
-        self.lock = omitted
-        before = copy.deepcopy(omitted['import_omissions'])
-        (self.root / 'vendor').rename(self.root / 'dependencies')
-        updated, _ = self.relocate()
-        self.assertEqual(updated['import_omissions'], before)
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-
-    def test_relocation_refuses_snapshot_modification(self):
-        (self.root / 'vendor').rename(self.root / 'dependencies')
-        self.put('dependencies/source.c', b'changed during rename')
-        with self.assertRaisesRegex(ValueError, 'relocated snapshot bytes changed'):
-            self.relocate()
-
-    def test_relocation_refuses_snapshot_additions_and_removals(self):
-        (self.root / 'vendor').rename(self.root / 'dependencies')
-        self.put('dependencies/extra.txt', b'not part of the reviewed snapshot')
-        with self.assertRaisesRegex(ValueError, 'relocated snapshot bytes changed'):
-            self.relocate()
-        (self.root / 'dependencies/extra.txt').unlink()
-        (self.root / 'dependencies/source.c').unlink()
-        with self.assertRaisesRegex(ValueError, 'relocated snapshot bytes changed'):
-            self.relocate()
-
-    def test_relocation_rejects_residual_old_root_and_missing_destination(self):
-        (self.root / 'dependencies').mkdir()
-        with self.assertRaisesRegex(ValueError, 'obsolete layout root remains'):
-            self.relocate()
-        (self.root / 'dependencies').rmdir()
-        with self.assertRaisesRegex(ValueError, 'destination is missing'):
-            self.relocate({'absent': 'missing'}, relocation_reasons={'absent': 'reviewed move'})
-
-    def test_relocation_rejects_overlap_cycles_and_missing_reason(self):
-        with self.assertRaisesRegex(ValueError, 'requires --relocation-reason'):
-            self.relocate(relocation_reasons={})
-        for rules in ({'vendor': 'vendor/new'}, {'vendor': 'x', 'x': 'vendor'},
-                      {'vendor': 'x', 'vendor/sub': 'y'}):
-            with self.subTest(rules=rules), self.assertRaisesRegex(ValueError, 'overlap|cycle'):
-                updater.relocate_paths(self.root, copy.deepcopy(self.lock), {}, rules,
-                    {name: 'reviewed move' for name in rules})
-
-    def test_relocation_rejects_unmatched_and_ambiguous_mappings(self):
-        (self.root / 'target').mkdir()
-        with self.assertRaisesRegex(ValueError, 'matches no current lock paths'):
-            self.relocate({'unknown': 'target'}, relocation_reasons={'unknown': 'reviewed move'})
-        (self.root / 'vendor').rename(self.root / 'dependencies')
-        with self.assertRaisesRegex(ValueError, 'multiple migration rules'):
-            self.relocate(mappings={'vendor/source.c': 'dependencies/source.c'})
-
-    def test_checker_rejects_reintroduced_old_layout_roots(self):
-        (self.root / 'vendor').rename(self.root / 'dependencies')
-        updated, _ = self.relocate()
-        self.put('vendor/untracked.txt', b'legacy directory restored')
-        self.assertIn('obsolete layout root remains: vendor', dependencies.verify(self.root, updated))
-
-    def test_checker_rejects_invalid_migration_history(self):
-        for migrations, message in [
-            ([{'from': 'old', 'to': 'old/nested', 'reason': 'move'}], 'prefixes overlap'),
-            ([{'from': 'old', 'to': 'vendor', 'reason': ''}], 'has no explanation'),
-            ([{'from': '../old', 'to': 'vendor', 'reason': 'move'}], 'without traversal'),
-            ([{'from': 'old', 'to': 'vendor', 'reason': 'move'}] * 2, 'duplicate'),
-            ([{'from': 'a', 'to': 'b', 'reason': 'move'}, {'from': 'b', 'to': 'a', 'reason': 'move'}], 'cycle'),
-        ]:
-            with self.subTest(migrations=migrations), self.assertRaisesRegex(ValueError, message):
-                self.lock['path_migrations'] = migrations
-                self.verify()
-
-    def test_explicit_omission_records_original_identity_and_is_idempotent(self):
-        name = 'old/.gitmodules'
-        self.add_historical(name, b'obsolete submodule metadata')
-        updated, _ = updater.refresh(self.root, self.lock, omissions={name: 'source snapshot is committed directly'})
-        self.assertEqual(updated['import_omissions'][name], {'original_sha256': digest(b'obsolete submodule metadata'),
-            'previous_path': name, 'reason': 'source snapshot is committed directly'})
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-        again, delta = updater.refresh(self.root, updated, omissions={name: 'source snapshot is committed directly'})
-        self.assertEqual(again, updated)
-        self.assertEqual(delta, [])
-
-    def test_prefix_move_then_omission_keeps_new_previous_path_without_hashing_it(self):
-        name = 'old/sdk/.gitmodules'
-        self.add_historical(name, b'obsolete submodule metadata')
-        updated, _ = updater.refresh(self.root, self.lock, prefix_mappings={'old/sdk': 'new-sdk'},
-            prefix_reasons={'old/sdk': 'flatten snapshot'}, omissions={name: 'repository metadata is not a build input'})
-        self.assertEqual(updated['import_omissions'][name]['previous_path'], 'new-sdk/.gitmodules')
-        self.assertNotIn(name, updated['import_adaptations'])
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-
-    def test_unrecorded_removal_still_fails_refresh(self):
-        self.add_historical('old/.gitmodules', b'obsolete metadata')
-        with self.assertRaises(FileNotFoundError):
-            updater.refresh(self.root, self.lock)
-
-    def test_omission_rejects_unknown_or_still_present_files(self):
-        with self.assertRaisesRegex(ValueError, 'not in the historical import'):
-            updater.refresh(self.root, self.lock, omissions={'unknown': 'remove unknown'})
-        with self.assertRaisesRegex(ValueError, 'omitted dependency input remains'):
-            updater.refresh(self.root, self.lock, omissions={'vendor/source.c': 'remove live source'})
-
-    def test_mapped_omission_rejects_either_original_or_previous_target(self):
-        (self.root / 'component/header.h').unlink()
-        updated, _ = updater.refresh(self.root, self.lock, omissions={'old/header.h': 'unused header'})
-        self.assertEqual(updated['import_omissions']['old/header.h']['previous_path'], 'component/header.h')
-        for name in ('old/header.h', 'component/header.h'):
+    def test_snapshot_selection_cannot_silently_remove_a_notice_or_required_input(self):
+        for name in ('vendor/dep/LICENSE', 'vendor/dep/NOTICE.txt', 'vendor/dep/compiled.c'):
             with self.subTest(name=name):
-                self.put(name, b'public header')
-                self.assertIn('omitted dependency input remains: ' + name, dependencies.verify(self.root, updated))
+                if name != 'vendor/dep/LICENSE':
+                    self.put(name, b'required')
+                    self.lock['snapshots'][0]['files'][name] = self.hash(name)
+                if name.endswith('compiled.c'):
+                    self.lock['required_inputs'][name] = self.hash(name)
                 (self.root / name).unlink()
+                with self.assertRaisesRegex(ValueError, 'protected dependency input cannot be removed'):
+                    updater.refresh(self.root, self.lock, snapshots=['dep'])
+                self.put(name, b'license' if name.endswith('LICENSE') else b'required')
 
-    def test_omission_cannot_hide_notices_or_required_build_inputs(self):
-        for name in ('old/LICENSE', 'old/NOTICE.txt', 'old/COPYRIGHT', 'old/THIRD_PARTY_NOTICES.md'):
-            with self.subTest(name=name):
-                self.add_historical(name, b'legal terms')
-                with self.assertRaisesRegex(ValueError, 'protected dependency input'):
-                    updater.refresh(self.root, self.lock, omissions={name: 'not permitted'})
-                history = json.loads((self.root / 'docs/imported.json').read_text())
-                del history['imported_files'][name]
-                self.put_json('docs/imported.json', history)
-                self.lock['original_import']['sha256'] = self.hash('docs/imported.json')
-        self.lock['required_inputs'] = {'component/header.h': self.hash('component/header.h')}
-        (self.root / 'component/header.h').unlink()
-        with self.assertRaisesRegex(ValueError, 'protected dependency input'):
-            updater.refresh(self.root, self.lock, omissions={'old/header.h': 'compiled input'})
+    def test_license_text_changes_need_explicit_separate_acceptance(self):
+        self.put('vendor/dep/LICENSE', b'reviewed license correction')
+        with self.assertRaisesRegex(ValueError, 'select --license vendor/dep/LICENSE'):
+            updater.refresh(self.root, self.lock, snapshots=['dep'])
+        updated, delta = updater.refresh(self.root, self.lock, snapshots=['dep'], licenses=['vendor/dep/LICENSE'])
+        self.assertTrue(delta)
+        self.assertEqual(dependencies.verify(self.root, updated), [])
 
-    def test_required_input_hash_is_not_silently_refreshed(self):
-        self.lock['required_inputs'] = {'component/header.h': self.hash('component/header.h')}
-        self.put('component/header.h', b'unreviewed required header')
-        with self.assertRaisesRegex(ValueError, 'SHA256 mismatch: component/header.h'):
+    def test_required_input_changes_need_explicit_acceptance(self):
+        self.put('component/header.h', b'new required input')
+        with self.assertRaisesRegex(ValueError, 'select --required-input component/header.h'):
             updater.refresh(self.root, self.lock)
+        updated, delta = updater.refresh(self.root, self.lock, required_inputs=['component/header.h'])
+        self.assertTrue(delta)
+        self.assertEqual(dependencies.verify(self.root, updated), [])
 
-    def test_explicit_map_and_omission_are_mutually_exclusive(self):
-        with self.assertRaisesRegex(ValueError, 'both mapped and omitted'):
-            updater.refresh(self.root, self.lock, mappings={'old/header.h': 'gone/header.h'},
-                omissions={'old/header.h': 'unused header'})
+    def test_selected_snapshot_refreshes_duplicate_required_pin(self):
+        name = 'vendor/dep/source.c'
+        self.lock['required_inputs'][name] = self.hash(name)
+        self.put(name, b'new reviewed wrapper')
+        updated, _ = updater.refresh(self.root, self.lock, snapshots=['dep'], patches=['docs/fix.patch'])
+        self.assertEqual(updated['required_inputs'][name], self.hash(name))
 
-    def test_multiple_historical_inputs_cannot_share_a_destination(self):
-        self.lock['import_adaptations']['vendor/source.c']['path'] = 'component/header.h'
-        with self.assertRaisesRegex(ValueError, 'share a mapped destination'):
-            self.verify()
+    def test_generated_fonts_refresh_without_vendor_acceptance(self):
+        self.put('fonts/font.c', b'new glyphs')
+        self.put('tools/generate.py', b'new generator')
+        self.fonts['fonts']['fixture.ttf']['sha256'] = digest(b'updated font input')
+        self.put_json('fonts/sources.json', self.fonts)
+        self.assertIn('font source identities differ from the lock', self.verify())
+        updated, delta = updater.refresh(self.root, self.lock)
+        self.assertTrue(delta)
+        self.assertEqual(updated['snapshots'], self.lock['snapshots'])
+        self.assertEqual(dependencies.verify(self.root, updated), [])
+        self.assertEqual(updater.refresh(self.root, updated), (updated, []))
 
-    def test_parent_symlinks_and_ambiguous_paths_are_rejected(self):
+    def test_generated_font_tool_versions_and_generator_path_are_checked(self):
+        self.fonts['pillow_version'] = 'other'
+        self.fonts['generator'] = 'other-generator.py'
+        self.put_json('fonts/sources.json', self.fonts)
+        errors = self.verify()
+        self.assertIn('font tool version differs from the lock: pillow_version', errors)
+        self.assertIn('font generator path differs from the lock', errors)
+
+    def test_rejects_parent_symlinks_traversal_and_ambiguous_paths(self):
         (self.root / 'linked').symlink_to(self.root / 'component', target_is_directory=True)
-        for name in ('linked/header.h', 'vendor/../component/header.h', 'vendor//source.c', 'vendor\\source.c'):
-            with self.subTest(name=name), self.assertRaisesRegex(ValueError, 'symlinks|without traversal'):
+        for name in ('linked/header.h', '../outside', 'vendor/../component/header.h',
+                     'vendor//dep/source.c', 'vendor\\dep\\source.c', '/absolute', '.', '', 'x\ny'):
+            with self.subTest(name=name), self.assertRaises(ValueError):
                 dependencies.local_path(self.root, name)
 
-    def test_failed_cli_write_preserves_existing_lock_bytes(self):
-        self.add_historical('old/.gitmodules', b'obsolete metadata')
+    def test_rejects_snapshot_symlink_input(self):
+        path = self.root / 'vendor/dep/source.c'
+        path.unlink()
+        path.symlink_to(self.root / 'component/header.h')
+        with self.assertRaisesRegex(ValueError, 'must not be symlinks'):
+            self.verify()
+
+    def test_rejects_history_path_traversal_and_invalid_digest(self):
+        self.lock['history']['original_import']['path'] = '../outside'
+        with self.assertRaisesRegex(ValueError, 'without traversal'):
+            self.verify()
+        self.lock['history']['original_import']['path'] = 'docs/imported.json'
+        self.lock['history']['original_import']['sha256'] = 'invalid'
+        with self.assertRaisesRegex(ValueError, 'invalid dependency SHA256'):
+            self.verify()
+
+    def test_unknown_snapshot_or_patch_selection_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'unknown snapshot selection'):
+            updater.refresh(self.root, self.lock, snapshots=['unknown'])
+        with self.assertRaisesRegex(ValueError, 'unknown patch selection'):
+            updater.refresh(self.root, self.lock, patches=['unknown.patch'])
+
+    def test_cli_preview_write_idempotence_and_failed_write_atomicity(self):
         path = self.root / 'dependencies.lock.json'
         path.write_text(json.dumps(self.lock))
         before = path.read_bytes()
-        result = subprocess.run([sys.executable, str(ROOT / 'scripts/update-dependencies-lock.py'),
-            '--root', str(self.root), '--write', '--omit', 'vendor/LICENSE=not permitted'], text=True, capture_output=True)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('protected dependency input', result.stderr)
-        self.assertEqual(path.read_bytes(), before)
-        self.assertEqual(list(self.root.glob('.dependency-lock-*')), [])
-
-    def test_checker_rejects_forged_omission_for_notice_or_unknown_input(self):
-        self.lock['import_omissions'] = {'vendor/LICENSE': {
-            'original_sha256': digest(b'license'), 'previous_path': 'vendor/LICENSE', 'reason': 'invalid omission'}}
-        self.assertIn('protected dependency input cannot be omitted: vendor/LICENSE', self.verify())
-        self.lock['import_omissions'] = {'not-imported': {
-            'original_sha256': None, 'previous_path': 'not-imported', 'reason': 'invalid omission'}}
-        self.assertIn('omission original hash is not the historical import: not-imported', self.verify())
-
-    def test_omission_retains_all_prior_mapping_destinations(self):
-        self.put('moved/header.h', b'public header')
-        (self.root / 'component/header.h').unlink()
-        moved, _ = updater.refresh(self.root, self.lock, mappings={'old/header.h': 'moved/header.h'},
-            reasons={'old/header.h': 'reviewed second move'})
-        (self.root / 'moved/header.h').unlink()
-        omitted, _ = updater.refresh(self.root, moved, omissions={'old/header.h': 'unused header'})
-        self.put('component/header.h', b'public header')
-        self.assertIn('omitted dependency input remains: component/header.h', dependencies.verify(self.root, omitted))
-
-    def test_cli_registers_snapshot_asset_and_required_input_with_idempotent_write(self):
-        self.put('snapshots/README.md', b'dependency index')
-        self.put('snapshots/extra/include/api.h', b'new snapshot header')
-        self.put('assets/view.c', b'maintained view')
-        self.lock['snapshots'] = []
-        path = self.root / 'dependencies.lock.json'
-        path.write_text(json.dumps(self.lock))
+        self.put('fonts/font.c', b'updated generated glyphs')
         command = [sys.executable, str(ROOT / 'scripts/update-dependencies-lock.py'),
-            '--root', str(self.root), '--write', '--json', '--add-snapshot', 'extra=snapshots/extra',
-            '--revision', 'extra=fixed-revision', '--source', 'extra=https://example.invalid/extra',
-            '--managed-asset', 'view=assets', '--required-input', 'component/header.h', '--vendor-root', 'snapshots']
-        first = subprocess.run(command, text=True, capture_output=True)
-        self.assertEqual(first.returncode, 0, first.stderr)
-        self.assertTrue(json.loads(first.stdout)['written'])
-        updated = json.loads(path.read_text())
-        self.assertEqual(updated['vendor_root'], 'snapshots')
-        self.assertIn('component/header.h', updated['required_inputs'])
-        self.assertEqual(updated['managed_assets'][0]['name'], 'view')
-        self.assertEqual(dependencies.verify(self.root, updated), [])
-        second = subprocess.run(command, text=True, capture_output=True)
-        self.assertEqual(second.returncode, 0, second.stderr)
-        self.assertFalse(json.loads(second.stdout)['written'])
-        self.assertEqual(json.loads(second.stdout)['changes'], [])
-
-    def test_refresh_rejects_unknown_adaptation_name(self):
-        with self.assertRaisesRegex(ValueError, 'not in the historical import'):
-            updater.refresh(self.root, self.lock, reasons={'made-up.c': 'not an import'})
-
-    def test_refresh_cli_previews_without_writing(self):
-        self.put('vendor/source.c', b'reviewed change')
-        path = self.root / 'dependencies.lock.json'
-        path.write_text(json.dumps(self.lock))
-        before = path.read_bytes()
-        result = subprocess.run([sys.executable, str(ROOT / 'scripts/update-dependencies-lock.py'),
-                                 '--root', str(self.root), '--json'], text=True, capture_output=True)
+                   '--root', str(self.root), '--json']
+        result = subprocess.run(command, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(json.loads(result.stdout)['review_required'])
         self.assertFalse(json.loads(result.stdout)['written'])
         self.assertEqual(path.read_bytes(), before)
-        result = subprocess.run([sys.executable, str(ROOT / 'scripts/update-dependencies-lock.py'),
-                                 '--root', str(self.root), '--write', '--json'], text=True, capture_output=True)
+        result = subprocess.run(command + ['--write'], text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(json.loads(result.stdout)['written'])
-        self.assertEqual(dependencies.verify(self.root, json.loads(path.read_text())), [])
-
-    def test_rejects_lock_path_traversal(self):
-        self.lock['original_import']['manifest'] = '../outside.json'
-        with self.assertRaisesRegex(ValueError, 'without traversal'):
-            self.verify()
-
-    def test_rejects_symlink_input(self):
-        target = self.root / 'vendor/LICENSE'
-        target.unlink()
-        target.symlink_to(self.root / 'vendor/source.c')
-        with self.assertRaisesRegex(ValueError, 'must not be symlinks'):
-            self.verify()
+        result = subprocess.run(command + ['--write'], text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(json.loads(result.stdout)['written'])
+        before = path.read_bytes()
+        self.put('vendor/dep/LICENSE', b'unreviewed')
+        result = subprocess.run(command + ['--write'], text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list(self.root.glob('.dependency-lock-*')), [])
 
 
 if __name__ == '__main__':

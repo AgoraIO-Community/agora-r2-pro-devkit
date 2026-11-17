@@ -68,14 +68,20 @@ class RtsaSnapshotTests(unittest.TestCase):
             'files': {'vendor/rtsa/' + name: digest(content) for name, content in self.contents.items()},
         }
         self.put('docs/imported.json', json.dumps({'imported_files': {}}).encode())
+        self.put('docs/lock-v1.json', json.dumps({'schema_version': 1,
+            'original_import': {'manifest': 'docs/imported.json',
+                                'sha256': self.hash('docs/imported.json')}}).encode())
         fonts = {'generator': 'tools/font.py', 'fonts': {}}
         self.put('fonts/sources.json', json.dumps(fonts).encode())
         self.put('tools/font.py', b'# fixture\n')
         self.lock = {
-            'schema_version': 1, 'vendor_root': 'vendor',
-            'original_import': {'manifest': 'docs/imported.json', 'sha256': self.hash('docs/imported.json')},
-            'snapshots': [self.snapshot], 'import_adaptations': {}, 'local_patches': [],
-            'import_omissions': {}, 'managed_assets': [], 'required_inputs': {}, 'retained_licenses': {},
+            'schema_version': 2, 'vendor_root': 'vendor',
+            'history': {
+                'dependency_lock_v1': {'path': 'docs/lock-v1.json', 'sha256': self.hash('docs/lock-v1.json')},
+                'original_import': {'path': 'docs/imported.json', 'sha256': self.hash('docs/imported.json')},
+            },
+            'snapshots': [self.snapshot], 'local_patches': [],
+            'required_inputs': {}, 'retained_licenses': {},
             'generated_fonts': {
                 'manifest': 'fonts/sources.json', 'manifest_sha256': self.hash('fonts/sources.json'),
                 'generator': 'tools/font.py', 'generator_sha256': self.hash('tools/font.py'),
@@ -196,33 +202,16 @@ class RtsaSnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'complete release snapshot changed'):
             updater.refresh(self.root, self.lock)
 
-    def test_complete_package_relocation_preserves_every_archive_identity(self):
-        original = copy.deepcopy(self.snapshot)
-        (self.root / 'vendor').rename(self.root / 'dependencies')
-        updated, delta = updater.refresh(self.root, self.lock,
-            relocation_prefixes={'vendor': 'dependencies'},
-            relocation_reasons={'vendor': 'rename dependency boundary'})
-        self.assertTrue(delta)
-        current = updated['snapshots'][0]
-        self.assertEqual(updated['vendor_root'], 'dependencies')
-        for key in original.keys() - {'directory', 'files'}:
-            self.assertEqual(current[key], original[key], key)
-        self.assertEqual(current['files'], {'dependencies/rtsa/' + name: value
-            for name, value in original['archive_files'].items()})
-        self.assertEqual(check.verify(self.root, updated), [])
-        again, changes = updater.refresh(self.root, updated)
-        self.assertEqual(again, updated)
-        self.assertEqual(changes, [])
-
-    def test_relocation_cannot_repin_or_trim_complete_release(self):
-        (self.root / 'vendor').rename(self.root / 'dependencies')
-        name = 'example/test_data/send_audio.pcm'
-        self.put('dependencies/rtsa/' + name, b'rewritten during migration')
-        self.snapshot['files']['vendor/rtsa/' + name] = digest(b'rewritten during migration')
+    def test_explicit_selection_still_cannot_refresh_the_complete_release(self):
+        self.put('vendor/rtsa/README.md', b'changed documentation')
         with self.assertRaisesRegex(ValueError, 'complete release snapshot changed'):
-            updater.refresh(self.root, self.lock,
-                relocation_prefixes={'vendor': 'dependencies'},
-                relocation_reasons={'vendor': 'rename dependency boundary'})
+            updater.refresh(self.root, self.lock, snapshots=['rtsa'])
+
+    def test_official_archive_identity_is_preserved_by_refresh(self):
+        original = copy.deepcopy(self.snapshot)
+        refreshed, delta = updater.refresh(self.root, self.lock, snapshots=['rtsa'])
+        self.assertEqual(delta, [])
+        self.assertEqual(refreshed['snapshots'][0], original)
 
 
 if __name__ == '__main__':
