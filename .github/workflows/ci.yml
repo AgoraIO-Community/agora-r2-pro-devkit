@@ -40,8 +40,8 @@ jobs:
           else
             range="$HEAD_SHA^!"
           fi
-          git log --no-merges --format='%s' "$range" | while IFS= read -r subject; do
-            printf '%s\n' "$subject" | ./githooks/commit-msg --subject-only
+          git rev-list --no-merges "$range" | while IFS= read -r revision; do
+            git show -s --format=%B "$revision" | ./githooks/commit-msg --stdin
           done
   host:
     runs-on: ubuntu-24.04

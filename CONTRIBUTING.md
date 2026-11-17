@@ -58,4 +58,12 @@ Install the repository hooks before committing:
 ./scripts/setup-githooks.sh
 ```
 
+The hook and CI validate complete messages with the same rules. A breaking
+subject requires one separated, nonempty `BREAKING CHANGE:` footer, and that
+footer requires `!` in the subject. To check a complete existing message:
+
+```sh
+git show -s --format=%B HEAD | ./githooks/commit-msg --stdin
+```
+
 Include the problem, resulting behavior, compatibility, executed checks and remaining hardware checks in each PR. Contributions follow [LICENSE](LICENSE) unless a file explicitly carries another compatible license.

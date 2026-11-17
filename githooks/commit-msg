@@ -5,7 +5,7 @@
 #
 # Usage:
 #   Hook mode:        invoked by git as commit-msg <message-file>
-#   Subject-only CI:  printf '%s\n' "$subject" | githooks/commit-msg --subject-only
+#   Complete CI:     git show -s --format=%B COMMIT | githooks/commit-msg --stdin
 #
 # Format:
 #   <type>[optional scope][!]: <subject>
@@ -16,14 +16,12 @@
 
 set -u
 
-if [ "${1:-}" = "--subject-only" ]; then
-    subject_only=1
+if [ "${1:-}" = "--stdin" ] && [ "$#" -eq 1 ]; then
     message=$(cat)
 elif [ $# -eq 1 ] && [ -r "$1" ]; then
-    subject_only=0
     message=$(cat "$1")
 else
-    echo "commit-msg: usage: commit-msg <message-file> | --subject-only" >&2
+    echo "commit-msg: usage: commit-msg <message-file> | --stdin" >&2
     exit 2
 fi
 
@@ -69,14 +67,35 @@ case "$type" in
         ;;
 esac
 
-if [ "$subject_only" -eq 0 ]; then
-    # A body, when present, must be separated from the subject by a blank line.
-    body_lines=$(printf '%s\n' "$message" | sed '1d' | sed '/^$/d' | wc -l)
-    second_line=$(printf '%s\n' "$message" | sed -n '2p')
-    if [ "$body_lines" -gt 0 ] && [ -n "$second_line" ]; then
-        echo "commit-msg: subject must be followed by a blank line before the body" >&2
+# A body, when present, must be separated from the subject by a blank line.
+body_lines=$(printf '%s\n' "$message" | sed '1d' | sed '/^$/d' | wc -l)
+second_line=$(printf '%s\n' "$message" | sed -n '2p')
+if [ "$body_lines" -gt 0 ] && [ -n "$second_line" ]; then
+    echo "commit-msg: subject must be followed by a blank line before the body" >&2
+    exit 1
+fi
+
+header=${subject%%:*}
+case "$header" in *!) breaking=1;; *) breaking=0;; esac
+if printf '%s\n' "$message" | sed '1d' | grep -q '^BREAKING CHANGE:'; then
+    [ "$breaking" -eq 1 ] || {
+        echo "commit-msg: BREAKING CHANGE footer requires ! in the subject" >&2
         exit 1
-    fi
+    }
+    printf '%s\n' "$message" | awk '
+        NR > 1 && /^BREAKING CHANGE:/ {
+            count++
+            if (previous !~ /^[[:space:]]*$/ || $0 !~ /^BREAKING CHANGE: [^[:space:]]/) invalid=1
+        }
+        { previous=$0 }
+        END { exit count != 1 || invalid }
+    ' || {
+        echo "commit-msg: use one separated BREAKING CHANGE: description footer" >&2
+        exit 1
+    }
+elif [ "$breaking" -eq 1 ]; then
+    echo "commit-msg: ! requires a BREAKING CHANGE: description footer" >&2
+    exit 1
 fi
 
 exit 0
