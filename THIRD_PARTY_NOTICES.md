@@ -10,6 +10,7 @@ Project-maintained application and Linux integration code uses [Apache-2.0](LICE
 | LVGL 9.5.0 production subset | MIT and source-specific notices | [LICENCE.txt](vendor/lvgl/LICENCE.txt), [COPYRIGHTS.md](vendor/lvgl/COPYRIGHTS.md) |
 | DejaVu terminal and signature fonts | Renamed 18/20 px subsets; DejaVu/Bitstream Vera terms and notices | [terminal font license](src/ui/fonts/licenses/TERMINAL_FONT_LICENSE.txt), [inputs](src/ui/fonts/sources.json) |
 | Source Han Sans Chinese subset | SIL OFL 1.1 | [Chinese font license](src/ui/fonts/licenses/LVGL_VIEW_FONT_LICENSE.txt) |
+| PDF manual fonts | MyBot Manual Sans is a renamed Source Han Sans derivative under SIL OFL 1.1; DejaVu Sans Mono Bold is unmodified under DejaVu/Bitstream Vera terms | [Sources and derivation](docs/user/assets/fonts/sources.json), [OFL](docs/user/assets/fonts/MyBotManualSans-OFL.txt), [DejaVu notices](docs/user/assets/fonts/DejaVuSansMono-LICENSE.txt) |
 | Montserrat / Font Awesome glyphs | SIL OFL and respective retained notices | [Montserrat](vendor/lvgl/scripts/built_in_font/font_license/Montserrat/OFL.txt), [Font Awesome](vendor/lvgl/scripts/built_in_font/font_license/FontAwesome5/LICENSE.txt) |
 | Agora RTSA 1.10.1 | Complete official package; separate vendor use/distribution terms | [Bundled package](vendor/rtsa/README.en.md), [RTSA_SOURCE.txt](docs/dependencies/RTSA_SOURCE.txt) |
 

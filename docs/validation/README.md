@@ -488,3 +488,17 @@ Wi-Fi 运行实现及对应测试已迁移为 C99。公开 `mybot_platform/wifi.
 - macOS 中文、英文、UBSan 的 `wifi-portal`、`wifi-service` 各 2/2 通过，覆盖阶段映射、成功后清除分类、未知分类安全回退及后端私有诊断不出现在 HTTP 响应中。保留统一 routed IPv4 服务及系统/私有模式的既有网络语义。
 - `test_portal_embedding.py` 两项通过：实际编译 C99 校验 Unicode、引号、反斜线、trigraph、长输入和跨分片 token 的字节往返，另验证重复生成不改输出及坏输入不覆盖旧文件。固定格式质量、schema 2 离线依赖和差异检查通过。
 - 前期隔离草案另执行 CMake 增量依赖和 Node VM 页面映射/语言切换检查，通过；这些是主机模拟证据。本轮未访问设备、手机或执行目标构建，不继承旧包真机验收。
+
+## 双语手册的可重现更新链（R13）
+
+2026-11-17，版本 0.5.3 的手册由受维护的 `mybot-ui-preview --manual` 导出每种语言 15 张逻辑画面，再使用仓库固定字体生成 PDF。manifest 固定日期 `2026-11-17`、应用版本、UI 内容身份及输入/输出摘要；当前 UI SHA256 为 `4ce2bd79d3cb9ecbffc3c0d0159f9ff74366a94163cde0fb681ad59ff584758a`。普通质量检查在格式器执行后使用标准库校验最终输入，避免 `--fix-format` 修改 UI 后错误返回通过。
+
+- macOS 执行手册工具 11 项与格式工具 11 项回归，均通过；前者覆盖输入/输出漂移、实际 LVGL 内容变化、无关 application 修改、预览来源/语言、固定 PDF 工具版本、失败不发布半成品和非法路径。`python3.10 -S scripts/check-device-manual.py --check` 通过，证明普通检查不需要可选 PDF 包。
+- 使用当前 0.5.3、schema 2 依赖锁及 typed clock 场景刷新全部 32 项输出后，`--reproduce` 通过：30 张 PNG 解码 RGB 像素一致，两份 PDF 逐字节一致。每份 PDF 均为 24 页、22 个书签及目录链接，实际文字使用的字体均嵌入，命令可选取且无替换字。正常双语 UI 各 38 帧基线仍逐字节一致。
+- 对双语共 48 页逐页检查 contact sheets，截图、代码和版面未见溢出；另以 PyMuPDF 逐词核对，两种语言的越界词数均为 0。MyBot Manual Sans 保留原字体嵌入权限及字形标志，完整 OFL、DejaVu 条款及来源摘要随文档字体保留；运行包许可数组未增加文档专用字体。
+- 固定格式质量、离线依赖与差异检查通过，打包工具 41/41 通过；通知新增文档字体说明后，运行包许可回归仍通过。未执行远端 CI、目标构建、设备访问或部署；本记录仅证明当前主机文档生成链与检查结果。
+
+| 手册 | SHA256 |
+| --- | --- |
+| `device-operations.zh-CN.pdf` | `0fc5ca7a413061678f5a30e293c85bbe2dea38fb041373b66fb1f801f4542678` |
+| `device-operations.en.pdf` | `cbadeda8dd903aa00a11e8fe95bcc2a1e2c85d75e43b816b4bae2b2d5b33f55d` |

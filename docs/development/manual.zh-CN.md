@@ -1,38 +1,69 @@
 # 操作手册的维护与生成
 
-[中文手册 PDF](../device-operations.zh-CN.pdf)与[英文手册 PDF](../device-operations.en.pdf)分别由[中文源稿](../user/device-manual.zh-CN.md)、[英文源稿](../user/device-manual.en.md)及对应的 UI PNG 生成。截图分别保存在源稿同目录的 `assets/device-manual/` 和 `assets/device-manual-en/`。PDF 是面向操作者的独立交付文件，封面自动读取 CMake 版本和 Git revision。源稿使用 `<!-- page -->` 分页，每个步骤独占一页，目录和书签自动生成。
+[中文 PDF](../device-operations.zh-CN.pdf)和[英文 PDF](../device-operations.en.pdf)分别由
+[中文源稿](../user/device-manual.zh-CN.md)、[英文源稿](../user/device-manual.en.md)及对应 UI 图片生成。
+手册为完整的逐步操作指南，专题行为以[文档索引](../README.md)所列参考指南为准。
+源稿使用 `<!-- page -->` 分页；目录、书签及可选取的代码由生成器排版。
 
-## 生成
+## 一次准备
 
-仅编辑文档时不需要设备或目标 SDK。以下依赖只用于可选的 PDF 生成，不加入普通应用构建：
+手册工具独立于应用构建，不需要设备或目标 SDK：
 
 ```sh
 python3 -m venv build/manual-tools
 build/manual-tools/bin/python -m pip install -r scripts/requirements-manual.txt
+cmake --preset host-zh
+cmake --preset host-en
 ```
 
-Ubuntu 24.04 安装字体后分别生成两种语言：
+macOS configure 的 libdrm 头文件设置与普通主机构建相同，见[构建指南](../user/build.zh-CN.md)。
+中英文使用同一套仓库内可再分发的固定字体，不依赖 macOS/Ubuntu 系统字体。
+`MyBot Manual Sans` 是由已锁定的 Source Han Sans 输入转换并重命名的 TrueType 子集，
+使用 SIL OFL；代码字体为未修改的 DejaVu Sans Mono Bold。完整条款、输入 URL、摘要、
+派生方式及工具版本见 [fonts/sources.json](../user/assets/fonts/sources.json)及同目录许可。
+普通手册生成不下载字体，也不需要原始 OTF。
+
+## 更新图片及 PDF
+
+修改 UI、源稿、版本或生成工具后，在仓库根执行：
 
 ```sh
-sudo apt install fonts-wqy-zenhei fonts-dejavu-core
-build/manual-tools/bin/python scripts/generate-device-manual.py --language zh-CN
-build/manual-tools/bin/python scripts/generate-device-manual.py --language en-US
+build/manual-tools/bin/python scripts/check-device-manual.py --refresh \
+  --build-zh build/host-zh --build-en build/host-en \
+  --date 2026-11-17
+build/manual-tools/bin/python scripts/check-device-manual.py --check
+build/manual-tools/bin/python scripts/check-device-manual.py --reproduce \
+  --build-zh build/host-zh --build-en build/host-en
 ```
 
-macOS 中文默认使用系统简体黑体，英文使用 Arial；Ubuntu 英文使用 DejaVu Sans。其他环境可显式提供允许嵌入的 TrueType 字体；TTC 集合可用 `--font-index`、`--bold-index` 选择字形：
+`--date` 改为本次文档日期；不指定时沿用 manifest 日期。刷新命令先构建两种语言的
+`mybot-ui-preview`，通过受维护的 `--manual` 场景导出 15 张 640×480 逻辑画面，
+再生成 PNG 和 PDF，最后登记输入/输出摘要。场景使用虚构热点 `mybot-a1b2` 和配对码
+`000042`，图片是 renderer 输出，不是真机照片，不代表新的硬件验证。
+
+`docs/user/assets/manual-manifest.json` 固定文档日期、应用版本、UI 内容摘要及输入/输出
+身份。封面显示 UI 内容摘要，不读取 Git HEAD；相同内容在后续提交或无 `.git` 的源码包
+中仍使用相同基线。普通质量检查只用标准库校验 manifest，发现 UI、文档、字体或版本
+变动后没有同步图片/PDF 时失败。完整重现另外比较图片像素与 PDF 字节，并检查页数、
+字体嵌入、可选取文字和目录跳转；CI 单独运行此链路。
+
+只需要排版草稿时，可用 `generate-device-manual.py --language zh-CN --output /tmp/manual.pdf`；
+`--language en-US` 使用英文源稿。`--date`、`--baseline` 及字体覆盖只用于明确的草稿输入，
+正式刷新使用登记的内容基线与固定字体。生成器拒绝代码行超宽、缺字和页面溢出。
+
+## 新增文字字形
+
+缺字检查失败时，先通过[UI 字体输入记录](../../src/ui/fonts/sources.json)取得原始
+`SourceHanSansSC-Normal.otf`，保持其锁定摘要，再重新生成手册字体：
 
 ```sh
-build/manual-tools/bin/python scripts/generate-device-manual.py \
-  --font /path/to/chinese-regular.ttf \
-  --bold-font /path/to/chinese-bold.ttf
+build/manual-tools/bin/python scripts/generate-manual-font.py \
+  --source local/fonts/SourceHanSansSC-Normal.otf
 ```
 
-`--language` 默认为 `zh-CN`，输出 `docs/device-operations.zh-CN.pdf`；`en-US` 输出 `docs/device-operations.en.pdf`。两种语言分别生成封面、目录、页眉及正文，并使用对应语言截图。`--date YYYY-MM-DD` 可固定文档日期，`--output PATH` 可输出检查副本。同一环境、字体、输入、revision 和日期下可重复生成；字体变化会改变排版和 PDF 字节。脚本检查命令宽度及预期页数，溢出时拒绝发布新 PDF。
+该脚本使用固定 fonttools 4.60.1，保留原著作权，重命名字体，采用固定时间戳并按源稿
+选字。脚本同步 `fonts/sources.json` 的输出摘要；保留完整 OFL，再执行上述刷新及重现。
+不要手工修改字体轮廓或用系统字体替代正式输入。
 
-## 更新 UI 配图
-
-配图是当前 `src/ui/` renderer 的逻辑正向输出，不是屏幕照片。图片采用模拟流程和会话状态；热点与配对码必须为虚构示例，不能来自私有设备数据。当前截图的应用代码基线为 `33b0ceb`，分别使用 `zh-CN` 和 `en-US` 构建，画布为 640×480。不能通过覆盖图片文字将中文截图伪造成英文。
-
-标准流程和设置页可由主机 UI 预览导出；补充 AP、时间和会话场景时，通过 renderer 公共接口提供合成状态。不要手工修改截图中的 UI 文案来模拟尚未实现的功能。生成器只排版已保存 PNG，不自动重建截图，不访问设备。
-
-UI 或业务行为改变时，同步更新两种语言源稿和截图，再生成 PDF。中文版以中文构建和国内服务为新设备示例；英文版以英文构建和国际服务为新设备示例，已有绑定的设备始终保留实际配置。逐页检查代码可选取、字体嵌入、目录跳转、截图比例，以及图注和当前功能一致。具体设备验收继续记录在[验证状态](../validation/README.md)，截图或 PDF 生成不视为新真机验证。
+逐页检查标题、代码、图注、截图比例及操作与实际功能一致。手册生成与设备测试分别
+记录，实际验收范围以[验证状态](../validation/README.md)为准。

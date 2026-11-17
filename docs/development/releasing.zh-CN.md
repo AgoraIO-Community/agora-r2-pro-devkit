@@ -2,6 +2,16 @@
 
 项目版本以根 `CMakeLists.txt` 为单一来源，执行 `python3 scripts/project-version.py` 查看。更新版本时执行 `python3 scripts/project-version.py --set X.Y.Z`，同步中英文 README 中带标记的版本声明；`python3 scripts/project-version.py --check` 检查是否一致。CMake 配置使用根版本，打包再从构建 manifest 读取版本，不在指南中维护另一份当前版本号。[验证矩阵](../validation/README.md)区分本地检查、CI 和硬件状态，旧包的真机验收不自动适用于新包。
 
+版本、UI、手册源稿或生成输入改变后，先按[手册维护指南](manual.zh-CN.md)刷新两种语言的配图及 PDF，再运行质量门禁：
+
+```sh
+build/manual-tools/bin/python scripts/check-device-manual.py --refresh \
+  --build-zh build/host-zh --build-en build/host-en
+python3 scripts/check-quality.py
+```
+
+首次使用先按维护指南准备固定工具和双语主机构建；需要更新文档日期时显式提供 `--date YYYY-MM-DD`。普通质量检查使用标准库核对手册 manifest，故意拒绝版本、UI 或源稿已更新而图片/PDF 仍旧的状态。PDF 的内容基线与生成日期来自 manifest，不随提交 revision 漂移。
+
 ## 构建身份
 
 每个构建目录保留 `build-config.json`（CMake 配置）、`build-inputs.json`（编译前输入快照）与 `build-manifest.json`（最终二进制、ABI 与输入身份）。manifest 绑定版本、源码 revision/dirty、语言、voice/video、板型、SDK/RTSA、音频时长、工具链、运行库和资源。不能手工修改这些文件来给旧程序改版本。

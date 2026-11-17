@@ -282,7 +282,7 @@ adb -s "$serial" shell /userdata/mybot/current/run.sh --version
 
 预期：服务正常运行，版本符合本次安装包。已绑定且联网时应用最终为 `ready`；新设备可能为 `ap`、`waiting_network` 或 `pairing`，按后续步骤操作。
 
-部署工具和 `S99mybot status` 主要表示版本链接和进程监督状态；业务是否就绪，以 `application.status` 中的 `state` 和屏幕为准。不要另开第二个 `run.sh` 实例。
+部署工具分别显示监督状态及核验后的应用版本、PID、状态和本地健康等级；`S99mybot status` 只表示监督状态。`degraded` 可表示合法的离线、配网或待绑定，不能当作云端 ready。不要另开第二个 `run.sh` 实例。
 
 <!-- page -->
 
@@ -309,7 +309,7 @@ adb -s "$serial" shell /userdata/mybot/current/run.sh --version
 ![设置：点击设备配网；左上角返回](assets/device-manual/settings-menu.png)
 ![配网引导：以设备显示的实际热点为准](assets/device-manual/ap-hotspot.png)
 
-2. 在手机 Wi-Fi 设置连接屏幕上的 `mybot-xxxx` 热点。热点不设密码；如手机提示“无互联网”，选择保持连接。
+2. 在手机 Wi-Fi 设置连接屏幕上的 `mybot-xxxx` 热点。四位后缀由完整永久 MAC 的摘要生成，短后缀可能重复，以设备屏幕为准。热点不设密码；如提示“无互联网”，选择保持连接。
 3. 等待自动弹出的页面；未弹出时，在手机浏览器手动输入 `http://192.168.4.1/`，使用 HTTP。
 4. 选择可用的 2.4 GHz Wi-Fi，填写密码；隐藏网络可手动输入名称。开放网络留空密码。
 5. 点击连接并等待结果。系统模式保存后还会验证关联、租约和路由，期间可能持续显示“正在连接”。
