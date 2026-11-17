@@ -163,7 +163,8 @@ class PackagingTests(unittest.TestCase):
         self.assertFalse(self.args.output_dir.exists())
 
     def test_example_environment_matches_each_package_and_is_reproducible(self):
-        for language in ("zh-CN", "en-US"):
+        for language, server in (("zh-CN", "https://botstation.shengwang.cn/api"),
+                                 ("en-US", "https://botstation.agora.io/api")):
             with self.subTest(language=language):
                 self.args.language = language
                 if language == "en-US":
@@ -174,6 +175,11 @@ class PackagingTests(unittest.TestCase):
                 environment = (destination / "example.env").read_text()
                 self.assertIn("UI language is " + language, environment)
                 self.assertNotIn("@UI_LANGUAGE@", environment)
+                self.assertNotIn("@DEFAULT_SERVER@", environment)
+                actual_server = subprocess.check_output(
+                    ["sh", "-c", '. "$1"; printf "%s" "$RV1126B_SERVER"',
+                     "sh", str(destination / "example.env")], text=True)
+                self.assertEqual(actual_server, server)
                 self.assertNotRegex(environment, r"mybot-rv1126b-\d+\.\d+\.\d+")
                 helper = next(line[2:] for line in environment.splitlines()
                               if line.startswith("# export RV1126B_TIME_SYNC_HELPER="))
@@ -194,16 +200,24 @@ class PackagingTests(unittest.TestCase):
                 self.assertEqual(first_hash, repeated_hash)
                 self.assertEqual(archive.read_bytes(), repeated.read_bytes())
 
-    def test_missing_or_duplicate_environment_language_marker_is_rejected(self):
-        for template in ("# no language marker\n", "# @UI_LANGUAGE@ @UI_LANGUAGE@\n"):
-            with self.subTest(template=template):
-                self.write(self.root / "packaging/example.env", template)
-                for build in (self.voice, self.video):
-                    self.refresh_source_marker(build)
-                    self.seal(build)
-                with self.assertRaisesRegex(ValueError, "exactly one UI language placeholder"):
-                    packager.package(self.root, self.args)
-                self.assertFalse(self.args.output_dir.exists())
+    def test_unknown_environment_language_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported example.env language"):
+            packager.example_environment(self.root, "fr-FR")
+
+    def test_missing_or_duplicate_environment_markers_are_rejected_before_publication(self):
+        original = (self.root / "packaging/example.env").read_text()
+        for placeholder, label in (("@UI_LANGUAGE@", "UI language"),
+                                   ("@DEFAULT_SERVER@", "default server")):
+            for replacement in ("", placeholder + placeholder):
+                with self.subTest(placeholder=placeholder, replacement=replacement):
+                    self.write(self.root / "packaging/example.env",
+                               original.replace(placeholder, replacement))
+                    for build in (self.voice, self.video):
+                        self.refresh_source_marker(build)
+                        self.seal(build)
+                    with self.assertRaisesRegex(ValueError, "exactly one " + label + " placeholder"):
+                        packager.package(self.root, self.args)
+                    self.assertFalse(self.args.output_dir.exists())
 
     def test_supervisor_tampering_is_rejected(self):
         self.write(self.voice / 'mybot-supervisor', 'changed supervisor')

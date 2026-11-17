@@ -8,7 +8,7 @@
 
 | CLI | 环境变量 | 默认值 / 说明 |
 | --- | --- | --- |
-| `--server HTTPS_URL` | `RV1126B_SERVER` | `https://botstation.shengwang.cn/api`，要求 HTTPS |
+| `--server HTTPS_URL` | `RV1126B_SERVER` | 按 UI 构建语言选择：`zh-CN` 为 `https://botstation.shengwang.cn/api`，`en-US` 为 `https://botstation.agora.io/api`；要求 HTTPS |
 | `--device-id ID` | `RV1126B_DEVICE_ID` | 空，默认从 CPU Serial 派生；最多 32 字符 |
 | `--identity-interface IF` | 无 | 以永久出厂 MAC 派生；显式 device-id 优先 |
 | `--capture-device PCM` | `RV1126B_CAPTURE_DEVICE` | `botstation_capture` |
@@ -32,12 +32,12 @@
 | --- | --- |
 | `MYBOT_KV_STORE_DIR` | 默认 `/userdata/mybot-rv1126b`，必须为当前用户拥有的私有绝对路径（0700） |
 | `MYBOT_ASSETS_DIR` | 默认包内 `assets/`；绝对路径 |
-| `MYBOT_LOCALE` | 提示音 locale，包括 AP 配网语音；默认与 UI 构建语言相同，包内提供 `zh-CN`、`en-US`；不会替换编译字库/UI文案 |
+| `MYBOT_LOCALE` | 提示音 locale，包括 AP 配网语音；默认与 UI 构建语言相同，包内提供 `zh-CN`、`en-US`；不会替换编译字库/UI文案或切换默认服务 |
 | `RV1126B_VIDEO` | 由 `run.sh` 读取，0 选语音程序，1 选视频程序 |
 | `RV1126B_VIDEO_DEVICE` | 视频程序指定相机节点，默认自动寻找唯一 `rkisp_mainpath` |
 | `RV1126B_NTP_SERVER` | 仅内置可选 BusyBox helper 读取，默认 `pool.ntp.org`；接受 DNS 主机名或 IPv4 地址，不自动启用 helper |
 
-启动脚本不自动 source `example.env`；按需先在 shell 中 export。默认中英文构建均保留同一 server 地址，切换 UI 语言不会自动切换服务。可使用 `--server` 显式覆盖。
+启动脚本不自动 source `example.env`；按需先在 shell 中 export。服务地址按 `--server` > `RV1126B_SERVER` > UI 构建语言默认值选择。运行时修改 `MYBOT_LOCALE` 只切换提示音语言，不改变默认服务。受监督部署中已显式配置的服务地址继续优先，切换构建语言不会覆盖该配置。
 
 ## 系统时间
 
