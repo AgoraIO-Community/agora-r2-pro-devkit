@@ -36,6 +36,8 @@ typedef enum {
     CLOCK_FAILURE,
     VIDEO_FAILURE,
     INPUT_FAILURE,
+    SDK_START_FAILURE,
+    SDK_START_FAILURE_CLEAN,
     POWEROFF,
     DEMO,
     OFFLINE_DEADLINE
@@ -304,11 +306,15 @@ int mybot_start(const mybot_config_t *config) {
     fixture.active_checks = 0;
     ++fixture.starts;
     record(SDK_START);
-    return 0;
+    if (fixture.scenario == SDK_START_FAILURE_CLEAN)
+        fixture.sdk_active = false;
+    return fixture.scenario == SDK_START_FAILURE || fixture.scenario == SDK_START_FAILURE_CLEAN ? -1
+                                                                                                : 0;
 }
 
 void mybot_stop(void) {
-    CHECK(fixture.sdk_active);
+    /* The public SDK permits stop after an already-cleaned failed start. */
+    CHECK(fixture.starts > 0);
     fixture.sdk_active = false;
     ++fixture.stops;
     record(SDK_STOP);
@@ -319,7 +325,9 @@ bool mybot_is_running(void) {
 }
 
 mybot_state_t mybot_get_state(void) {
-    return fixture.sdk_active ? MYBOT_STATE_READY : MYBOT_STATE_STOPPED;
+    if (!fixture.sdk_active)
+        return MYBOT_STATE_STOPPED;
+    return fixture.scenario == SDK_START_FAILURE ? MYBOT_STATE_FAILED : MYBOT_STATE_READY;
 }
 
 bool rv1126b_video_failed(void) {
@@ -372,6 +380,12 @@ static void run(scenario_t scenario, int expected) {
     } else if (scenario == INPUT_FAILURE) {
         CHECK(fixture.starts == 0 && position(WIFI_START) < 0 && position(INPUT_STOP) < 0);
         CHECK(position(UI_STOP) >= 0 && position(VOLUME_STOP) >= 0);
+    } else if (scenario == SDK_START_FAILURE || scenario == SDK_START_FAILURE_CLEAN) {
+        CHECK(fixture.starts == 1 && fixture.stops == 1);
+        CHECK(!fixture.statuses[RV1126B_APP_READY]);
+        CHECK(position(SDK_STOP) < position(TIME_STOP));
+        CHECK(position(SDK_STOP) < position(INPUT_STOP));
+        CHECK(position(SDK_STOP) < position(UI_STOP));
     } else if (scenario == POWEROFF) {
         CHECK(fixture.power_sent && fixture.statuses[RV1126B_APP_POWERING_OFF]);
         CHECK(position(POWER_REQUEST) < position(SDK_STOP));
@@ -389,8 +403,9 @@ int main(void) {
     CHECK(setenv("MYBOT_ASSETS_DIR", "/fixture/assets", 1) == 0);
     CHECK(setenv("MYBOT_LOCALE", "zh-CN", 1) == 0);
     for (scenario_t scenario = NORMAL; scenario <= OFFLINE_DEADLINE; ++scenario)
-        run(scenario,
-            scenario == CLOCK_FAILURE || scenario == VIDEO_FAILURE || scenario == INPUT_FAILURE);
+        run(scenario, scenario == CLOCK_FAILURE || scenario == VIDEO_FAILURE ||
+                          scenario == INPUT_FAILURE || scenario == SDK_START_FAILURE ||
+                          scenario == SDK_START_FAILURE_CLEAN);
     CHECK(sdk_status(MYBOT_STATE_PAIRING) == RV1126B_APP_PAIRING);
     CHECK(sdk_status(MYBOT_STATE_IN_CONVERSATION) == RV1126B_APP_CONVERSATION);
     CHECK(sdk_status(MYBOT_STATE_WIFI_DISCONNECTED) == RV1126B_APP_OFFLINE);

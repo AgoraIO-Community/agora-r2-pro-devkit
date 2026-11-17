@@ -93,7 +93,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
     const char *drm = options.drm_device;
     const unsigned int rotation = options.rotation, seconds = options.seconds;
     int failed = 0;
-    bool sdk_started = false, ui_started = false, wifi_started = false, volume_started = false;
+    bool sdk_needs_stop = false, ui_started = false, wifi_started = false, volume_started = false;
     bool input_started = false;
     rv1126b_time_sync_t *time_sync = NULL;
     char dhcp_script[PATH_MAX];
@@ -239,7 +239,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
              * The gate still requires successful manually requested setup. */
             rv1126b_network_gate_action_t network_action =
                 rv1126b_network_gate_poll(&network_gate, options.wifi_provisioning,
-                                          require_provisioning, sdk_started, ready, &status);
+                                          require_provisioning, sdk_needs_stop, ready, &status);
             if (network_action == RV1126B_NETWORK_GATE_RECOVER) {
                 /* No SDK is running in this loop. A route lost while closing
                  * setup still needs the same recovery acknowledgement as a
@@ -295,12 +295,14 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
         rv1126b_ui_wifi_failed(false);
         rv1126b_ui_time_status(MYBOT_DISPLAY_CLOCK_INACTIVE);
         rv1126b_prompt_stop();
+        /* stop() is idempotent after failed startup and retries cleanup that
+         * could not finish during the startup attempt. */
+        sdk_needs_stop = true;
         if (mybot_start(config) < 0) {
             fprintf(stderr, "MyBot startup failed\n");
             failed = 1;
             goto cleanup;
         }
-        sdk_started = true;
         bool reprovision = false;
         bool recover_network = false;
         mybot_state_t previous = MYBOT_STATE_STOPPED;
@@ -348,7 +350,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
             rv1126b_network_ready(platform.network_interface) == 0)
             recover_network = true;
         stop_sdk();
-        sdk_started = false;
+        sdk_needs_stop = false;
         if (*exit_requested || monotonic_ms() >= deadline || input_exit)
             goto cleanup;
         if (!reprovision && !recover_network) {
@@ -365,7 +367,7 @@ cleanup:
     if (!demo)
         publish_status(RV1126B_APP_STOPPING);
     rv1126b_prompt_stop();
-    if (sdk_started)
+    if (sdk_needs_stop)
         stop_sdk();
     rv1126b_time_sync_destroy(time_sync);
     if (wifi_started)
