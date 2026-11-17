@@ -2,6 +2,16 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.5.3 — Unreleased
+
+- Derive compact hotspot names from the full permanent MAC and detect stopped AP services with a settings retry path.
+- Clean owned Wi-Fi process groups and recover or report failed video pipelines with bounded retries.
+- Validate rollback profiles, board prerequisites, startup modes and actual local application health before reporting deployment success.
+- Separate portable build identity from local provenance and current dependency integrity from immutable import history.
+- Centralize product lifecycle, use typed readiness state and document C API ownership and cleanup contracts.
+
+This candidate has its own source and artifact identity; it does not replace a differently sourced 0.5.2 installation in place. Hardware acceptance remains separate from host and cross-build checks.
+
 ## 0.5.2 — Unreleased
 
 - Route manual Wi-Fi setup exclusively through the UI settings menu; remove touch and Menu holds, terminal `w`, and the forced-provisioning CLI option. Automatic offline setup remains available.

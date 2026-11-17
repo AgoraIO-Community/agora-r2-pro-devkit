@@ -4,7 +4,7 @@
 
 A Linux application for running MyBot 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides AP Wi-Fi setup with voice guidance, HTTPS pairing, bidirectional voice, persistent device identity and output volume, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
 
-The current source is the **<!-- project-version -->0.5.2<!-- /project-version --> deployment candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. AP Wi-Fi setup, voice guidance, persistent volume and time handling require device testing; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
+The current source is the **<!-- project-version -->0.5.3<!-- /project-version --> deployment candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. AP Wi-Fi setup, voice guidance, persistent volume and time handling require device testing; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
 
 ## Platform and behavior
 
