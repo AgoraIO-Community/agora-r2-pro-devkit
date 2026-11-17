@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-#define _DEFAULT_SOURCE
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE 1
+#endif
 #define _POSIX_C_SOURCE 200809L
 #if defined(__APPLE__)
 #define _DARWIN_C_SOURCE
