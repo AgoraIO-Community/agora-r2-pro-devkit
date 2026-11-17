@@ -22,6 +22,9 @@ SERVICE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
                   "assets/service/mybot-rv1126b.conf", "assets/service/audio-prepare.sh",
                   "assets/network/99-mybot-lease", "bin/mybot-supervisor",
                   "supervisor-manifest.json", "abi-report-supervisor.json")
+EXECUTABLE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
+                     "assets/service/audio-prepare.sh", "assets/network/99-mybot-lease",
+                     "assets/wifi/udhcpc.script", "assets/time/sync-busybox.sh", "bin/mybot-supervisor")
 NAME = re.compile(r"mybot-rv1126b-(\d+\.\d+\.\d+)(?:-en-US)?-aarch64(?:-voice|-video)?\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 TAG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}\Z")
@@ -48,7 +51,7 @@ def verify_package(path, expected, legacy=False):
         raise ValueError("Package must be a bounded regular archive")
     if sha256(path.read_bytes()) != expected:
         raise ValueError("Archive SHA256 mismatch")
-    files, names, root, total = {}, set(), None, 0
+    files, modes, names, root, total = {}, {}, set(), None, 0
     with tarfile.open(path, "r:gz") as archive:
         for member in archive:
             name = member.name.rstrip("/")
@@ -63,11 +66,15 @@ def verify_package(path, expected, legacy=False):
                 root = parts[0]
             if root != parts[0] or not NAME.fullmatch(root):
                 raise ValueError("Archive must contain one named release directory")
+            if member.isdir() and member.mode & 0o500 != 0o500:
+                raise ValueError("Package directories require owner read/search permission")
             if member.isfile():
                 total += member.size
                 if total > MAX_PACKAGE_BYTES:
                     raise ValueError("Unpacked package is too large")
-                files["/".join(parts[1:])] = archive.extractfile(member).read()
+                relative = "/".join(parts[1:])
+                files[relative] = archive.extractfile(member).read()
+                modes[relative] = member.mode
     if not root or "SHA256SUMS" not in files:
         raise ValueError("Missing package checksum manifest")
     checksums = {}
@@ -123,10 +130,16 @@ def verify_package(path, expected, legacy=False):
             inputs_markers[profile] = inputs_marker[0]
     if not profiles or "run.sh" not in files or "lib/libagora-rtc-sdk.so" not in files:
         raise ValueError("Missing application/runtime package contents")
-    elf_aarch64(files["lib/libagora-rtc-sdk.so"])
+    executables = ["run.sh", *("bin/mybot-rv1126b" + ("-video" if profile == "video" else "")
+                              for profile in profiles)]
     if not legacy:
         if any(name not in files for name in SERVICE_ASSETS):
             raise ValueError("Package lacks supervised deployment assets")
+        executables.extend(EXECUTABLE_ASSETS)
+    if any(name not in modes or modes[name] & 0o500 != 0o500 for name in executables):
+        raise ValueError("Package startup files require owner read/execute permission")
+    elf_aarch64(files["lib/libagora-rtc-sdk.so"])
+    if not legacy:
         binary = files["bin/mybot-supervisor"]
         elf_aarch64(binary)
         manifest = json.loads(files["supervisor-manifest.json"])

@@ -54,12 +54,12 @@ class DeploymentTests(unittest.TestCase):
                       "build-manifest-voice.json": json.dumps(manifest).encode()}
         self.files["abi-report-supervisor.json"] = report_bytes
         self.files["supervisor-manifest.json"] = json.dumps({**manifest, "role": "supervisor"}).encode()
-        for name in deployment.SERVICE_ASSETS:
+        for name in (*deployment.SERVICE_ASSETS, *deployment.EXECUTABLE_ASSETS):
             self.files.setdefault(name, b"#!/bin/sh\n")
         self.settings = {"server": "https://example.invalid/api", "device_id": "FIXTURE-ONLY",
                          "video": False, "wifi_interface": "wlan0"}
 
-    def archive(self, files=None, extra=None, name=None):
+    def archive(self, files=None, extra=None, name=None, modes=None):
         files = dict(self.files if files is None else files)
         checksums = "".join(deployment.sha256(data) + "  " + path + "\n"
                             for path, data in sorted(files.items()))
@@ -68,7 +68,8 @@ class DeploymentTests(unittest.TestCase):
         with tarfile.open(archive_path, "w:gz") as archive:
             for path, data in files.items():
                 info = tarfile.TarInfo((name or self.name) + "/" + path)
-                info.size, info.mode = len(data), 0o644
+                executable = path == "run.sh" or path.startswith("bin/") or path in deployment.EXECUTABLE_ASSETS
+                info.size, info.mode = len(data), (modes or {}).get(path, 0o755 if executable else 0o644)
                 archive.addfile(info, io.BytesIO(data))
             if extra is not None:
                 archive.addfile(extra)
@@ -85,6 +86,30 @@ class DeploymentTests(unittest.TestCase):
         for checksum in (None, "short", "0" * 64):
             with self.subTest(checksum=checksum), self.assertRaises(ValueError):
                 deployment.verify_package(path, checksum)
+
+    def test_archive_rejects_each_unexecutable_startup_file(self):
+        for name in ("run.sh", "bin/mybot-rv1126b", *deployment.EXECUTABLE_ASSETS):
+            with self.subTest(name=name):
+                path, checksum = self.archive(modes={name: 0o644})
+                with self.assertRaisesRegex(ValueError, "read/execute"):
+                    deployment.verify_package(path, checksum)
+
+    def test_archive_rejects_unsearchable_directory(self):
+        directory = tarfile.TarInfo(self.name + "/bin")
+        directory.type, directory.mode = tarfile.DIRTYPE, 0o644
+        path, checksum = self.archive(extra=directory)
+        with self.assertRaisesRegex(ValueError, "read/search"):
+            deployment.verify_package(path, checksum)
+
+    def test_legacy_archive_requires_executable_application_without_new_helpers(self):
+        files = {name: value for name, value in self.files.items()
+                 if name in ("run.sh", "bin/mybot-rv1126b", "lib/libagora-rtc-sdk.so", "abi-report-voice.json")}
+        name = "mybot-rv1126b-0.1.1-aarch64"
+        path, checksum = self.archive(files, name=name)
+        self.assertEqual(deployment.verify_package(path, checksum, legacy=True)["profiles"], ["voice"])
+        path, checksum = self.archive(files, name=name, modes={"bin/mybot-rv1126b": 0o644})
+        with self.assertRaisesRegex(ValueError, "read/execute"):
+            deployment.verify_package(path, checksum, legacy=True)
 
     def test_traversal_and_symlink_members_are_rejected(self):
         for name, kind in (("../escape", tarfile.REGTYPE),
