@@ -89,6 +89,14 @@ def deterministic_archive(directory, archive, epoch):
                             tar.addfile(info, data)
 
 
+def example_environment(root, language):
+    template = (Path(root) / "packaging/example.env").read_text()
+    placeholder = "@UI_LANGUAGE@"
+    if template.count(placeholder) != 1:
+        raise ValueError("Expected exactly one UI language placeholder in example.env template")
+    return template.replace(placeholder, language)
+
+
 def package(root, args):
     root = Path(root)
     profiles = ("voice", "video") if args.profile == "all" else (args.profile,)
@@ -125,6 +133,7 @@ def package(root, args):
     checksum = output / (name + ".tar.gz.sha256")
     if any(path.exists() for path in (destination, archive, checksum)):
         raise ValueError("Bundle destination already exists; use a fresh --output-dir: " + str(destination))
+    environment = example_environment(root, baseline["config"]["language"])
     epoch = source_epoch(root)
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".package-", dir=output) as temporary:
@@ -169,7 +178,7 @@ def package(root, args):
             launcher = launcher.replace("${RV1126B_VIDEO:-0}", "${RV1126B_VIDEO:-1}")
         (staging / "run.sh").write_text(launcher)
         (staging / "run.sh").chmod(0o755)
-        shutil.copyfile(root / "packaging/example.env", staging / "example.env")
+        (staging / "example.env").write_text(environment)
         shutil.copyfile(root / "packaging/README.zh-CN.md", staging / "README.zh-CN.md")
         (staging / "licenses").mkdir()
         for source, filename in LICENSES:

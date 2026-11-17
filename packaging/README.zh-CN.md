@@ -1,6 +1,6 @@
 # MyBot RV1126B 运行包
 
-本包用于 RV1126B TEST2 RK805B V10 的现有 AArch64 Buildroot 系统。0.5.1 为设备部署候选，AP 配网、语音引导、音量与时间处理均需真机回归；此前 0.1.0 语音/UI与 0.1.1 显示优化已由用户验收。可选视频和长期专项尚未完成。
+本包用于 RV1126B TEST2 RK805B V10 的现有 AArch64 Buildroot 系统。包版本、语言与变体以 `./run.sh --version` 和包内构建 manifest 为准。此前 0.1.0 语音/UI与 0.1.1 显示优化已由用户验收；当前版本的设备回归、可选视频和长期专项范围以源码仓库的验证状态为准。
 
 ## 校验与运行
 
@@ -69,7 +69,7 @@ RV1126B_VIDEO=1 ./run.sh
 
 ## 退出与回退
 
-程序不修改系统库、ALSA 配置或开机服务。结束候选程序后可从保留的旧目录运行旧版本；共享 KV 目录保留且两版不可同时运行。恢复原厂服务：
+直接执行 `run.sh` 不修改系统库、ALSA 配置文件或开机服务。手动运行时，结束候选程序后可从保留的旧目录运行旧版本；共享 KV 目录保留且两版不可同时运行。仅在原厂服务未被部署工具禁用、且本应用已经完整停止时恢复原厂服务：
 
 ```sh
 /etc/init.d/S99botstation-device start
@@ -77,4 +77,6 @@ RV1126B_VIDEO=1 ./run.sh
 
 反馈时提供包名、校验和、version、实际命令和问题附近日志；隐藏 token、配对码、设备 ID/Serial/MAC。不要上传 KV 目录。源码仓库的 `docs/validation/README.md` 是当前验证状态的唯一现行记录。
 
-受监督设备部署使用包内 `assets/service/` 和 `bin/mybot-supervisor`，由显式部署工具安装。`assets/network/99-mybot-lease` 是系统 dhcpcd 的租约事件 hook；它与应用自有 DHCP hook 用途不同。系统模式以系统 Wi-Fi 配置为主记录，已有绑定数据目录保持不变。
+受监督设备部署使用包内 `assets/service/` 和 `bin/mybot-supervisor`，由源码仓库的显式部署工具安装。它会安装 `/etc/init.d/S99mybot`、禁用原厂业务自启动，并更新 `/etc/dnsmasq.conf`、`/etc/dhcpcd.conf` 和系统 dhcpcd 租约 hook；网络策略由操作者确认连接条件后另行重载。每次服务启动，`audio-prepare.sh` 通过 `amixer cset` 应用板级采集 mixer 设置，不写 ALSA 配置文件。通过部署工具安装后，按源码仓库的设备部署指南启停与回退，不直接恢复原厂服务。
+
+`assets/network/99-mybot-lease` 是系统 dhcpcd 的租约事件 hook，与应用自有 DHCP hook 用途不同。系统模式以系统 Wi-Fi 配置为主记录，已有绑定数据目录保持不变。

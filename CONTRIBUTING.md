@@ -16,11 +16,12 @@ Never include tokens, private device identities, credentials, runtime data, pers
 
 ## Checks
 
-Use Python 3.10+, CMake 3.25+, OpenSSL and libdrm development files. See [build setup](docs/user/build.zh-CN.md) for macOS header configuration.
+Use Python 3.10+, CMake 3.25+, OpenSSL and libdrm development files. Install the pinned formatting tool with `python3 -m venv local/dev-tools` followed by `local/dev-tools/bin/python -m pip install -r requirements-dev.txt`; the quality check selects it automatically and verifies its version. See [build setup](docs/user/build.zh-CN.md) for Ubuntu 24.04 packages and macOS header configuration.
 
 ```sh
 python3 scripts/doctor.py --host
 python3 scripts/check-dependencies.py
+python3 scripts/check-quality.py
 cmake --preset host-zh
 cmake --build --preset host-zh
 ctest --preset host-zh

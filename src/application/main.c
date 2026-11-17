@@ -79,7 +79,8 @@ static void stop_sdk(void) {
         fprintf(stderr, "SDK shutdown incomplete; retrying cleanup\n");
         mybot_stop();
         if (mybot_get_state() != MYBOT_STATE_STOPPED) {
-            fprintf(stderr, "SDK workers remain active; terminating process with locks held\n");
+            fprintf(stderr,
+                    "SDK cleanup incomplete; terminating without explicit resource cleanup\n");
             _Exit(EXIT_FAILURE);
         }
     }
@@ -160,13 +161,13 @@ int main(int argc, char **argv) {
     umask(0077);
     if (rv1126b_legacy_service_running() != 0) {
         fprintf(stderr, "Existing botstation service is running, or /proc cannot be checked. Stop "
-                        "that service before this test.\n");
+                        "that service before starting this application.\n");
         return 1;
     }
     int legacy_lock = rv1126b_runtime_lock("/run/botstation-device.lock", false);
     if (legacy_lock == -1) {
         fprintf(stderr, "Existing botstation service holds its lock (or it cannot be checked). "
-                        "Stop it before this test; it owns the same hardware.\n");
+                        "Stop it before starting this application; it owns the same hardware.\n");
         return 1;
     }
     int lock = rv1126b_runtime_lock("/run/mybot-rv1126b.lock", true);
