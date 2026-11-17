@@ -1,6 +1,6 @@
 # 候选制品与发布
 
-项目版本以根 `CMakeLists.txt` 为单一来源。当前为 **0.2.2 源码目录重构候选版**，尚未继承旧包的真机验收。[验证矩阵](../validation/README.md)区分本地检查、CI 和硬件状态。
+项目版本以根 `CMakeLists.txt` 为单一来源，执行 `python3 scripts/project-version.py` 查看。更新版本时执行 `python3 scripts/project-version.py --set X.Y.Z`，同步中英文 README 中带标记的版本声明；`python3 scripts/project-version.py --check` 检查是否一致。CMake 配置使用根版本，打包再从构建 manifest 读取版本，不在指南中维护另一份当前版本号。[验证矩阵](../validation/README.md)区分本地检查、CI 和硬件状态，旧包的真机验收不自动适用于新包。
 
 ## 构建身份
 

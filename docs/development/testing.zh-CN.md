@@ -4,7 +4,15 @@
 
 ## 标准主机门禁
 
-格式工具基线为 clang-format 11（CI 使用 `requirements-dev.txt` 固定版本）；可在忽略的 `local/dev-tools` 虚拟环境安装该依赖。准备环境后，在仓库根目录执行：
+格式工具基线为 clang-format 11，准确版本由 `requirements-dev.txt` 固定。Ubuntu 24.04 系统自带的其他版本不能替代该基线。在仓库根目录准备忽略的虚拟环境，CI 也安装同一份固定依赖：
+
+```sh
+sudo apt install python3-venv
+python3 -m venv local/dev-tools
+local/dev-tools/bin/python -m pip install -r requirements-dev.txt
+```
+
+`check-quality.py` 自动选择 `local/dev-tools/bin/clang-format`，无需激活虚拟环境；没有该工具时再查找 PATH。显式 `--clang-format PATH` 可指定其他安装位置，但所选工具版本仍必须匹配固定基线，否则检查失败并显示修复方式。准备环境后，在仓库根目录执行：
 
 ```sh
 python3 scripts/doctor.py --host

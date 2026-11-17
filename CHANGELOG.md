@@ -4,6 +4,8 @@ Changes to project-maintained code follow Semantic Versioning. Validation eviden
 
 ## 0.5.1 — Unreleased
 
+- Keep current documentation versions synchronized with CMake, render package language examples, and enforce the pinned formatter before quality checks.
+- Clarify direct application execution versus supervised system deployment and correct lifecycle diagnostics.
 - Add a persistent settings entry with Wi-Fi setup, poweroff confirmation, cancellation and failure pages in both UI languages.
 - Place settings navigation at the top left and retain multitouch slot coordinates across contacts for repeated taps.
 - Keep product input available before and across SDK sessions, normalize touchscreen coordinates and isolate menu gestures from conversation controls.

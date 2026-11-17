@@ -6,10 +6,38 @@ import ast
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 GENERATED = ('src/ui/fonts/generated/',)
 DATA_FILES = {'pixel_expression_masks.h', 'pixel_expression_shapes.h'}
+
+
+def checked_formatter(requested, root=ROOT):
+    """Select the project formatter and reject a different formatting baseline."""
+    requirements = (root / 'requirements-dev.txt').read_text()
+    pin = re.search(r'^clang-format==(\d+)(?:\.\d+)+$', requirements, re.M)
+    if not pin:
+        raise ValueError('requirements-dev.txt must pin the clang-format baseline')
+    baseline = int(pin.group(1))
+    local = root / 'local/dev-tools/bin/clang-format'
+    command = requested or (str(local) if local.exists() or local.is_symlink() else 'clang-format')
+    setup = ('Create the pinned project tools from the repository root:\n'
+             '  python3 -m venv local/dev-tools\n'
+             '  local/dev-tools/bin/python -m pip install -r requirements-dev.txt\n'
+             'Then rerun scripts/check-quality.py; it selects that formatter automatically.\n'
+             'Use --clang-format PATH to select another clang-format ' + str(baseline) + ' executable.')
+    try:
+        result = subprocess.run([command, '--version'], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError(f'Cannot run formatter {command}: {error}\n{setup}') from error
+    reported = (result.stdout + '\n' + result.stderr).strip()
+    version = re.search(r'\bclang-format version\s+(\d+)(?:\.\d+)*\b', reported)
+    if result.returncode or not version:
+        raise ValueError(f'Cannot identify formatter version for {command}: {reported}\n{setup}')
+    if int(version.group(1)) != baseline:
+        raise ValueError(f'clang-format {baseline} is required; {command} reports {reported}.\n{setup}')
+    return command
 
 
 def maintained_files():
@@ -22,9 +50,18 @@ def maintained_files():
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--clang-format', default='clang-format')
+    parser.add_argument('--clang-format', metavar='PATH',
+                        help='formatter executable (default: local/dev-tools/bin/clang-format, then PATH)')
     parser.add_argument('--fix-format', action='store_true')
     args = parser.parse_args()
+    try:
+        formatter = checked_formatter(args.clang_format, ROOT)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+    version = subprocess.run([sys.executable, str(ROOT / 'scripts/project-version.py'), '--check'],
+                             capture_output=True, text=True)
+    if version.returncode:
+        parser.error(version.stderr.strip() or version.stdout.strip())
     files = maintained_files()
     errors = []
     formatted = []
@@ -57,7 +94,7 @@ def main():
                 if not (path.parent / target).exists():
                     errors.append(f'{name}: missing local link {target}')
     if formatted:
-        result = subprocess.run([args.clang_format, '-i' if args.fix_format else '--dry-run',
+        result = subprocess.run([formatter, '-i' if args.fix_format else '--dry-run',
                                  *([] if args.fix_format else ['--Werror']),
                                  *map(str, formatted)], capture_output=True, text=True)
         if result.returncode:

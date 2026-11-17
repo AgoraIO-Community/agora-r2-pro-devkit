@@ -1,6 +1,6 @@
 # 上手、升级与回退
 
-当前候选版为 0.5.1，目标为 RV1126B TEST2 RK805B V10 的现有 AArch64 Buildroot 系统。已验收版本和候选版的检查范围见[验证状态](../validation/README.md)。源码构建见[构建指南](build.zh-CN.md)。
+目标为 RV1126B TEST2 RK805B V10 的现有 AArch64 Buildroot 系统。当前源码版本以根 `CMakeLists.txt` 为准，执行 `python3 scripts/project-version.py` 查看；已验收版本和候选版的检查范围见[验证状态](../validation/README.md)。源码构建见[构建指南](build.zh-CN.md)。
 
 ## 设备条件
 
@@ -10,26 +10,29 @@
 
 ## 手动部署
 
-以下命令由设备操作者执行，会向 `/userdata` 写入候选包。主机构建和打包本身不执行这些步骤。若连接多台设备，给所有 `adb` 命令加 `-s <serial>`。
+以下命令由设备操作者执行，会向 `/userdata` 写入候选包，直接运行 `run.sh` 不安装开机服务。需要版本链接、受监督服务与自启动时，使用[设备部署工具](deployment.zh-CN.md)，不要混用两套启停步骤。主机构建和打包本身不执行这些步骤。若连接多台设备，给所有 `adb` 命令加 `-s <serial>`。
 
 在主机仓库根目录执行：
 
 ```sh
-adb push dist/mybot-rv1126b-0.5.1-aarch64.tar.gz /userdata/
+version=$(python3 scripts/project-version.py)
+package="mybot-rv1126b-${version}-aarch64"
+adb push "dist/${package}.tar.gz" /userdata/
 adb shell
 ```
 
-在设备 shell 执行：
+在设备 shell 执行，将 `<version>` 替换为刚才上传包的实际版本；主机变量不会自动带入设备 shell：
 
 ```sh
+package='mybot-rv1126b-<version>-aarch64'
 cd /userdata
-tar -xzf mybot-rv1126b-0.5.1-aarch64.tar.gz
-cd mybot-rv1126b-0.5.1-aarch64
+tar -xzf "${package}.tar.gz"
+cd "$package"
 sha256sum -c SHA256SUMS
 ./run.sh --version
 ```
 
-校验应全部为 `OK`，版本为 0.5.1，语言和视频标志与所选程序一致。英文包、单配置包的名称不同，以实际交付文件名为准。包内包括程序、RTSA、提示音、可选授时 helper、来源/许可、构建 manifest、ABI 报告和校验清单。无需覆盖 `/usr/bin`、`/usr/lib`、ALSA 配置或开机脚本。
+校验应全部为 `OK`，版本与所上传包的 manifest 一致，语言和视频标志与所选程序一致。英文包、单配置包的名称不同，以实际交付文件名为准。包内包括程序、RTSA、提示音、可选授时 helper、来源/许可、构建 manifest、ABI 报告和校验清单。手动解包运行无需覆盖 `/usr/bin`、`/usr/lib`、ALSA 配置文件或开机脚本。
 
 如果原厂服务仍在运行，由操作者停止它：
 
@@ -80,4 +83,4 @@ RV1126B_VIDEO=1 ./run.sh
 /etc/init.d/S99botstation-device start
 ```
 
-应用不安装自启动服务。恢复原厂服务不会将其身份/凭据与本应用合并。
+以上手动运行步骤不安装自启动服务。通过[部署工具](deployment.zh-CN.md)安装的受监督服务会设置 `S99mybot`、禁用原厂业务自启动，并应用板级网络策略；请按部署指南启停或回退，不能直接沿用上述原厂服务恢复命令。每次受监督服务启动还会通过 `amixer` 设置采集 mixer，不改 ALSA 配置文件。恢复原厂服务不会将其身份/凭据与本应用合并。
