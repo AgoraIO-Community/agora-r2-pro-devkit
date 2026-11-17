@@ -17,13 +17,23 @@ target_compile_options(mybot_time_sync PRIVATE -Wall -Wextra -Werror)
 add_library(mybot_network_route STATIC src/services/network_route.c)
 target_compile_options(mybot_network_route PRIVATE -Wall -Wextra -Werror)
 find_package(OpenSSL REQUIRED)
-add_library(mybot_wifi STATIC src/services/wifi/wifi_common.c
+set(wifi_portal_header "${CMAKE_CURRENT_BINARY_DIR}/generated/wifi/wifi_portal_page.h")
+add_custom_command(OUTPUT "${wifi_portal_header}"
+    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/embed-wifi-portal.py"
+        --input "${CMAKE_CURRENT_SOURCE_DIR}/src/services/wifi/portal.html"
+        --output "${wifi_portal_header}"
+    COMMAND "${CMAKE_COMMAND}" -E touch "${wifi_portal_header}"
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/services/wifi/portal.html"
+        "${PROJECT_SOURCE_DIR}/scripts/embed-wifi-portal.py"
+    VERBATIM)
+add_library(mybot_wifi STATIC "${wifi_portal_header}" src/services/wifi/wifi_common.c
     src/services/wifi/wifi_backend.c src/services/wifi/wifi_credentials.c
     src/services/wifi/wifi_process.c src/services/wifi/wifi_radio.c
     src/services/wifi/wifi_wpa_control.c src/services/wifi/wifi_portal.c
     src/services/wifi/wifi_service.c src/services/wifi/system_wifi_profile.c)
 set_target_properties(mybot_wifi PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
-target_include_directories(mybot_wifi PUBLIC include PRIVATE src/services/wifi)
+target_include_directories(mybot_wifi PUBLIC include PRIVATE src/services/wifi
+    "${CMAKE_CURRENT_BINARY_DIR}/generated/wifi")
 target_link_libraries(mybot_wifi PUBLIC Threads::Threads OpenSSL::Crypto PRIVATE mybot_network_route)
 target_compile_options(mybot_wifi PRIVATE -Wall -Wextra -Werror)
 add_library(mybot_power STATIC src/services/power.c)

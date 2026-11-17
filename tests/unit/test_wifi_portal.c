@@ -210,11 +210,11 @@ int main(void) {
     CHECK(!strstr(page, "@TOKEN@"));
     CHECK(strstr(page, "textContent"));
     CHECK(!strstr(page, "innerHTML"));
-    CHECK(strstr(page, "setTimeout(leave,1000)"));
-    const char *start = strstr(page, "const token='");
+    CHECK(strstr(page, "setTimeout(leave, 1000)"));
+    const char *start = strstr(page, "const token = '");
     CHECK(start);
     char token[65];
-    memcpy(token, start + strlen("const token='"), 64);
+    memcpy(token, start + strlen("const token = '"), 64);
     token[64] = 0;
     CHECK(strlen(token) == 64);
     const char *scan = get(config.http_port, "/scan");
@@ -225,6 +225,30 @@ int main(void) {
     CHECK(strstr(get(config.http_port, "/saved/list"), "[\"home\",\"测试网络\"]"));
     CHECK(strstr(get(config.http_port, "/status"), "\"state\":\"ap\""));
     CHECK(strstr(get(config.http_port, "/status"), "\"busy\":false"));
+    static const struct {
+        wifi_portal_error_t code;
+        const char *name;
+    } errors[] = {
+        {WIFI_PORTAL_ERROR_NONE, "none"},     {WIFI_PORTAL_ERROR_CONNECT, "connect"},
+        {WIFI_PORTAL_ERROR_SAVE, "save"},     {WIFI_PORTAL_ERROR_COMMIT, "commit"},
+        {WIFI_PORTAL_ERROR_AP, "ap"},         {WIFI_PORTAL_ERROR_SAVED_UPDATE, "saved_update"},
+        {(wifi_portal_error_t)777, "unknown"}};
+    for (size_t i = 0; i < sizeof(errors) / sizeof(errors[0]); ++i) {
+        pthread_mutex_lock(&handler.mutex);
+        handler.current.error_code = errors[i].code;
+        CHECK(wifi_copy(handler.current.error, sizeof(handler.current.error),
+                        "private-backend-detail-password-do-not-export"));
+        pthread_mutex_unlock(&handler.mutex);
+        const char *response = get(config.http_port, "/status");
+        char expected[64];
+        snprintf(expected, sizeof(expected), "\"error_code\":\"%s\"", errors[i].name);
+        CHECK(strstr(response, expected));
+        CHECK(!strstr(response, "private-backend-detail"));
+    }
+    pthread_mutex_lock(&handler.mutex);
+    handler.current.error_code = WIFI_PORTAL_ERROR_NONE;
+    handler.current.error[0] = '\0';
+    pthread_mutex_unlock(&handler.mutex);
     const char *probes[] = {"/generate_204",    "/hotspot-detect.html",
                             "/connecttest.txt", "/ncsi.txt",
                             "/unknown",         "/submit?ssid=leak&password=secret"};

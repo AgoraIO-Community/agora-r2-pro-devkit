@@ -330,6 +330,7 @@ static void test_ap_and_portal_rollback(void) {
         AWAIT(snapshot(service).state == RV1126B_WIFI_ERROR);
         CHECK(!snapshot(service).ap_active);
         CHECK(GET(s, portal_starts) == portal_failure);
+        CHECK(status(service).error_code == WIFI_PORTAL_ERROR_AP);
         CHECK(GET(s, ap_stops) >= 1 && !GET(s, ap));
         close_service(service, s);
     }
@@ -360,6 +361,7 @@ static void test_ap_exit_withdraws_guidance_before_cleanup_and_allows_retry(void
     CHECK(failed.state == RV1126B_WIFI_ERROR && !failed.ap_active && !failed.ssid[0]);
     CHECK(!strcmp(portal.state, "error") && !portal.busy && !portal.ssid[0]);
     CHECK(failed.error[0] && !strcmp(failed.error, portal.error));
+    CHECK(portal.error_code == WIFI_PORTAL_ERROR_AP);
     CHECK(GET(s, ap_stops) == 0 && GET(s, scans) == 1);
     CHECK(first_name(service, "retained") && GET(s, saves) == 0);
     char error[WIFI_ERROR_CAPACITY] = "";
@@ -449,6 +451,7 @@ static void test_candidate_failure_then_success_and_grace(void) {
     AWAIT(GET(s, connections) == 2);
     wait_ap(service);
     CHECK(portal_state(service, "error") && !GET(s, saves));
+    CHECK(status(service).error_code == WIFI_PORTAL_ERROR_CONNECT);
     SET(s, connection_ok, 1);
     CHECK(wifi_service_submit(service, "test", "password123", error));
     AWAIT(portal_state(service, "connected"));
@@ -618,6 +621,7 @@ static void test_failed_persistence_does_not_change_cache(void) {
     SET(s, block_save, 0);
     AWAIT(!status(service).busy);
     CHECK(portal_state(service, "error") && status(service).error[0]);
+    CHECK(status(service).error_code == WIFI_PORTAL_ERROR_SAVED_UPDATE);
     const rv1126b_wifi_status_t public_status = snapshot(service);
     const wifi_portal_status_t portal_status = status(service);
     CHECK(!strcmp(public_status.error, portal_status.error) && names(service).count == 1);
@@ -625,11 +629,13 @@ static void test_failed_persistence_does_not_change_cache(void) {
     CHECK(wifi_service_submit(service, "new", "password123", error));
     AWAIT(snapshot(service).state == RV1126B_WIFI_AP_READY && portal_state(service, "error"));
     CHECK(snapshot(service).ap_active && first_name(service, "old") && status(service).error[0]);
+    CHECK(status(service).error_code == WIFI_PORTAL_ERROR_SAVE);
     CHECK(!wifi_service_finish(service, error));
     SET(s, save_ok, 1);
     CHECK(wifi_service_submit(service, "new", "password123", error));
     AWAIT(portal_state(service, "connected"));
     CHECK(first_name(service, "new") && !status(service).error[0]);
+    CHECK(status(service).error_code == WIFI_PORTAL_ERROR_NONE);
     CHECK(wifi_service_finish(service, error));
     close_service(service, s);
 }
@@ -677,6 +683,7 @@ static void test_profile_reload_timeout_retains_committed_cache_and_cancels(void
     AWAIT(snapshot(service).state == RV1126B_WIFI_AP_READY && portal_state(service, "error"));
     CHECK(snapshot(service).ap_active && !status(service).busy && first_name(service, "new"));
     CHECK(GET(s, saves) == 1 && GET(s, committed_checks) == 1);
+    CHECK(status(service).error_code == WIFI_PORTAL_ERROR_COMMIT);
     pthread_mutex_lock(&s->mutex);
     CHECK(!strcmp(s->disk.items[0].ssid, "new"));
     pthread_mutex_unlock(&s->mutex);
