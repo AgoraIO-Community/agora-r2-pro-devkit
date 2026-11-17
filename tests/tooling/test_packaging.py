@@ -236,6 +236,50 @@ class PackagingTests(unittest.TestCase):
         self.write(zig, "changed compiler contents")
         self.assertNotEqual(wrapped_before, metadata.inputs_digest(metadata.build_inputs(self.root, self.voice)))
 
+    def test_dependency_directory_links_are_rejected_instead_of_silently_skipped(self):
+        headers = self.base / 'headers'
+        self.write(headers / 'api.h', 'first contents')
+        (self.staging / 'include').symlink_to(headers, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'symlink'):
+            metadata.tree_snapshot(self.staging)
+        self.write(headers / 'api.h', 'changed contents')
+        with self.assertRaisesRegex(ValueError, 'symlink'):
+            metadata.tree_snapshot(self.staging)
+        (self.staging / 'include').unlink()
+        (self.staging / 'include').symlink_to('usr', target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'Directory dependency symlinks'):
+            metadata.tree_snapshot(self.staging)
+
+    def test_dependency_file_links_bind_both_link_text_and_target_bytes(self):
+        include = self.staging / 'usr/include'
+        self.write(include / 'first.h', 'same contents')
+        self.write(include / 'second.h', 'same contents')
+        link = include / 'alias.h'
+        link.symlink_to('first.h')
+        before = metadata.tree_snapshot(self.staging)
+        link.unlink()
+        link.symlink_to('second.h')
+        after = metadata.tree_snapshot(self.staging)
+        self.assertNotEqual(before['sha256'], after['sha256'])
+        self.write(include / 'second.h', 'changed contents')
+        self.assertNotEqual(after['sha256'], metadata.tree_snapshot(self.staging)['sha256'])
+        self.assertEqual(before['file_count'], after['file_count'])
+
+    def test_dependency_links_cannot_cycle_escape_or_hide_missing_inputs(self):
+        outside = self.base / 'external.h'
+        self.write(outside, 'external contents')
+        for target in ('missing', '.', '../external.h', str(outside), 'alias.h'):
+            with self.subTest(target=target):
+                link = self.staging / 'alias.h'
+                link.symlink_to(target)
+                with self.assertRaises(ValueError):
+                    metadata.tree_snapshot(self.staging)
+                link.unlink()
+        directory_link = self.base / 'staging-alias'
+        directory_link.symlink_to(self.staging, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'Directory dependency symlinks'):
+            metadata.tree_snapshot(directory_link)
+
     def test_new_packages_require_portable_identity_manifest_schema(self):
         manifest = metadata.read_json(self.voice / "build-manifest.json")
         manifest["schema"] = 1

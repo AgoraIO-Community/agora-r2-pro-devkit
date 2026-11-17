@@ -80,14 +80,31 @@ def source_snapshot(root):
 
 def tree_snapshot(path):
     path = Path(path)
+    if path.is_symlink():
+        raise ValueError("Directory dependency symlinks are unsupported; provide a materialized snapshot")
     if not path.is_dir():
         raise ValueError("Missing dependency directory: " + str(path))
+    root = path.resolve()
     entries = []
     for child in sorted(path.rglob("*")):
-        if child.is_file():
-            entries.append([str(child.relative_to(path)), digest(child)])
-        elif child.is_symlink() and not child.exists():
-            raise ValueError("Broken dependency symlink: " + str(child))
+        relative = str(child.relative_to(path))
+        if child.is_symlink():
+            link = str(child.readlink())
+            if Path(link).is_absolute():
+                raise ValueError("Absolute dependency symlink is unsupported: " + relative)
+            try:
+                target = child.resolve(strict=True)
+            except (OSError, RuntimeError) as error:
+                raise ValueError("Broken or cyclic dependency symlink: " + relative) from error
+            if not target.is_relative_to(root):
+                raise ValueError("Symlink leaves dependency snapshot: " + relative)
+            if target.is_dir():
+                raise ValueError("Directory dependency symlinks are unsupported: " + relative)
+            if not target.is_file():
+                raise ValueError("Unsupported dependency symlink target: " + relative)
+            entries.append([relative, "symlink", link, digest(target)])
+        elif child.is_file():
+            entries.append([relative, digest(child)])
     if not entries:
         raise ValueError("Empty dependency directory: " + str(path))
     return {"sha256": json_digest(entries), "file_count": len(entries)}
