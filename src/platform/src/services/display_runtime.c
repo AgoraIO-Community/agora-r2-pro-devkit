@@ -17,6 +17,7 @@ static struct {
     const char *device;
     unsigned rotation;
     int expression;
+    mybot_settings_page_t settings;
     mybot_lcd_content_t latest;
     mybot_display_runtime_status_t status;
 } s_ui = {.lock = PTHREAD_MUTEX_INITIALIZER, .ready = PTHREAD_COND_INITIALIZER};
@@ -47,13 +48,16 @@ static void *ui_worker(void *unused) {
         mybot_lcd_content_t content = s_ui.latest;
         mybot_display_runtime_status_t status = s_ui.status;
         int expression = s_ui.expression;
+        mybot_settings_page_t settings = s_ui.settings;
         s_ui.pending = false;
         pthread_mutex_unlock(&s_ui.lock);
         if (stop)
             break;
         uint32_t now = now_ms();
-        if (update)
+        if (update) {
             rv1126b_renderer_update(&content, &status, now);
+            rv1126b_renderer_settings(settings);
+        }
         (void)rv1126b_renderer_expression(expression);
         rv1126b_renderer_step(now);
         if (rv1126b_renderer_failed()) {
@@ -83,6 +87,7 @@ int rv1126b_ui_start(const char *device, unsigned rotation) {
     s_ui.rotation = rotation;
     s_ui.stopping = s_ui.startup_done = s_ui.failed = false;
     s_ui.expression = -1;
+    s_ui.settings = MYBOT_SETTINGS_CLOSED;
     s_ui.latest = (mybot_lcd_content_t){MYBOT_LCD_SCREEN_STARTING, {0}, 0};
     s_ui.status = (mybot_display_runtime_status_t){.state = "starting", .in_conversation = false};
     s_ui.pending = true;
@@ -181,6 +186,18 @@ void rv1126b_ui_time_status(int status) {
     if (s_ui.status.clock_state != status) {
         s_ui.status.clock_state = status;
         s_ui.pending = true;
+    }
+    pthread_mutex_unlock(&s_ui.lock);
+}
+
+void rv1126b_ui_settings(mybot_settings_page_t page) {
+    if (page < MYBOT_SETTINGS_CLOSED || page > MYBOT_SETTINGS_POWEROFF_ERROR)
+        return;
+    pthread_mutex_lock(&s_ui.lock);
+    if (s_ui.settings != page) {
+        s_ui.settings = page;
+        s_ui.pending = true;
+        fprintf(stdout, "Settings page=%d\n", (int)page);
     }
     pthread_mutex_unlock(&s_ui.lock);
 }

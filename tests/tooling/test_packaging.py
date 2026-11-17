@@ -40,7 +40,7 @@ class PackagingTests(unittest.TestCase):
         self.write(self.root / "CMakeLists.txt", "project(mybot_rv1126b VERSION 0.2.0 LANGUAGES C CXX)\n")
         self.write(self.root / ".gitignore", "/build*/\n/local/\n/dist/\n")
         self.write(self.root / "packaging/run.sh", 'case "${RV1126B_VIDEO:-0}" in\n0) :;;\n1) :;;\nesac\n')
-        self.write(self.root / "packaging/example.env", "# fixture\n")
+        self.write(self.root / "packaging/example.env", (ROOT / "packaging/example.env").read_text())
         self.write(self.root / "packaging/README.zh-CN.md", "fixture guide\n")
         for source in packager.EXECUTABLE_ASSETS.values():
             self.write(self.root / source, "#!/bin/sh\nexit 0\n")
@@ -72,10 +72,10 @@ class PackagingTests(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text)
 
-    def create_build(self, name, video):
+    def create_build(self, name, video, language="zh-CN"):
         build = self.root / ("build-" + name)
         build.mkdir()
-        config = {"schema": 1, "version": "0.2.0", "language": "zh-CN", "video": video,
+        config = {"schema": 1, "version": "0.2.0", "language": language, "video": video,
                   "ptime_ms": 20, "board": metadata.BOARD,
                   "sdk": {"rtsa_library": str(self.rtsa), "sdk_dir": str(self.sdk),
                           "staging_dir": str(self.staging)},
@@ -86,7 +86,7 @@ class PackagingTests(unittest.TestCase):
                   "flags": {"c": "-O3 -DNDEBUG", "cxx": "-O3 -DNDEBUG",
                             "exe_link": "-L" + str(self.staging / "usr/lib"), "build_type": "Release"}}
         metadata.write_json(build / "build-config.json", config)
-        marker = ("MYBOT_RV1126B_BUILD_CONFIG:0.2.0;zh-CN;video=" + str(int(video)) +
+        marker = ("MYBOT_RV1126B_BUILD_CONFIG:0.2.0;" + language + ";video=" + str(int(video)) +
                   ";ptime_ms=20;board=" + metadata.BOARD + "\0")
         inputs = metadata.build_inputs(self.root, build)
         source_marker = "MYBOT_RV1126B_SOURCE:" + inputs["source"]["sha256"] + "\0"
@@ -161,6 +161,63 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "valid JSON"):
             packager.package(self.root, self.args)
         self.assertFalse(self.args.output_dir.exists())
+
+    def test_example_environment_matches_each_package_and_is_reproducible(self):
+        for language, server in (("zh-CN", "https://botstation.shengwang.cn/api"),
+                                 ("en-US", "https://botstation.agora.io/api")):
+            with self.subTest(language=language):
+                self.args.language = language
+                if language == "en-US":
+                    self.args.voice_build = self.create_build("voice-en", False, language)
+                    self.args.video_build = self.create_build("video-en", True, language)
+                self.args.output_dir = self.base / ("environment-" + language)
+                destination, archive, first_hash = packager.package(self.root, self.args)
+                environment = (destination / "example.env").read_text()
+                self.assertIn("UI language is " + language, environment)
+                self.assertNotIn("@UI_LANGUAGE@", environment)
+                self.assertNotIn("@DEFAULT_SERVER@", environment)
+                actual_server = subprocess.check_output(
+                    ["sh", "-c", '. "$1"; printf "%s" "$RV1126B_SERVER"',
+                     "sh", str(destination / "example.env")], text=True)
+                self.assertEqual(actual_server, server)
+                self.assertNotRegex(environment, r"mybot-rv1126b-\d+\.\d+\.\d+")
+                helper = next(line[2:] for line in environment.splitlines()
+                              if line.startswith("# export RV1126B_TIME_SYNC_HELPER="))
+                resolved = subprocess.check_output(
+                    ["sh", "-c", helper + '\nprintf "%s" "$RV1126B_TIME_SYNC_HELPER"'],
+                    cwd=destination, text=True)
+                self.assertEqual(resolved, str(destination / "assets/time/sync-busybox.sh"))
+                self.assertTrue(Path(resolved).is_file())
+                checksums = dict((filename, expected) for expected, filename in
+                                 (line.split("  ", 1) for line in
+                                  (destination / "SHA256SUMS").read_text().splitlines()))
+                self.assertEqual(checksums["example.env"], metadata.digest(destination / "example.env"))
+                with tarfile.open(archive) as stream:
+                    self.assertEqual(stream.extractfile(destination.name + "/example.env").read(),
+                                     environment.encode())
+                self.args.output_dir = self.base / ("environment-repeat-" + language)
+                _, repeated, repeated_hash = packager.package(self.root, self.args)
+                self.assertEqual(first_hash, repeated_hash)
+                self.assertEqual(archive.read_bytes(), repeated.read_bytes())
+
+    def test_unknown_environment_language_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, "Unsupported example.env language"):
+            packager.example_environment(self.root, "fr-FR")
+
+    def test_missing_or_duplicate_environment_markers_are_rejected_before_publication(self):
+        original = (self.root / "packaging/example.env").read_text()
+        for placeholder, label in (("@UI_LANGUAGE@", "UI language"),
+                                   ("@DEFAULT_SERVER@", "default server")):
+            for replacement in ("", placeholder + placeholder):
+                with self.subTest(placeholder=placeholder, replacement=replacement):
+                    self.write(self.root / "packaging/example.env",
+                               original.replace(placeholder, replacement))
+                    for build in (self.voice, self.video):
+                        self.refresh_source_marker(build)
+                        self.seal(build)
+                    with self.assertRaisesRegex(ValueError, "exactly one " + label + " placeholder"):
+                        packager.package(self.root, self.args)
+                    self.assertFalse(self.args.output_dir.exists())
 
     def test_supervisor_tampering_is_rejected(self):
         self.write(self.voice / 'mybot-supervisor', 'changed supervisor')

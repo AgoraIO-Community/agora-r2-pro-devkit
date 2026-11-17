@@ -40,7 +40,7 @@ typedef struct {
     char socket_path[sizeof(((struct sockaddr_un *)0)->sun_path)];
     const char *state;
     pid_t child;
-    bool stopping, cleaning, failed, expected_exit, unclean;
+    bool stopping, cleaning, failed, expected_exit, unclean, poweroff_requested;
     int child_result;
     uint64_t terminate_at, cleanup_at, launch_at, restarts[3];
     unsigned int restart_count;
@@ -343,7 +343,8 @@ static int cleanup_children(supervisor_t *service) {
         return -1;
     for (size_t i = 0; i < count; ++i) {
         pid_t pid = children[i];
-        if (signal_owned(pid, SIGKILL, true) < 0 && errno != ECHILD)
+        int number = service->poweroff_requested && !service->unclean ? SIGTERM : SIGKILL;
+        if (signal_owned(pid, number, true) < 0 && errno != ECHILD)
             return -1;
         int status;
         pid_t reaped;
@@ -432,6 +433,112 @@ static void begin_stop(supervisor_t *service, uint64_t now) {
     publish(service, "stopping");
 }
 
+static bool poweroff_command_safe(const char *path) {
+    if (!path || path[0] != '/')
+        return false;
+    char resolved[PATH_MAX];
+    struct stat status;
+    if (!realpath(path, resolved) || stat(resolved, &status) < 0 || !S_ISREG(status.st_mode) ||
+        !(status.st_mode & S_IXUSR) || (status.st_mode & 0022))
+        return false;
+#ifdef RV1126B_SUPERVISOR_TEST_ALLOW_UNPRIVILEGED
+    if (status.st_uid != geteuid())
+        return false;
+#else
+    if (geteuid() != 0 || status.st_uid != 0)
+        return false;
+    /* Every resolved ancestor must protect the verified executable from
+     * replacement. /sbin/poweroff may legitimately resolve to BusyBox. */
+    for (char *separator = resolved + 1; *separator; ++separator) {
+        if (*separator != '/')
+            continue;
+        *separator = '\0';
+        bool safe = stat(resolved, &status) == 0 && S_ISDIR(status.st_mode) && status.st_uid == 0 &&
+                    !(status.st_mode & 0022);
+        *separator = '/';
+        if (!safe)
+            return false;
+    }
+#endif
+    return true;
+}
+
+static bool poweroff_peer_is_application(supervisor_t *service, int fd) {
+    pid_t peer = -1;
+    uid_t owner = (uid_t)-1;
+#ifdef __linux__
+    struct ucred credentials;
+    socklen_t size = sizeof(credentials);
+    if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &credentials, &size) < 0 ||
+        size != sizeof(credentials))
+        return false;
+    peer = credentials.pid;
+    owner = credentials.uid;
+#elif defined(__APPLE__)
+    gid_t group;
+    socklen_t size = sizeof(peer);
+    if (getpeereid(fd, &owner, &group) < 0 ||
+        getsockopt(fd, SOL_LOCAL, LOCAL_PEERPID, &peer, &size) < 0 || size != sizeof(peer))
+        return false;
+#else
+    (void)fd;
+    return false;
+#endif
+#ifdef RV1126B_SUPERVISOR_TEST_ALLOW_UNPRIVILEGED
+    if (owner != geteuid())
+        return false;
+#else
+    if (owner != 0 || geteuid() != 0)
+        return false;
+#endif
+    siginfo_t information;
+    return peer > 1 && peer == service->child && observe(peer, &information) == 0 &&
+           !information.si_pid;
+}
+
+static void accept_poweroff(supervisor_t *service, int fd, uint64_t now) {
+    if (!service->policy.poweroff_command || service->failed || service->unclean ||
+        service->stopping || service->cleaning || !poweroff_peer_is_application(service, fd) ||
+        !poweroff_command_safe(service->policy.poweroff_command)) {
+        reply(fd, "failed\n");
+        return;
+    }
+    /* Commit only if the application received its acknowledgement. A missing
+     * ACK keeps the application and supervisor alive without arming shutdown. */
+    if (write(fd, "accepted\n", 9) != 9) {
+        close(fd);
+        return;
+    }
+    struct timeval commit_timeout = {.tv_sec = 1, .tv_usec = 500000};
+    if (setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &commit_timeout, sizeof(commit_timeout)) < 0) {
+        close(fd);
+        return;
+    }
+    char commit[8] = {0};
+    size_t used = 0;
+    while (used < 7) {
+        ssize_t count = read(fd, commit + used, 7 - used);
+        if (count < 0 && errno == EINTR)
+            continue;
+        if (count <= 0)
+            break;
+        used += (size_t)count;
+        if (memchr(commit, '\n', used))
+            break;
+    }
+    now = milliseconds();
+    if (used != 7 || memcmp(commit, "commit\n", 7) || !now || write(fd, "committed\n", 10) != 10) {
+        close(fd);
+        return;
+    }
+    close(fd);
+    service->poweroff_requested = service->stopping = service->expected_exit = true;
+    service->terminate_at = now + service->policy.terminate_timeout_ms;
+    /* The application owns orderly resource release; do not signal it while
+     * its acknowledgement is still returning to the product thread. */
+    publish(service, "poweroff_pending");
+}
+
 static void accept_control(supervisor_t *service, uint64_t now) {
     int fd = accept(service->listener, NULL, NULL);
     if (fd < 0)
@@ -439,6 +546,7 @@ static void accept_control(supervisor_t *service, uint64_t now) {
     (void)descriptor_flags(fd, false);
     struct timeval timeout = {.tv_sec = 0, .tv_usec = 100000};
     (void)setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
+    (void)setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
     char request[16] = {0};
     ssize_t count = 0;
     while ((size_t)count < sizeof(request) - 1) {
@@ -455,6 +563,8 @@ static void accept_control(supervisor_t *service, uint64_t now) {
         char response[48];
         snprintf(response, sizeof(response), "%s\n", service->state);
         reply(fd, response);
+    } else if (count == 9 && !memcmp(request, "poweroff\n", 9)) {
+        accept_poweroff(service, fd, now);
     } else if (count == 5 && !memcmp(request, "stop\n", 5) && service->stop_client < 0) {
         service->stop_client = fd;
         begin_stop(service, now);
@@ -532,7 +642,8 @@ static void dispose(supervisor_t *service) {
 
 int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
     if (!config || !config->runtime_directory || !config->log_directory || !config->argv ||
-        !config->argv[0] || config->argv[0][0] != '/')
+        !config->argv[0] || config->argv[0][0] != '/' ||
+        (config->poweroff_command && !poweroff_command_safe(config->poweroff_command)))
         return 1;
     supervisor_t service = {.policy = *config,
                             .runtime = -1,
@@ -605,8 +716,11 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
             } else if (information.si_pid == service.child) {
                 service.child_result =
                     information.si_code == CLD_EXITED ? information.si_status : 1;
-                if (information.si_code != CLD_EXITED && !service.stopping)
+                if (information.si_code != CLD_EXITED &&
+                    (!service.stopping || service.poweroff_requested))
                     mark_unclean(&service);
+                if (service.poweroff_requested && service.child_result != 0)
+                    service.failed = true;
                 service.cleaning = true;
             } else if (service.stopping && now >= service.terminate_at) {
                 mark_unclean(&service);
@@ -631,7 +745,7 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
                         service.stop_client = -1;
                     }
                 } else if (service.stopping || service.child_result == 0) {
-                    if (service.stopping)
+                    if (service.stopping && !service.poweroff_requested)
                         service.failed = false; /* A verified clean stop permits replacement. */
                     publish(&service, service.failed ? "failed" : "stopped");
                     finished = true;
@@ -654,6 +768,8 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
                     publish(&service, "failed");
                 }
             } else if (clean < 0 || now >= service.cleanup_at) {
+                if (service.poweroff_requested)
+                    mark_unclean(&service);
                 service.failed = true;
                 publish(&service, "failed");
                 if (service.stop_client >= 0) {
@@ -672,7 +788,24 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
             }
         }
     }
+    bool poweroff = service.poweroff_requested && !service.failed && !service.unclean &&
+                    service.child_result == 0;
+    if (poweroff) {
+        publish(&service, "poweroff");
+        if (service.log >= 0)
+            (void)fsync(service.log);
+    }
     dispose(&service);
+    if (poweroff) {
+        /* Close the control socket before PID1 can execute rcK/S99mybot stop:
+         * shutdown must never wait for a supervisor waiting for shutdown. */
+        if (!poweroff_command_safe(service.policy.poweroff_command))
+            return 1;
+        sync();
+        char *const arguments[] = {(char *)service.policy.poweroff_command, NULL};
+        execv(service.policy.poweroff_command, arguments);
+        return 1;
+    }
     return service.failed ? 1 : 0;
 }
 
@@ -743,33 +876,38 @@ int rv1126b_supervisor_main(int argc, char **argv) {
     (void)rv1126b_build_source_identity[0];
 #endif
     if (argc == 2 && !strcmp(argv[1], "--help")) {
-        puts("mybot-supervisor supervise --runtime DIR --log-dir DIR -- EXECUTABLE [ARGS...]\n"
+        puts("mybot-supervisor supervise --runtime DIR --log-dir DIR "
+             "[--poweroff-command EXECUTABLE] -- EXECUTABLE [ARGS...]\n"
              "mybot-supervisor stop|status --runtime DIR");
         return 0;
     }
     if (argc < 4)
         return 2;
-    const char *runtime = NULL, *logs = NULL;
+    const char *runtime = NULL, *logs = NULL, *poweroff = NULL;
     int argument = 2;
     while (argument + 1 < argc && strcmp(argv[argument], "--")) {
         if (!strcmp(argv[argument], "--runtime"))
             runtime = argv[argument + 1];
         else if (!strcmp(argv[argument], "--log-dir"))
             logs = argv[argument + 1];
+        else if (!strcmp(argv[argument], "--poweroff-command"))
+            poweroff = argv[argument + 1];
         else
             return 2;
         argument += 2;
     }
     if (!strcmp(argv[1], "status") || !strcmp(argv[1], "stop")) {
-        if (!runtime || logs || argument != argc)
+        if (!runtime || logs || poweroff || argument != argc)
             return 2;
         return rv1126b_supervisor_control(runtime, !strcmp(argv[1], "stop"));
     }
     if (strcmp(argv[1], "supervise") || !runtime || !logs || argument + 1 >= argc ||
         strcmp(argv[argument], "--"))
         return 2;
-    rv1126b_supervisor_config_t config = {
-        .runtime_directory = runtime, .log_directory = logs, .argv = argv + argument + 1};
+    rv1126b_supervisor_config_t config = {.runtime_directory = runtime,
+                                          .log_directory = logs,
+                                          .argv = argv + argument + 1,
+                                          .poweroff_command = poweroff};
     return rv1126b_supervisor_run(&config);
 }
 

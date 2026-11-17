@@ -5,8 +5,11 @@
 | 用户指南 | 内容 |
 | --- | --- |
 | [上手与升级](user/getting-started.zh-CN.md) | 设备要求、解包、资源占用、UI/语音检查、回退 |
+| [设备部署](user/deployment.zh-CN.md) | 受监督服务、版本切换、系统策略、备份与回退 |
 | [构建](user/build.zh-CN.md) | 主机开发、独立目标 SDK、presets 与交付包 |
 | [AP 配网](user/wifi-provisioning.zh-CN.md) | 热点入口、浏览器流程、系统前提与设备验收 |
+| [设备设置](user/settings.zh-CN.md) | 设置入口、设备配网与确认关机 |
+| [系统时间](user/time-sync.zh-CN.md) | 启动时间检查、已有校时服务与可选 helper |
 | [配置](user/configuration.zh-CN.md) | CLI、环境变量、身份、语言与音频契约 |
 | [故障排查](user/troubleshooting.zh-CN.md) | 构建、显示、音频、网络和摄像头问题 |
 

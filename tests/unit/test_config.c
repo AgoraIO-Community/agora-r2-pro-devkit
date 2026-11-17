@@ -7,13 +7,22 @@
 
 int main(void) {
     CHECK(unsetenv("RV1126B_SERVER") == 0);
+    CHECK(unsetenv("MYBOT_LOCALE") == 0);
     CHECK(unsetenv("RV1126B_INPUT_DEVICE") == 0);
     CHECK(unsetenv("RV1126B_TIME_SYNC_TIMEOUT") == 0);
     CHECK(unsetenv("RV1126B_TIME_SYNC_HELPER") == 0);
     rv1126b_app_config_t config;
     char *defaults[] = {"mybot", NULL};
     CHECK(rv1126b_app_config_parse(1, defaults, &config) == 0);
-    CHECK(!strcmp(config.server, "https://botstation.shengwang.cn/api"));
+    const bool english = strcmp(RV1126B_LOCALE, "en-US") == 0;
+    const char *expected_server =
+        english ? "https://botstation.agora.io/api" : "https://botstation.shengwang.cn/api";
+    CHECK(!strcmp(config.server, expected_server));
+    /* Prompt locale overrides do not move an existing build to another service. */
+    CHECK(setenv("MYBOT_LOCALE", english ? "zh-CN" : "en-US", 1) == 0);
+    CHECK(rv1126b_app_config_parse(1, defaults, &config) == 0);
+    CHECK(!strcmp(config.server, expected_server));
+    CHECK(unsetenv("MYBOT_LOCALE") == 0);
     CHECK(config.rotation == 270 && config.seconds == 0 && config.platform.talk_key == 139);
     CHECK(!config.demo && config.platform.enable_ui);
     CHECK(config.time_sync_timeout == 30 && !config.time_sync_helper[0]);
@@ -34,14 +43,15 @@ int main(void) {
     CHECK(rv1126b_app_config_parse(3, relative_helper, &config) < 0);
     CHECK(unsetenv("RV1126B_TIME_SYNC_TIMEOUT") == 0);
     CHECK(unsetenv("RV1126B_TIME_SYNC_HELPER") == 0);
-    CHECK(config.wifi_provisioning && !config.force_wifi_provisioning && !config.wifi_interface[0]);
-    char *provision[] = {"mybot", "--wifi-provision", "--wifi-interface", "wlan0", NULL};
-    CHECK(rv1126b_app_config_parse(4, provision, &config) == 0);
-    CHECK(config.force_wifi_provisioning && !strcmp(config.wifi_interface, "wlan0"));
+    CHECK(config.wifi_provisioning && !config.wifi_interface[0]);
+    char *interface[] = {"mybot", "--wifi-interface", "wlan0", NULL};
+    CHECK(rv1126b_app_config_parse(3, interface, &config) == 0);
+    CHECK(config.wifi_provisioning && !strcmp(config.wifi_interface, "wlan0"));
+    /* Explicit manual entry is owned by the settings UI, including at startup. */
+    char *removed_provision[] = {"mybot", "--wifi-provision", NULL};
+    CHECK(rv1126b_app_config_parse(2, removed_provision, &config) < 0);
     char *monitor[] = {"mybot", "--no-wifi-provisioning", NULL};
     CHECK(rv1126b_app_config_parse(2, monitor, &config) == 0 && !config.wifi_provisioning);
-    char *conflict[] = {"mybot", "--wifi-provision", "--no-wifi-provisioning", NULL};
-    CHECK(rv1126b_app_config_parse(3, conflict, &config) < 0);
     char *bad_interface[] = {"mybot", "--wifi-interface", "../../wlan0", NULL};
     CHECK(rv1126b_app_config_parse(3, bad_interface, &config) < 0);
     CHECK(setenv("RV1126B_SERVER", "https://environment.example/api", 1) == 0);

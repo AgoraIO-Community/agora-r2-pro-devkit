@@ -62,11 +62,14 @@ esac
 export MYBOT_ASSETS_DIR="$release/assets"
 export MYBOT_KV_STORE_DIR=/userdata/mybot-rv1126b
 export MYBOT_STATUS_PATH=/run/mybot-rv1126b/application.status
+export MYBOT_SUPERVISOR_RUNTIME="$runtime"
 [ ! -L /run/mybot-rv1126b ] || fail 'application status directory must not be a link'
 mkdir -p /run/mybot-rv1126b
 chmod 0700 /run/mybot-rv1126b
 mkdir -p /userdata/mybot/logs
 chmod 0700 /userdata/mybot/logs
 [ "$1" != prepare ] || exit 0
+[ -x /sbin/poweroff ] || fail 'normal system poweroff command is missing'
 exec "$service_dir/mybot-supervisor" supervise --runtime "$runtime" \
-    --log-dir /userdata/mybot/logs -- "$service_dir/run-service.sh" exec "$release" </dev/null
+    --log-dir /userdata/mybot/logs --poweroff-command /sbin/poweroff \
+    -- "$service_dir/run-service.sh" exec "$release" </dev/null
