@@ -15,6 +15,8 @@ import subprocess
 import tarfile
 import time
 
+from build_metadata import MANIFEST_SCHEMA, inputs_digest
+
 ROOT = Path(__file__).resolve().parents[1]
 DEVICE_ROOT = "/userdata/mybot"
 DATA_ROOT = "/userdata/mybot-rv1126b"
@@ -111,7 +113,7 @@ def verify_package(path, expected, legacy=False):
                 raise ValueError("Missing executable build manifest")
             manifest = json.loads(files["build-manifest-" + profile + ".json"])
             config = manifest["inputs"]["config"]
-            if (manifest.get("schema") != 1 or config["version"] != version or
+            if (manifest.get("schema") != MANIFEST_SCHEMA or config["version"] != version or
                     config["board"] != "rv1126b-test2-rk805b-v10" or
                     config["ptime_ms"] != 20 or type(config["video"]) is not bool or
                     config["video"] != (profile == "video") or
@@ -124,11 +126,12 @@ def verify_package(path, expected, legacy=False):
                       "board=rv1126b-test2-rk805b-v10\0").encode()
             source_marker = ("MYBOT_RV1126B_SOURCE:" +
                              manifest["inputs"]["source"]["sha256"] + "\0").encode()
-            inputs_marker = re.search(rb"MYBOT_RV1126B_INPUTS:([0-9a-f]{64})\0", files[executable])
+            inputs_marker = ("MYBOT_RV1126B_INPUTS:" +
+                             inputs_digest(manifest["inputs"], public=True) + "\0").encode()
             if (config["language"] != language or marker not in files[executable] or
-                    source_marker not in files[executable] or inputs_marker is None):
+                    source_marker not in files[executable] or inputs_marker not in files[executable]):
                 raise ValueError("Executable provenance markers do not match its manifest")
-            inputs_markers[profile] = inputs_marker[0]
+            inputs_markers[profile] = inputs_marker
     if not profiles or "run.sh" not in files or "lib/libagora-rtc-sdk.so" not in files:
         raise ValueError("Missing application/runtime package contents")
     executables = ["run.sh", *("bin/mybot-rv1126b" + ("-video" if profile == "video" else "")
@@ -153,7 +156,7 @@ def verify_package(path, expected, legacy=False):
                   "board=rv1126b-test2-rk805b-v10\0").encode()
         source_marker = ("MYBOT_RV1126B_SOURCE:" + source + "\0").encode()
         app_manifest = json.loads(files["build-manifest-" + profiles[0] + ".json"])
-        if (manifest.get("role") != "supervisor" or manifest.get("schema") != 1 or
+        if (manifest.get("role") != "supervisor" or manifest.get("schema") != MANIFEST_SCHEMA or
                 config != app_manifest["inputs"]["config"] or
                 source != app_manifest["inputs"]["source"]["sha256"] or
                 manifest["binary_sha256"] != sha256(binary) or
@@ -161,6 +164,8 @@ def verify_package(path, expected, legacy=False):
                 report.get("errors") or report["binary"]["machine"] != 183 or
                 report["binary"]["sha256"] != sha256(binary) or
                 marker not in binary or source_marker not in binary or
+                inputs_digest(manifest["inputs"], public=True) !=
+                inputs_digest(app_manifest["inputs"], public=True) or
                 inputs_markers[profiles[0]] not in binary):
             raise ValueError("Supervisor ABI/provenance does not match its independent manifest")
     return {"path": path.resolve(), "name": root, "version": version,

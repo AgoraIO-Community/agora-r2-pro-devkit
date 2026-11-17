@@ -9,6 +9,8 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -90,7 +92,7 @@ class PackagingTests(unittest.TestCase):
                   ";ptime_ms=20;board=" + metadata.BOARD + "\0")
         inputs = metadata.build_inputs(self.root, build)
         source_marker = "MYBOT_RV1126B_SOURCE:" + inputs["source"]["sha256"] + "\0"
-        inputs_marker = "MYBOT_RV1126B_INPUTS:" + metadata.json_digest(inputs) + "\0"
+        inputs_marker = "MYBOT_RV1126B_INPUTS:" + metadata.inputs_digest(inputs) + "\0"
         self.write(build / "mybot-rv1126b", "executable " + name + "\0" + marker + source_marker + inputs_marker)
         binary = {"path": str(build / "mybot-rv1126b"), "sha256": metadata.digest(build / "mybot-rv1126b"),
                   "machine": 183, "soname": None, "interpreter": "/lib/ld-linux-aarch64.so.1",
@@ -109,7 +111,7 @@ class PackagingTests(unittest.TestCase):
 
     def seal(self, build):
         metadata.write_json(build / "build-manifest.json",
-                            {"schema": 1, "inputs": metadata.build_inputs(self.root, build),
+                            {"schema": metadata.MANIFEST_SCHEMA, "inputs": metadata.build_inputs(self.root, build),
                              "binary_sha256": metadata.digest(build / "mybot-rv1126b"),
                              "abi_report_sha256": metadata.digest(build / "abi-report.json")})
 
@@ -117,7 +119,7 @@ class PackagingTests(unittest.TestCase):
         binary = build / "mybot-rv1126b"
         inputs = metadata.build_inputs(self.root, build)
         executable = binary.read_bytes()
-        for field, value in (("SOURCE", inputs["source"]["sha256"]), ("INPUTS", metadata.json_digest(inputs))):
+        for field, value in (("SOURCE", inputs["source"]["sha256"]), ("INPUTS", metadata.inputs_digest(inputs))):
             current = ("MYBOT_RV1126B_" + field + ":" + value).encode() + b"\0"
             executable = re.sub(("MYBOT_RV1126B_" + field + ":[0-9a-f]{64}").encode() + b"\0",
                                 current, executable)
@@ -155,6 +157,90 @@ class PackagingTests(unittest.TestCase):
         for line in (destination / "SHA256SUMS").read_text().splitlines():
             expected, filename = line.split("  ", 1)
             self.assertEqual(expected, metadata.digest(destination / filename))
+
+    def test_portable_input_identity_survives_relocation_including_zig_wrappers(self):
+        zig = self.base / "toolchain-bin/zig"
+        self.write(zig, "fixture Zig executable bytes")
+        for compiler, tool in ((self.compiler, "cc"), (self.cxx_compiler, "c++")):
+            self.write(compiler, "#!/bin/sh\nexport ZIG_GLOBAL_CACHE_DIR=" +
+                       shlex.quote(str(self.root / "local/cache/global")) +
+                       "\nexport ZIG_LOCAL_CACHE_DIR=" + shlex.quote(str(self.root / "local/cache/local")) +
+                       '\nif [ "$#" -eq 1 ] && [ "$1" = --version ]; then\n  exec ' +
+                       shlex.quote(str(zig)) + " " + tool + " --version\nfi\nexec " +
+                       shlex.quote(str(zig)) + " " + tool +
+                       ' -target aarch64-linux-gnu.2.41 "$@"\n')
+        self.write(self.toolchain, 'set(CMAKE_FIND_ROOT_PATH "' + str(self.staging) + '")\n')
+        config = metadata.read_json(self.voice / "build-config.json")
+        config["flags"]["c"] += (" -I" + str(self.staging / "usr/include") +
+                                 " -isystem " + shlex.quote(str(self.sdk / "include")) +
+                                 " --sysroot=" + str(self.staging) +
+                                 " -ffile-prefix-map=" + str(self.root) + "=. -DRESOURCE_PATH=/target/runtime")
+        config["flags"]["exe_link"] += " -Wl,-rpath-link," + str(self.staging / "lib")
+        metadata.write_json(self.voice / "build-config.json", config)
+        self.refresh_source_marker(self.voice)
+        self.seal(self.voice)
+        before = metadata.build_inputs(self.root, self.voice)
+        with tempfile.TemporaryDirectory(prefix="mybot-relocated-") as temporary:
+            relocated = Path(temporary) / "different-parent"
+            shutil.copytree(self.base, relocated)
+            for filename in ("compiler", "cxx-compiler", "toolchain.cmake", "source/build-voice/build-config.json"):
+                path = relocated / filename
+                path.write_text(path.read_text().replace(str(self.base), str(relocated)))
+            root = relocated / "source"
+            build = root / "build-voice"
+            after = metadata.build_inputs(root, build)
+            self.assertNotEqual(before["config"], after["config"])
+            self.assertNotEqual(before["dependencies"]["compiler"]["sha256"],
+                                after["dependencies"]["compiler"]["sha256"])
+            self.assertEqual(before["identity"], after["identity"])
+            self.assertEqual(metadata.inputs_digest(before), metadata.inputs_digest(after))
+            public_before = metadata.public_manifest({"inputs": before})
+            public_after = metadata.public_manifest({"inputs": after})
+            self.assertEqual(public_before, public_after)
+            self.assertNotIn(str(self.base), json.dumps(public_before))
+            self.assertNotIn(str(relocated), json.dumps(public_after))
+            with self.assertRaisesRegex(ValueError, "Stale build manifest"):
+                metadata.verify_manifest(root, build, "zh-CN", False)
+            self.run_manifest("--prepare")
+            with patch.object(manifest_tool, "ROOT", root), \
+                    patch.object(sys, "argv", ["build-manifest.py", "--build-dir", str(build), "--prepare"]), \
+                    redirect_stdout(io.StringIO()):
+                manifest_tool.main()
+            self.assertEqual((self.voice / "build_source_identity.c").read_bytes(),
+                             (build / "build_source_identity.c").read_bytes())
+
+    def test_portable_identity_keeps_semantic_flags_and_compiler_arguments(self):
+        original = metadata.read_json(self.voice / "build-config.json")
+        before = metadata.inputs_digest(metadata.build_inputs(self.root, self.voice))
+        for option in (" -fno-exceptions", " -DNAME=first", " -DNAME=second",
+                       " -DRESOURCE_PATH=" + str(self.root), " -I/unregistered/headers"):
+            with self.subTest(option=option):
+                config = json.loads(json.dumps(original))
+                config["flags"]["cxx"] += option
+                metadata.write_json(self.voice / "build-config.json", config)
+                self.assertNotEqual(before, metadata.inputs_digest(metadata.build_inputs(self.root, self.voice)))
+        metadata.write_json(self.voice / "build-config.json", original)
+        zig = self.base / "zig"
+        self.write(zig, "compiler contents")
+        wrapper = ('#!/bin/sh\nexport ZIG_GLOBAL_CACHE_DIR=/tmp/fixture-global\n'
+                   'export ZIG_LOCAL_CACHE_DIR=/tmp/fixture-local\nexec ' + shlex.quote(str(zig)) +
+                   ' cc -target aarch64-linux-gnu.2.41 "$@"\n')
+        self.write(self.compiler, wrapper)
+        wrapped_before = metadata.inputs_digest(metadata.build_inputs(self.root, self.voice))
+        self.write(self.compiler, wrapper.replace("aarch64-linux-gnu.2.41", "aarch64-linux-gnu.2.40"))
+        self.assertNotEqual(wrapped_before, metadata.inputs_digest(metadata.build_inputs(self.root, self.voice)))
+        self.write(self.compiler, wrapper.replace('"$@"', '$@'))
+        self.assertNotEqual(wrapped_before, metadata.inputs_digest(metadata.build_inputs(self.root, self.voice)))
+        self.write(self.compiler, wrapper)
+        self.write(zig, "changed compiler contents")
+        self.assertNotEqual(wrapped_before, metadata.inputs_digest(metadata.build_inputs(self.root, self.voice)))
+
+    def test_new_packages_require_portable_identity_manifest_schema(self):
+        manifest = metadata.read_json(self.voice / "build-manifest.json")
+        manifest["schema"] = 1
+        metadata.write_json(self.voice / "build-manifest.json", manifest)
+        with self.assertRaisesRegex(ValueError, "Unsupported build manifest"):
+            packager.package(self.root, self.args)
 
     def test_missing_video_is_rejected_in_all_profile(self):
         (self.video / "build-manifest.json").unlink()

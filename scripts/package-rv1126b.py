@@ -11,7 +11,7 @@ import shutil
 import tarfile
 import tempfile
 
-from build_metadata import (digest, git, json_digest, public_abi, public_manifest, source_snapshot,
+from build_metadata import (digest, git, inputs_digest, public_abi, public_manifest, source_snapshot,
                             verified_abi, verify_manifest, write_json)
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,7 +111,7 @@ def package(root, args):
         build = Path(getattr(args, profile + "_build")).resolve()
         manifest, report = verify_manifest(root, build, args.language, profile == "video")
         inputs = manifest['inputs']
-        verified_abi(build, inputs['config'], inputs['source']['sha256'], json_digest(inputs),
+        verified_abi(build, inputs['config'], inputs['source']['sha256'], inputs_digest(inputs),
                      binary_name='mybot-supervisor', report_name='abi-report-supervisor.json',
                      require_rtsa=False)
         validated.append((profile, build, manifest, report))

@@ -18,6 +18,9 @@ import unittest
 from unittest.mock import Mock, patch
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts"))
+import build_metadata as metadata
+
 SPEC = importlib.util.spec_from_file_location("deployment", ROOT / "scripts/deploy-rv1126b.py")
 deployment = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(deployment)
@@ -36,18 +39,25 @@ class DeploymentTests(unittest.TestCase):
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
         self.name = "mybot-rv1126b-0.4.0-aarch64"
+        config = {"version": "0.4.0", "language": "zh-CN", "video": False,
+                  "board": "rv1126b-test2-rk805b-v10", "ptime_ms": 20}
+        source = {"sha256": "a" * 64, "file_count": 1}
+        flags = {"c": [], "cxx": [], "exe_link": [], "build_type": "Release"}
+        inputs = {"schema": metadata.MANIFEST_SCHEMA,
+                  "config": {**config, "flags_sha256": metadata.json_digest(flags)},
+                  "source": source, "dependencies": {},
+                  "identity": {"schema": metadata.IDENTITY_SCHEMA, "config": {**config, "flags": flags},
+                               "source": source, "dependencies": {}}}
         marker = ("MYBOT_RV1126B_BUILD_CONFIG:0.4.0;zh-CN;video=0;ptime_ms=20;"
                   "board=rv1126b-test2-rk805b-v10\0MYBOT_RV1126B_SOURCE:" + "a" * 64 +
-                  "\0MYBOT_RV1126B_INPUTS:" + "b" * 64 + "\0")
+                  "\0MYBOT_RV1126B_INPUTS:" + metadata.inputs_digest(inputs) + "\0")
         binary = target_elf(marker.encode())
         report = {"binary": {"machine": 183, "sha256": deployment.sha256(binary),
                              "runpaths": ["$ORIGIN/../lib"]}, "errors": []}
         report_bytes = json.dumps(report).encode()
-        manifest = {"schema": 1, "binary_sha256": deployment.sha256(binary),
+        manifest = {"schema": metadata.MANIFEST_SCHEMA, "binary_sha256": deployment.sha256(binary),
                     "abi_report_sha256": deployment.sha256(report_bytes),
-                    "inputs": {"config": {"version": "0.4.0", "language": "zh-CN", "video": False,
-                                           "board": "rv1126b-test2-rk805b-v10", "ptime_ms": 20},
-                               "source": {"sha256": "a" * 64}}}
+                    "inputs": inputs}
         self.files = {"bin/mybot-rv1126b": binary, "bin/mybot-supervisor": binary,
                       "lib/libagora-rtc-sdk.so": target_elf(), "run.sh": b"#!/bin/sh\n",
                       "abi-report-voice.json": report_bytes,
@@ -162,6 +172,30 @@ class DeploymentTests(unittest.TestCase):
             with self.subTest(filename=filename), self.assertRaises(ValueError):
                 deployment.verify_package(path, checksum)
 
+    def test_new_archive_requires_recomputed_portable_inputs_marker(self):
+        files = dict(self.files)
+        manifest = json.loads(files["build-manifest-voice.json"])
+        manifest["inputs"]["identity"]["dependencies"]["compiler"] = {"sha256": "c" * 64}
+        manifest["inputs"]["dependencies"] = manifest["inputs"]["identity"]["dependencies"]
+        files["build-manifest-voice.json"] = json.dumps(manifest).encode()
+        path, checksum = self.archive(files)
+        with self.assertRaisesRegex(ValueError, "provenance markers"):
+            deployment.verify_package(path, checksum)
+
+    def test_new_archive_rejects_old_manifest_schema_or_inconsistent_identity(self):
+        for legacy_schema in (True, False):
+            with self.subTest(legacy_schema=legacy_schema):
+                files = dict(self.files)
+                manifest = json.loads(files["build-manifest-voice.json"])
+                if legacy_schema:
+                    manifest["schema"] = 1
+                else:
+                    manifest["inputs"]["identity"]["config"]["video"] = True
+                files["build-manifest-voice.json"] = json.dumps(manifest).encode()
+                path, checksum = self.archive(files)
+                with self.assertRaises(ValueError):
+                    deployment.verify_package(path, checksum)
+
     def test_missing_deployment_assets_prevent_installation(self):
         files = dict(self.files)
         del files["assets/service/S99mybot"]
@@ -183,11 +217,14 @@ class DeploymentTests(unittest.TestCase):
     def test_video_only_supervisor_uses_selected_profile_markers(self):
         files = dict(self.files)
         binary = files.pop("bin/mybot-rv1126b").replace(b"video=0", b"video=1")
+        manifest = json.loads(files.pop("build-manifest-voice.json"))
+        manifest["inputs"]["config"]["video"] = True
+        manifest["inputs"]["identity"]["config"]["video"] = True
+        marker = ("MYBOT_RV1126B_INPUTS:" + metadata.inputs_digest(manifest["inputs"]) + "\0").encode()
+        binary = re.sub(rb"MYBOT_RV1126B_INPUTS:[0-9a-f]{64}\0", lambda _match: marker, binary)
         report = json.loads(files.pop("abi-report-voice.json"))
         report["binary"]["sha256"] = deployment.sha256(binary)
         report_bytes = json.dumps(report).encode()
-        manifest = json.loads(files.pop("build-manifest-voice.json"))
-        manifest["inputs"]["config"]["video"] = True
         manifest["binary_sha256"] = deployment.sha256(binary)
         manifest["abi_report_sha256"] = deployment.sha256(report_bytes)
         files.update({"bin/mybot-rv1126b-video": binary, "bin/mybot-supervisor": binary,
