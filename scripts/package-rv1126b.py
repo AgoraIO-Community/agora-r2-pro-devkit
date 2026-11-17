@@ -31,6 +31,7 @@ LICENSES = [
     ("LICENSE", "project-APACHE-2.0.txt"),
     ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
     ("docs/dependencies/licensing.md", "DEPENDENCY_LICENSING.md"),
+    ("docs/dependencies/cjson-LICENSE.txt", "cjson-LICENSE.txt"),
     ("vendor/mybot/LICENSE", "mybot-LICENSE.txt"),
     ("vendor/mybot/THIRD_PARTY_NOTICES.md", "mybot-THIRD_PARTY_NOTICES.md"),
     ("vendor/aosl/LICENSE", "aosl-LICENSE.txt"),

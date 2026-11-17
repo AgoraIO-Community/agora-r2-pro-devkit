@@ -473,3 +473,10 @@ Wi-Fi 运行实现及对应测试已迁移为 C99。公开 `mybot_platform/wifi.
 
 - macOS 打包回归 40/40 通过，随后将越界夹具明确指向一个存在的根外文件，该专项复测通过。覆盖目录内容变化时始终拒绝、同内容文件之间切换链接文本时身份改变、目标内容变化、根链接及循环/缺失/越界输入。
 - 当前 SDK 与 staging 根及内部均无目录链接；staging 的八项文件链接为根内相对 alias。使用现有真实 CMake 配置执行 build_inputs 成功，SDK/staging 分别登记 5 / 528 项；当前未配置 sysroot，不扩大为其他 SDK 的结论。固定格式质量、依赖及差异检查通过；完整目标链接另由最终集成验证执行，未访问设备。
+
+## 运行包许可补充：完整 cJSON MIT 条款
+
+2026-11-17，从 namespaced cJSON 的原始版权注释提取完整 1055 字节 MIT 许可，保留在 `docs/dependencies/cjson-LICENSE.txt` 并登记依赖锁，随包输出 `licenses/cjson-LICENSE.txt`。项目 notice 链接完整条款，并修正原头文件路径；vendor 源码和原有许可未改变。
+
+- macOS 打包回归 41/41 通过，随后加入包内 notice 指向完整条款的断言并专项复测通过。测试从 `.c` 和 `.h` 原始注释独立提取并与副本逐字比较，核对包目录、tar、SHA256SUMS 和 notice 链接，以及前后 vendor 字节一致。
+- 固定格式质量、依赖与差异检查通过。未生成生产目标包或访问设备；依赖锁变化后，最终目标构建须先刷新本地 SDK 配置。

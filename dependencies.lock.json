@@ -1297,7 +1297,8 @@
     "vendor/lvgl/scripts/built_in_font/font_license/FontAwesome5/LICENSE.txt": "de784a808496d49f5f80dd9d1d6e9a51cff712cfbc339e7c25155631ae3cdb5d",
     "vendor/lvgl/scripts/built_in_font/font_license/Montserrat/OFL.txt": "41f82bb4d24b304f30f7136bc47abdd083782e4265c984160f5649d1e78ea49c",
     "vendor/mybot/LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
-    "vendor/mybot/THIRD_PARTY_NOTICES.md": "9da0cf2d4c8c640b1d32dc86e94cdb9f09753c600016ad58aa020b5b5db2ad6d"
+    "vendor/mybot/THIRD_PARTY_NOTICES.md": "9da0cf2d4c8c640b1d32dc86e94cdb9f09753c600016ad58aa020b5b5db2ad6d",
+    "docs/dependencies/cjson-LICENSE.txt": "be4b7891d0aef539ac77a354fdb1ab26bc671ff2e33d74e9ba5680a49770cd3e"
   },
   "required_inputs": {
     "vendor/aosl/CMakeLists.txt": "6e32321b2af3e46161a4da388661231e854b7624f5040c54fa4ae6ad51a1e05c",

@@ -15,6 +15,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -39,6 +40,8 @@ class PackagingTests(unittest.TestCase):
         self.root.mkdir()
         for source, _ in packager.LICENSES:
             self.write(self.root / source, "license fixture\n")
+        self.write(self.root / 'docs/dependencies/cjson-LICENSE.txt',
+                   (ROOT / 'docs/dependencies/cjson-LICENSE.txt').read_text())
         self.write(self.root / "CMakeLists.txt", "project(mybot_rv1126b VERSION 0.2.0 LANGUAGES C CXX)\n")
         self.write(self.root / ".gitignore", "/build*/\n/local/\n/dist/\n")
         self.write(self.root / "packaging/run.sh", 'case "${RV1126B_VIDEO:-0}" in\n0) :;;\n1) :;;\nesac\n')
@@ -341,6 +344,30 @@ class PackagingTests(unittest.TestCase):
                 self.assertTrue((destination / 'licenses' / link).is_file(), link)
         with tarfile.open(archive) as stream:
             self.assertEqual(stream.extractfile(destination.name + '/' + filename).read(), actual.encode())
+
+    def test_cjson_mit_notice_matches_upstream_and_complete_archive(self):
+        sources = ('vendor/mybot/src/support/mybot_json.c', 'vendor/mybot/src/internal/mybot_json.h')
+        expected = (ROOT / 'docs/dependencies/cjson-LICENSE.txt').read_bytes()
+        before = {name: metadata.digest(ROOT / name) for name in sources}
+        for name in sources:
+            comments = re.findall(r'/\*(.*?)\*/', (ROOT / name).read_text(), re.S)
+            comment = next(block for block in comments if 'Copyright (c) 2009 Dave Gamble' in block)
+            self.assertEqual(expected, (textwrap.dedent(comment).strip() + '\n').encode())
+        self.write(self.root / 'THIRD_PARTY_NOTICES.md', (ROOT / 'THIRD_PARTY_NOTICES.md').read_text())
+        for build in (self.voice, self.video):
+            self.refresh_source_marker(build)
+            self.seal(build)
+        destination, archive, _ = packager.package(self.root, self.args)
+        filename = 'licenses/cjson-LICENSE.txt'
+        self.assertEqual((destination / filename).read_bytes(), expected)
+        self.assertIn('](cjson-LICENSE.txt)', (destination / 'licenses/THIRD_PARTY_NOTICES.md').read_text())
+        checksums = dict((name, checksum) for checksum, name in
+                         (line.split('  ', 1) for line in
+                          (destination / 'SHA256SUMS').read_text().splitlines()))
+        self.assertEqual(checksums[filename], metadata.digest(destination / filename))
+        with tarfile.open(archive) as stream:
+            self.assertEqual(stream.extractfile(destination.name + '/' + filename).read(), expected)
+        self.assertEqual(before, {name: metadata.digest(ROOT / name) for name in sources})
 
     def test_example_environment_matches_each_package_and_is_reproducible(self):
         for language, server in (("zh-CN", "https://botstation.shengwang.cn/api"),
