@@ -561,8 +561,16 @@ fi
 printf 'service=%s\\n' "$service_state"
 health=not_ready
 verified=no
+version=
+pid=
+state=unavailable
+release={DEVICE_ROOT}/$current
+expected_version=${{current#releases/mybot-rv1126b-}}
+expected_version=${{expected_version%%-*}}
+wanted={shlex.quote('releases/' + expected_release) if expected_release else '"$current"'}
 status=/run/mybot-rv1126b/application.status
-if [ ! -L /run/mybot-rv1126b ] && [ -d /run/mybot-rv1126b ] &&
+if [ "$expected_version" != 0.1.1 ] &&
+   [ ! -L /run/mybot-rv1126b ] && [ -d /run/mybot-rv1126b ] &&
    [ "$(stat -c '%u:%a' /run/mybot-rv1126b)" = '0:700' ] &&
    [ -f "$status" ] && [ ! -L "$status" ] &&
    [ "$(stat -c '%u:%a:%h' "$status")" = '0:600:1' ] &&
@@ -578,12 +586,7 @@ if [ ! -L /run/mybot-rv1126b ] && [ -d /run/mybot-rv1126b ] &&
     version=$(printf '%s\\n' "$information" | awk -F= '$1 == "version" {{print $2}}')
     pid=$(printf '%s\\n' "$information" | awk -F= '$1 == "pid" {{print $2}}')
     state=$(printf '%s\\n' "$information" | awk -F= '$1 == "state" {{print $2}}')
-    printf 'application_version=%s\\napplication_pid=%s\\napplication_state=%s\\n' "$version" "$pid" "$state"
-    release={DEVICE_ROOT}/$current
-    expected_version=${{current#releases/mybot-rv1126b-}}
-    expected_version=${{expected_version%%-*}}
     executable=$(readlink /proc/"$pid"/exe 2>/dev/null || true)
-    wanted={shlex.quote('releases/' + expected_release) if expected_release else '"$current"'}
     if [ -n "$current" ] && [ "$current" = "$wanted" ] && [ "$version" = "$expected_version" ] &&
        [ -d "$release" ] && [ ! -L "$release" ] && kill -0 "$pid" 2>/dev/null &&
        {{ {executable_check}; }}; then
@@ -596,10 +599,41 @@ if [ ! -L /run/mybot-rv1126b ] && [ -d /run/mybot-rv1126b ] &&
             esac
         fi
     fi
-else
-    printf 'application_state=unavailable\\n'
 fi
-printf 'application_verified=%s\\napplication_health=%s\\n' "$verified" "$health"
+# The accepted 0.1.1 application predates application.status. Its local
+# lifetime can be confirmed, but its business state cannot be reported.
+if [ "$expected_version" = 0.1.1 ] && [ "$service_state" = running ] &&
+   [ "$current" = "$wanted" ] && [ -d "$release" ] && [ ! -L "$release" ]; then
+    for process in /proc/[0-9]*/exe; do
+        executable=$(readlink "$process" 2>/dev/null || true)
+        {{ {executable_check}; }} || continue
+        candidate=${{process%/exe}}
+        candidate=${{candidate##*/}}
+        kill -0 "$candidate" 2>/dev/null || continue
+        parent=$(awk '$1 == "PPid:" && $2 ~ /^[0-9]+$/ && length($2) <= 10 && $2 + 0 > 1 {{print $2}}' \\
+            /proc/"$candidate"/status 2>/dev/null) || continue
+        [ -n "$parent" ] && kill -0 "$parent" 2>/dev/null || continue
+        [ "$(readlink /proc/"$parent"/exe 2>/dev/null)" = /etc/mybot-rv1126b/mybot-supervisor ] || continue
+        tr '\\000' '\\n' < /proc/"$parent"/cmdline 2>/dev/null | awk '
+            NR == 1 {{ if ($0 != "/etc/mybot-rv1126b/mybot-supervisor") invalid=1 }}
+            NR == 2 {{ if ($0 == "supervise") supervise=1; else invalid=1 }}
+            $0 == "--" {{ separator=1; exit }}
+            pending {{ if ($0 == "/run/mybot-rv1126b-service") runtime++; else invalid=1; pending=0; next }}
+            $0 == "--runtime" {{ pending=1 }}
+            END {{ exit !supervise || runtime != 1 || pending || !separator || invalid }}
+        ' || continue
+        version=0.1.1
+        pid=$candidate
+        state=unsupported
+        verified=yes
+        health=legacy_running
+        break
+    done
+fi
+if [ -n "$version" ] && [ -n "$pid" ]; then
+    printf 'application_version=%s\\napplication_pid=%s\\n' "$version" "$pid"
+fi
+printf 'application_state=%s\\napplication_verified=%s\\napplication_health=%s\\n' "$state" "$verified" "$health"
 """
 
 
@@ -610,8 +644,11 @@ def wait_for_application(adb, release, video, timeout=30):
         remaining = max(0.1, deadline - time.monotonic())
         output = adb.shell(status_script(release, video), timeout=min(5, remaining))
         status = dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
+        legacy = (NAME.fullmatch(release)[1] == "0.1.1" and
+                  status.get("application_health") == "legacy_running" and
+                  status.get("application_state") == "unsupported")
         if (status.get("service") == "running" and status.get("application_verified") == "yes" and
-                status.get("application_health") in ("ready", "degraded", "started")):
+                (status.get("application_health") in ("ready", "degraded", "started") or legacy)):
             return output
         if time.monotonic() >= deadline:
             raise RuntimeError("Selected application did not reach a verified local startup state; "

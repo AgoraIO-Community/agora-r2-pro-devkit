@@ -609,7 +609,8 @@ class DeploymentTests(unittest.TestCase):
         receipt.assert_not_called()
 
     def status_fixture(self, *, state='ready', service='running', version='0.4.0',
-                       alive=True, wrong_executable=False, mode=0o600, expected=None, video=None):
+                       alive=True, wrong_executable=False, mode=0o600, expected=None, video=None,
+                       status_present=True, legacy_parent=None):
         root = self.base / 'installation'
         release = root / 'releases' / self.name
         (release / 'bin').mkdir(parents=True)
@@ -627,20 +628,33 @@ class DeploymentTests(unittest.TestCase):
         service_script = self.base / 'service'
         service_script.write_text('#!/bin/sh\nprintf "%s\\n" ' + shlex.quote(service) + '\n')
         service_script.chmod(0o755)
+        supervisor = self.base / 'mybot-supervisor'
+        if legacy_parent is not None:
+            supervisor.write_text('fixture supervisor\n')
+            (proc / 'status').write_text('Name:\tmybot\nPPid:\t456\n')
+            parent = self.base / 'proc/456'
+            parent.mkdir()
+            (parent / 'exe').symlink_to(supervisor if legacy_parent != 'wrong-exe' else service_script)
+            service_runtime = str(runtime) + '-service' + ('-other' if legacy_parent == 'wrong-runtime' else '')
+            (parent / 'cmdline').write_bytes(b'\0'.join(value.encode() for value in
+                (str(supervisor), 'supervise', '--runtime', service_runtime, '--', str(executable))) + b'\0')
+        if not status_present:
+            status.unlink()
         with patch.object(deployment, 'DEVICE_ROOT', str(root)), \
                 patch.object(deployment, 'SERVICE', str(service_script)):
             script = deployment.status_script(expected, video)
         script = script.replace('/run/mybot-rv1126b', str(runtime)).replace('/proc/', str(self.base / 'proc') + '/')
+        script = script.replace('/etc/mybot-rv1126b/mybot-supervisor', str(supervisor))
         metadata = shlex.quote(sys.executable) + ' -c ' + shlex.quote(
             "import os,sys; p=os.stat(sys.argv[-1]); "
             "print(sys.argv[-2].replace('%u','0').replace('%a','%o' % (p.st_mode & 0o777))"
             ".replace('%h',str(p.st_nlink)).replace('%s',str(p.st_size)))")
         prefix = ('set -eu\nid() { printf "0\\n"; }\nstat() { ' + metadata + ' "$@"; }\n'
                   'kill() { return ' + ('0' if alive else '1') + '; }\n')
-        before = status.read_bytes()
+        before = status.read_bytes() if status.exists() else None
         result = subprocess.run(['sh', '-s'], input=prefix + script, text=True, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(status.read_bytes(), before)
+        self.assertEqual(status.read_bytes() if status.exists() else None, before)
         return dict(line.split('=', 1) for line in result.stdout.splitlines())
 
     def test_status_preserves_supervisor_state_and_distinguishes_degraded_application(self):
@@ -663,6 +677,40 @@ class DeploymentTests(unittest.TestCase):
                     patch.object(self, 'base', Path(temporary)):
                 result = self.status_fixture(**options)
                 self.assertEqual(result['application_health'], 'not_ready')
+
+    def test_accepted_legacy_target_without_status_verifies_supervisor_parent(self):
+        with patch.object(self, 'name', 'mybot-rv1126b-0.1.1-aarch64'):
+            result = self.status_fixture(status_present=False, legacy_parent='service',
+                                         expected=self.name, video=False)
+        self.assertEqual(result['application_version'], '0.1.1')
+        self.assertEqual(result['application_state'], 'unsupported')
+        self.assertEqual(result['application_verified'], 'yes')
+        self.assertEqual(result['application_health'], 'legacy_running')
+        adb = Mock()
+        adb.shell.return_value = ''.join(key + '=' + value + '\n' for key, value in result.items())
+        deployment.wait_for_application(adb, 'mybot-rv1126b-0.1.1-aarch64', False, timeout=0)
+        with self.assertRaises(RuntimeError):
+            deployment.wait_for_application(adb, self.name, False, timeout=0)
+
+    def test_legacy_health_rejects_unrelated_parent_runtime_and_missing_process(self):
+        for options in ({'legacy_parent': None}, {'legacy_parent': 'wrong-exe'},
+                        {'legacy_parent': 'wrong-runtime'}, {'legacy_parent': 'service', 'alive': False},
+                        {'legacy_parent': 'service', 'video': True},
+                        {'legacy_parent': 'service', 'service': 'backoff'}):
+            with self.subTest(options=options), tempfile.TemporaryDirectory(dir=self.base) as temporary, \
+                    patch.object(self, 'base', Path(temporary)), \
+                    patch.object(self, 'name', 'mybot-rv1126b-0.1.1-aarch64'):
+                result = self.status_fixture(status_present=False, **options)
+                self.assertEqual(result['application_health'], 'not_ready')
+
+    def test_legacy_state_is_never_ready_and_modern_target_still_requires_status(self):
+        with patch.object(self, 'name', 'mybot-rv1126b-0.1.1-aarch64'):
+            result = self.status_fixture(version='0.1.1', state='ready', legacy_parent='service')
+            self.assertEqual(result['application_state'], 'unsupported')
+            self.assertEqual(result['application_health'], 'legacy_running')
+        with tempfile.TemporaryDirectory(dir=self.base) as temporary, patch.object(self, 'base', Path(temporary)):
+            result = self.status_fixture(status_present=False, legacy_parent='service')
+            self.assertEqual(result['application_health'], 'not_ready')
 
     def test_start_health_accepts_verified_offline_state_after_backoff(self):
         adb = Mock()

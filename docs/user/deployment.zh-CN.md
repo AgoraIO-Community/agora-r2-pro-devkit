@@ -76,6 +76,8 @@ python3 scripts/deploy-rv1126b.py deploy --serial SERIAL \
 
 `--start` 最多等待 30 秒核对应用版本、PID 存活、实际可执行路径和装配后的状态，单次 ADB 健康查询最多 5 秒。`ready` 表示可对话，`started` 表示已进入 SDK 启动流程，`degraded` 表示本地应用已启动但仍处于配网、等待网络/时钟、绑定、离线或 `wifi_error` 等状态；后者会如实显示，不强制等待云端 ready。健康检查失败保留部署锁供检查，不会打印成功回执或自动回退。
 
+显式兼容的 0.1.1 早于应用状态接口。仅对此版本，检查所选旧二进制的真实 PID、直接父进程监督器的执行路径，以及该监督器的服务 runtime 参数，报告 `application_health=legacy_running`、`application_state=unsupported`；这只确认受监督的本地进程，不能证明业务 ready。现代版本缺失应用状态文件时仍拒绝启动确认。
+
 写入顺序为：只读平台/能力/身份检查 → 设备内完整备份 → 上传及再次校验 → 解包为独立 release → 用选定 profile 执行无硬件访问的 `--version` 加载检查 → 再核对身份 → 停止旧服务 → 安装稳定服务配置 → 原子切换链接。停止命令失败、旧进程仍占用或校验失败时不继续。保留 ALSA 配置文件，不禁用 chronyd、ADB 或电源服务。每次服务启动前，`audio-prepare.sh` 通过 `amixer cset` 设置并读回核对 `ACodec_LP Digital Gain Volume=0`、`ACodec_LP PGA Gain Volume=23` 两项采集控制；这会修改声卡的运行时 mixer 状态，不修改播放控制或写入 ALSA 配置文件。
 
 原 `botstation-device` 配置改为 `BOTSTATION_ENABLED=0`，其 `S99botstation-device` 移入 `/etc/mybot-rv1126b/disabled/`，避免开机重复占用。系统 dnsmasq 配置限制为 `interface=usb0`、`bind-dynamic`，保留现有 USB 监听地址与 DHCP 范围，USB 接口尚无 IPv4 时也不会抢占 AP 地址。dhcpcd 增加 `denyinterfaces mbap*`，防止其接管临时 AP；网络租约 hook 安装到 `/lib/dhcpcd/dhcpcd-hooks/99-mybot-lease`（0644），运行记录目录 `/run/mybot-network/leases` 为 0700。操作者在确认连接条件后分别受控重载：
