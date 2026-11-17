@@ -126,3 +126,11 @@ add_test(NAME ui-baseline COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/integration/check_ui_preview.py"
     --binary "$<TARGET_FILE:mybot-ui-preview>" --language "${RV1126B_LANGUAGE}")
 set_tests_properties(ui-baseline PROPERTIES TIMEOUT 30)
+
+# Include the real worker in the fixture to inject pthread creation failures.
+add_executable(test-video-lifecycle unit/test_video_lifecycle.c)
+target_include_directories(test-video-lifecycle PRIVATE "${platform_root}/src/drivers/video")
+target_link_libraries(test-video-lifecycle PRIVATE Threads::Threads)
+target_compile_options(test-video-lifecycle PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME video-lifecycle COMMAND test-video-lifecycle)
+set_tests_properties(video-lifecycle PROPERTIES TIMEOUT 30)

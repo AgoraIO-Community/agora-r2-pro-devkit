@@ -1376,7 +1376,7 @@
     "platforms/rv1126b/rv1126b_video.c": {
       "path": "src/platform/src/drivers/video/v4l2_mpp_video.c",
       "original_sha256": "27edf354930c530e1c19ee208753d3c990567b2214b6796e6ed6345b50089a3e",
-      "result_sha256": "16f2f685568018a7e02d89179a38137022543d3f22865bf8cd2e5070a00b29da",
+      "result_sha256": "7b246f36c321178283fe07f5a1b4d52bad36a9d7aaa9d48dabf9da4569b09017",
       "reason": "RV1126B Linux driver/service adaptation; move into its component, use internal headers and centralized board defaults. Group maintained Linux board drivers and services under src/platform while preserving public include namespaces.",
       "previous_paths": [
         "components/mybot_platform/src/drivers/video/v4l2_mpp_video.c"

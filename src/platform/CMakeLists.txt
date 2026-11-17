@@ -53,7 +53,8 @@ target_link_libraries(mybot_platform PUBLIC mybot::sdk mybot_linux_display
 if(MYBOT_ENABLE_VIDEO)
     find_path(RV1126B_MPP_INCLUDE rk_mpi.h PATH_SUFFIXES rockchip REQUIRED)
     find_library(RV1126B_MPP_LIBRARY rockchip_mpp REQUIRED)
-    target_sources(mybot_platform PRIVATE src/drivers/video/v4l2_mpp_video.c)
+    target_sources(mybot_platform PRIVATE src/drivers/video/v4l2_mpp_video.c
+        src/drivers/video/video_lifecycle.c)
     target_include_directories(mybot_platform PRIVATE "${RV1126B_MPP_INCLUDE}")
     target_link_libraries(mybot_platform PRIVATE "${RV1126B_MPP_LIBRARY}")
 endif()

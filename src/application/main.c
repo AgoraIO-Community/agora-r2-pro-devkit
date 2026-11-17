@@ -15,6 +15,9 @@
 #include "mybot_platform/volume.h"
 #include "mybot_platform/prompt.h"
 #include "mybot_platform/time_sync.h"
+#if MYBOT_ENABLE_VIDEO
+#include "mybot_platform/video.h"
+#endif
 #include "mybot_ui/expression.h"
 
 #include <errno.h>
@@ -437,6 +440,13 @@ int main(int argc, char **argv) {
                 publish_status(sdk_status(state));
                 previous = state;
             }
+#if MYBOT_ENABLE_VIDEO
+            if (rv1126b_video_failed()) {
+                fprintf(stderr, "Video recovery exhausted; stopping the SDK before restart\n");
+                failed = 1;
+                goto cleanup;
+            }
+#endif
             if (state == MYBOT_STATE_FAILED || (platform.enable_ui && rv1126b_ui_failed())) {
                 failed = 1;
                 goto cleanup;
