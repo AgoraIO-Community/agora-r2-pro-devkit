@@ -43,7 +43,7 @@ UI 为 640×480，默认旋转 270°到物理 480×640 屏；调整方向可加 
 
 ## AP 配网前提
 
-目标系统需提供 `iw`、`hostapd`、`dnsmasq`、`wpa_supplicant`、`udhcpc`、`ip` 和支持 nl80211 AP 的无线驱动。包内只包含 `assets/wifi/udhcpc.script`，不包含上述系统工具。需有创建接口、配置 IP、启动 DHCP 与绑定 80/53 端口的权限。优先 AP+STA；单接口回退不能抢占外部网络管理服务，无法安全接管时报告错误。热点的 `xxxx` 取自 STA MAC 的前两个字节，小写十六进制。
+目标系统需提供 `iw`、`hostapd`、`dnsmasq`、`wpa_supplicant`、`udhcpc`、`ip` 和支持 nl80211 AP 的无线驱动。包内只包含 `assets/wifi/udhcpc.script`，不包含上述系统工具。需有创建接口、配置 IP、启动 DHCP 与绑定 80/53 端口的权限。优先 AP+STA；单接口回退不能抢占外部网络管理服务，无法安全接管时报告错误。热点的 `xxxx` 由所选 STA 完整永久 MAC 的 SHA-256 摘要派生，为四位小写十六进制；同一地址保持稳定，短后缀可能重复。无法确认永久 MAC 时明确报错。
 
 右上角设置中的“设备配网”是手动配网的唯一入口；`--wifi-interface wlan0` 选择无线接口，`--no-wifi-provisioning` 仅监测已有网络并禁用自动和手动配网。SSID/密码不写入 URL/日志；加密网络最多保存 10 项派生 PSK 于私有的 `/userdata/mybot-rv1126b/wifi/wifi.credentials`，不要公开该目录。手机未弹出页面时手动访问 HTTP 地址；单接口连接尝试期间热点可能短暂断开，失败后重新连接热点重试。
 

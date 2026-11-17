@@ -22,6 +22,56 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+static void hotspot_names(void) {
+    static const struct {
+        const char *mac;
+        const char *ssid;
+    } vectors[] = {{"AA:BB:CC:00:00:01", "mybot-5639"},
+                   {"AA:BB:CC:00:00:02", "mybot-f36c"},
+                   {"02:11:22:33:44:55", "mybot-fc1d"},
+                   {"00:11:22:33:44:55", "mybot-bc46"},
+                   {"02:AA:BB:CC:DD:EE", "mybot-65e0"}};
+    char output[WIFI_SSID_CAPACITY];
+    for (size_t i = 0; i < sizeof(vectors) / sizeof(vectors[0]); ++i) {
+        CHECK(wifi_hotspot_ssid_from_mac(vectors[i].mac, output, sizeof(output)));
+        CHECK(!strcmp(output, vectors[i].ssid) && strlen(output) == 10);
+        CHECK(strspn(output + 6, "0123456789abcdef") == 4);
+    }
+    CHECK(wifi_hotspot_ssid_from_mac("aa:bb:cc:00:00:01", output, sizeof(output)));
+    CHECK(!strcmp(output, vectors[0].ssid));
+    CHECK(wifi_hotspot_ssid_from_mac("aA:bB:cC:00:00:01\n", output, sizeof(output)));
+    CHECK(!strcmp(output, vectors[0].ssid));
+    CHECK(wifi_hotspot_ssid_from_mac("AA:BB:CC:00:00:01\r\n", output, sizeof(output)));
+    CHECK(!strcmp(output, vectors[0].ssid));
+    const char *invalid[] = {NULL,
+                             "",
+                             "00:00:00:00:00:00",
+                             "FF:FF:FF:FF:FF:FF",
+                             "01:11:22:33:44:55",
+                             "AA:BB",
+                             "A:BB:CC:00:00:01",
+                             "AAA:BB:CC:00:00:01",
+                             "AA:BB:CC:00:00:0G",
+                             "AA-BB-CC-00-00-01",
+                             "AA:BB:CC:00:00:01:02",
+                             " AA:BB:CC:00:00:01",
+                             "AA:BB:CC:00:00:01 ",
+                             "AA:BB:CC:00:00:01\n\n",
+                             "AA:BB:CC:00:00:01\r",
+                             "AA:BB:CC:00:00:01\nx"};
+    for (size_t i = 0; i < sizeof(invalid) / sizeof(invalid[0]); ++i) {
+        strcpy(output, "old-value");
+        CHECK(!wifi_hotspot_ssid_from_mac(invalid[i], output, sizeof(output)) && !*output);
+    }
+    char exact[sizeof("mybot-ffff")];
+    CHECK(wifi_hotspot_ssid_from_mac(vectors[0].mac, exact, sizeof(exact)));
+    CHECK(!strcmp(exact, vectors[0].ssid));
+    CHECK(!wifi_hotspot_ssid_from_mac(vectors[0].mac, output, 10) && !*output);
+    output[0] = 'x';
+    CHECK(!wifi_hotspot_ssid_from_mac(vectors[0].mac, output, 0) && output[0] == 'x');
+    CHECK(!wifi_hotspot_ssid_from_mac(vectors[0].mac, NULL, sizeof(output)));
+}
+
 static void credentials(void) {
     wifi_credential_t credential;
     char error[WIFI_ERROR_CAPACITY] = "";
@@ -439,6 +489,7 @@ int main(int argc, char **argv) {
     }
     char self[PATH_MAX];
     CHECK(realpath(argv[0], self));
+    hotspot_names();
     credentials();
     parsing();
     same_network_lease();

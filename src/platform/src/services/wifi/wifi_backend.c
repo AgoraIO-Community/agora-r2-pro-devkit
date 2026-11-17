@@ -288,16 +288,22 @@ static bool initialize(void *context, char *error) {
         wifi_error(error, "No nl80211 Wi-Fi interface; configure the Wi-Fi interface explicitly");
         return false;
     }
-    snprintf(path, sizeof(path), "/sys/class/net/%s/address", backend->interface_name);
+    snprintf(path, sizeof(path), "/sys/class/net/%s/addr_assign_type", backend->interface_name);
     wifi_buffer_t mac;
     wifi_buffer_init(&mac, 256);
-    bool valid_mac = wifi_read_text(path, &mac) && mac.length >= 5 && mac.data[2] == ':' &&
-                     isxdigit((unsigned char)mac.data[0]) && isxdigit((unsigned char)mac.data[1]) &&
-                     isxdigit((unsigned char)mac.data[3]) && isxdigit((unsigned char)mac.data[4]);
-    if (valid_mac)
-        snprintf(backend->ssid, sizeof(backend->ssid), "mybot-%c%c%c%c",
-                 tolower((unsigned char)mac.data[0]), tolower((unsigned char)mac.data[1]),
-                 tolower((unsigned char)mac.data[3]), tolower((unsigned char)mac.data[4]));
+    const bool permanent_mac = wifi_read_text(path, &mac) &&
+                               (mac.length == 1 || (mac.length == 2 && mac.data[1] == '\n')) &&
+                               mac.data[0] == '0';
+    wifi_buffer_free(&mac);
+    if (!permanent_mac) {
+        wifi_error(error, "Wi-Fi interface does not report a permanent MAC address");
+        return false;
+    }
+    snprintf(path, sizeof(path), "/sys/class/net/%s/address", backend->interface_name);
+    wifi_buffer_init(&mac, 256);
+    const bool valid_mac =
+        wifi_read_text(path, &mac) &&
+        wifi_hotspot_ssid_from_mac(mac.data, backend->ssid, sizeof(backend->ssid));
     wifi_buffer_free(&mac);
     if (!valid_mac) {
         wifi_error(error, "Cannot read Wi-Fi MAC address");

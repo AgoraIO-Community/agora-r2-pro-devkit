@@ -28,6 +28,10 @@ typedef struct {
 
 bool wifi_valid_interface(const char *name);
 
+/* The caller proves the MAC is permanent; malformed/non-unicast addresses fail.
+ * Writes a stable ten-character display name, not a globally unique identity. */
+bool wifi_hotspot_ssid_from_mac(const char *mac, char *output, size_t capacity);
+
 bool wifi_valid_ssid(const char *ssid);
 
 bool wifi_hex_psk(const char *psk);
