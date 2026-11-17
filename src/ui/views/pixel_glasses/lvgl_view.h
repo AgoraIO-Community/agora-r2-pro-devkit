@@ -9,13 +9,16 @@
 extern "C" {
 #endif
 
-/* Shared LVGL view. The display owner serializes all calls with its LVGL lock.
- * The display and its active screen must outlive the view. Its single LVGL timer
- * is owned by the view and removed before any widgets on destroy. Update borrows
- * content only for the duration of the call; no FreeRTOS tasks are created here. */
+/* One UI worker serializes every call; the view creates no threads. The
+ * display and its active screen outlive the view. Create returns 0/-1 and owns
+ * one LVGL timer, removed before widgets on destroy. Update borrows content for
+ * this call and copies retained text. Destroy is safe after partial creation. */
 int mybot_lvgl_view_create(lv_display_t *display);
+
 int mybot_lvgl_view_create_sized(lv_display_t *display, int width, int height);
+
 void mybot_lvgl_view_update(const mybot_lcd_content_t *content);
+
 void mybot_lvgl_view_destroy(void);
 
 #ifdef __cplusplus

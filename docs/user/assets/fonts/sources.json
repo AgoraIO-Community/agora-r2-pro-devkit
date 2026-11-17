@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "fonts": {
+    "MyBotManualSans.ttf": {
+      "source": {
+        "url": "https://cdn.jsdelivr.net/gh/lvgl/lvgl@85aa60d18b3d5e5588d7b247abf90198f07c8a63/scripts/built_in_font/SourceHanSansSC-Normal.otf",
+        "sha256": "1ee89e1669362dee13851129c0a8a791a87521eb4148e5efbf5d26596738e25b"
+      },
+      "derivation": "scripts/generate-manual-font.py; fonttools 4.60.1; CFF to TrueType outlines, 1-unit tolerance; subset of maintained manual text; renamed; fixed timestamps",
+      "license": "MyBotManualSans-OFL.txt",
+      "sha256": "9ee31724fc2b0880370134568f61d0330a6c45f82465c7e2239e74a7b0f7cb61"
+    },
+    "DejaVuSansMono-Bold.ttf": {
+      "source": {
+        "url": "https://cdn.jsdelivr.net/gh/matplotlib/matplotlib@v3.8.2/lib/matplotlib/mpl-data/fonts/ttf/DejaVuSansMono-Bold.ttf",
+        "sha256": "baada9a5172fe20886251aff0433fc38461912d5daf07287e7bee56620a8da96"
+      },
+      "derivation": "Unmodified source font",
+      "license": "DejaVuSansMono-LICENSE.txt",
+      "sha256": "baada9a5172fe20886251aff0433fc38461912d5daf07287e7bee56620a8da96"
+    }
+  }
+}

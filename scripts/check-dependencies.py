@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
-"""Verify committed dependency snapshots, import provenance, patches, and generated fonts offline."""
+"""Verify current dependency snapshots, archived provenance, patches and fonts offline."""
 
 import argparse
 import hashlib
@@ -15,7 +15,8 @@ def sha256(path):
 
 
 def local_path(root, value):
-    if not isinstance(value, str) or '\\' in value:
+    if (not isinstance(value, str) or '\\' in value or
+            any(character in value for character in ('\0', '\r', '\n'))):
         raise ValueError('lock paths must be repository-relative without traversal')
     relative = PurePosixPath(value)
     if relative.is_absolute() or '..' in relative.parts or str(relative) in ('', '.') or str(relative) != value:
@@ -31,18 +32,6 @@ def local_path(root, value):
     return path
 
 
-def protected_omission(name, previous, lock):
-    """Notices and explicitly pinned build inputs cannot be pruned."""
-    required = lock.get('required_inputs', {})
-    for value in (name, previous):
-        leaf = PurePosixPath(value).name.lower()
-        if (any(word in leaf for word in ('license', 'licence', 'copyright', 'notice'))
-                or leaf == 'copying' or leaf.startswith('copying.')
-                or value in required):
-            return True
-    return False
-
-
 def inventory(root, directory):
     folder = local_path(root, directory)
     if not folder.is_dir():
@@ -53,6 +42,8 @@ def inventory(root, directory):
         local_path(root, name)
         if path.is_file():
             files.add(name)
+        elif not path.is_dir():
+            raise ValueError('dependency input must be a regular file or directory: ' + name)
     return files
 
 
@@ -68,34 +59,6 @@ def archive_inventory(root, entry):
             raise ValueError('invalid complete archive SHA256: ' + name)
         result[path.relative_to(root).as_posix()] = digest
     return result
-
-
-def verify_migrations(root, lock, errors):
-    """Keep reviewed layout history explicit and reject restored obsolete roots."""
-    migrations = {}
-    for entry in lock.get('path_migrations', []):
-        source, destination = entry['from'], entry['to']
-        previous = local_path(root, source)
-        local_path(root, destination)
-        if source in migrations:
-            raise ValueError('duplicate layout migration source: ' + source)
-        if (source == destination or source.startswith(destination + '/')
-                or destination.startswith(source + '/')):
-            raise ValueError('layout migration prefixes overlap: ' + source)
-        if not entry.get('reason', '').strip():
-            raise ValueError('layout migration has no explanation: ' + source)
-        if previous.exists():
-            errors.append('obsolete layout root remains: ' + source)
-        migrations[source] = destination
-    for source, destination in migrations.items():
-        seen = {source}
-        while destination in migrations:
-            if destination in seen:
-                raise ValueError('layout migrations form a cycle')
-            seen.add(destination)
-            destination = migrations[destination]
-        if not local_path(root, destination).is_dir():
-            errors.append('layout migration destination is missing: ' + destination)
 
 
 def verify_rtsa(root, entry, checked_hash, errors):
@@ -139,12 +102,15 @@ def verify_rtsa(root, entry, checked_hash, errors):
 
 
 def verify_groups(root, lock, checked_hash, errors):
-    """Require disjoint snapshot ownership, also for project-maintained assets."""
-    groups = [('snapshot', entry) for entry in lock['snapshots']]
-    groups += [('managed asset', entry) for entry in lock.get('managed_assets', [])]
+    """Require complete, disjoint ownership of current vendor snapshots."""
     directories, owners, names = [], {}, set()
-    for kind, entry in groups:
+    for entry in lock['snapshots']:
         directory = local_path(root, entry['directory'])
+        if not all(isinstance(entry.get(field), str) and entry[field].strip()
+                   for field in ('name', 'source', 'revision')):
+            raise ValueError('snapshot requires name, source and revision')
+        if not isinstance(entry.get('files'), dict) or not entry['files']:
+            raise ValueError('dependency inventory must not be empty: ' + entry['directory'])
         if entry.get('name'):
             if entry['name'] in names:
                 raise ValueError('duplicate dependency group name: ' + entry['name'])
@@ -160,7 +126,7 @@ def verify_groups(root, lock, checked_hash, errors):
         for name in sorted(actual - expected):
             errors.append('unlocked dependency file: ' + name)
         for name in sorted(expected - actual):
-            errors.append('missing ' + kind + ' file: ' + name)
+            errors.append('missing snapshot file: ' + name)
         for name, digest in entry['files'].items():
             if not local_path(root, name).is_relative_to(directory):
                 raise ValueError('snapshot file is outside its declared directory')
@@ -168,7 +134,7 @@ def verify_groups(root, lock, checked_hash, errors):
                 raise ValueError('dependency file has multiple owners: ' + name)
             owners[name] = entry['directory']
             checked_hash(name, digest)
-        if kind == 'snapshot' and entry.get('name') == 'rtsa':
+        if entry['name'] == 'rtsa':
             if 'archive_files' not in entry:
                 raise ValueError('RTSA requires a complete archive inventory')
             verify_rtsa(root, entry, checked_hash, errors)
@@ -187,12 +153,24 @@ def verify_groups(root, lock, checked_hash, errors):
                 errors.append('unregistered vendor entry: ' + path.relative_to(root).as_posix())
 
 
+def valid_sha256(value):
+    return (isinstance(value, str) and len(value) == 64 and
+            all(character in '0123456789abcdef' for character in value))
+
+
 def verify(root, lock):
+    """Check current content, with historical records verified only as archives."""
     errors = []
-    if lock.get('schema_version') != 1:
-        raise ValueError('unsupported dependency lock schema')
+    if lock.get('schema_version') != 2:
+        raise ValueError('unsupported dependency lock schema; expected 2')
+    obsolete = {'original_import', 'import_adaptations', 'import_omissions', 'path_migrations',
+                'managed_assets'}
+    if obsolete & lock.keys():
+        raise ValueError('schema 2 stores historical mappings only in the immutable history archive')
 
     def checked_hash(name, expected):
+        if not valid_sha256(expected):
+            raise ValueError('invalid dependency SHA256: ' + name)
         try:
             actual = sha256(local_path(root, name))
             if actual != expected:
@@ -200,70 +178,49 @@ def verify(root, lock):
         except OSError:
             errors.append('missing dependency input: ' + name)
 
-    history = lock['original_import']
-    checked_hash(history['manifest'], history['sha256'])
-    original = json.loads(local_path(root, history['manifest']).read_text())
-    original_files = original['imported_files']
-    revisions = {name: value for name, value in original.items() if name not in ('imported_files', 'local_patches')}
-    if history.get('revisions', {}) != revisions:
-        errors.append('historical import revisions differ from the original manifest')
-    verify_migrations(root, lock, errors)
+    history = lock['history']
+    if not {'dependency_lock_v1', 'original_import'} <= history.keys():
+        raise ValueError('both historical lock and original import references are required')
+    for record in history.values():
+        checked_hash(record['path'], record['sha256'])
+    archived = json.loads(local_path(root, history['dependency_lock_v1']['path']).read_text())
+    imported = history['original_import']
+    if (archived.get('schema_version') != 1 or
+            archived.get('original_import', {}).get('manifest') != imported['path'] or
+            archived.get('original_import', {}).get('sha256') != imported['sha256']):
+        errors.append('historical lock and original import reference differ')
     verify_groups(root, lock, checked_hash, errors)
-    adaptations = lock['import_adaptations']
-    omissions = lock.get('import_omissions', {})
-    if set(adaptations) & set(omissions):
-        raise ValueError('historical input cannot be both mapped and omitted')
-    destinations = {}
-    for name, entry in adaptations.items():
-        if name not in original_files or entry['original_sha256'] != original_files[name]:
-            errors.append('adaptation original hash is not the historical import: ' + name)
-        if not entry.get('reason'):
-            errors.append('adaptation has no explanation: ' + name)
-        destination = entry['path']
-        if destination in destinations:
-            raise ValueError('historical inputs share a mapped destination: ' + destination)
-        destinations[destination] = name
-        for previous in {name, *entry.get('previous_paths', [])} - {destination}:
-            if local_path(root, previous).exists():
-                errors.append('obsolete mapped input remains: ' + previous)
-        checked_hash(entry['path'], entry['result_sha256'])
-    for name, entry in omissions.items():
-        if name not in original_files or entry['original_sha256'] != original_files[name]:
-            errors.append('omission original hash is not the historical import: ' + name)
-        if not entry.get('reason', '').strip():
-            errors.append('omission has no explanation: ' + name)
-        previous = entry['previous_path']
-        if protected_omission(name, previous, lock):
-            errors.append('protected dependency input cannot be omitted: ' + name)
-        for old in {name, previous, *entry.get('previous_paths', [])}:
-            if local_path(root, old).exists():
-                errors.append('omitted dependency input remains: ' + old)
-    for name, digest in original_files.items():
-        if name not in adaptations and name not in omissions:
-            if name in destinations:
-                raise ValueError('historical inputs share a mapped destination: ' + name)
-            checked_hash(name, digest)
+    snapshot_files = {name: value for entry in lock['snapshots']
+                      for name, value in entry['files'].items()}
     for patch in lock['local_patches']:
         checked_hash(patch['path'], patch['sha256'])
-        source = patch['original_path']
-        if patch['original_sha256'] != original_files.get(source):
-            errors.append('patch original hash is not the historical import: ' + source)
-        checked_hash(patch['result_path'], patch['result_sha256'])
-        adaptation = adaptations.get(source, {})
-        if adaptation.get('result_sha256') != patch['result_sha256']:
-            errors.append('patch result is not the recorded adaptation: ' + source)
+        local_path(root, patch['original_path'])
+        if not valid_sha256(patch['original_sha256']):
+            raise ValueError('invalid patch original SHA256: ' + patch['path'])
+        result = patch['result_path']
+        checked_hash(result, patch['result_sha256'])
+        if snapshot_files.get(result) != patch['result_sha256']:
+            errors.append('patch result differs from the current snapshot: ' + result)
     generated = lock['generated_fonts']
     checked_hash(generated['manifest'], generated['manifest_sha256'])
     checked_hash(generated['generator'], generated['generator_sha256'])
     sources = json.loads(local_path(root, generated['manifest']).read_text())
     if sources['fonts'] != generated['inputs']:
         errors.append('font source identities differ from the lock')
+    if sources['generator'] != generated['generator']:
+        errors.append('font generator path differs from the lock')
+    for field in ('pillow_version', 'freetype_version'):
+        if sources.get(field) != generated.get(field):
+            errors.append('font tool version differs from the lock: ' + field)
     for name, digest in generated['outputs'].items():
         checked_hash(name, digest)
-    for name, digest in lock.get('retained_licenses', {}).items():
-        checked_hash(name, digest)
-    for name, digest in lock.get('required_inputs', {}).items():
-        checked_hash(name, digest)
+    for field in ('retained_licenses', 'required_inputs'):
+        for name, digest in lock.get(field, {}).items():
+            checked_hash(name, digest)
+    for name, digest in lock.get('external', {}).get('runtime', {}).get('libraries', {}).items():
+        local_path(root, name)
+        if not valid_sha256(digest):
+            raise ValueError('invalid external runtime SHA256: ' + name)
     return sorted(set(errors))
 
 
@@ -285,7 +242,7 @@ def main():
     elif errors:
         print('\n'.join(errors))
     else:
-        print('Dependency provenance, snapshots, patches, and generated fonts verified (offline).')
+        print('Current dependency snapshots, patches, fonts and immutable history verified (offline; schema 2).')
     raise SystemExit(1 if errors else 0)
 
 

@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-#define _DEFAULT_SOURCE
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE 1
+#endif
 #define _POSIX_C_SOURCE 200809L
 #include "wifi_backend_internal.h"
 #include <ctype.h>
@@ -18,6 +20,7 @@
 #include <unistd.h>
 
 extern char **environ;
+
 void wifi_child_init(wifi_child_t *child) {
     child->pid = -1;
     child->status = -1;
@@ -39,6 +42,7 @@ bool wifi_child_start(wifi_child_t *child, const char *const *arguments, int out
         wifi_error(error, "Invalid Wi-Fi process state");
         return false;
     }
+    child->status = -1;
     size_t count = 0, extras = 0;
     while (environ[count])
         ++count;
@@ -103,16 +107,45 @@ bool wifi_child_start(wifi_child_t *child, const char *const *arguments, int out
     return true;
 }
 
-bool wifi_child_running(wifi_child_t *child) {
+/* Observe without reaping: even an exited leader reserves the process-group
+ * number until all group signals are sent. Handles have one waiting owner. */
+static int child_exited(wifi_child_t *child) {
     if (child->pid <= 0)
-        return false;
-    int status = 0;
-    pid_t result = waitpid(child->pid, &status, WNOHANG);
-    if (!result || (result < 0 && errno == EINTR))
-        return true;
-    child->status = result > 0 ? status : -1;
-    child->pid = -1;
-    return false;
+        return -1;
+    siginfo_t information = {0};
+    int result;
+    do {
+        result = waitid(P_PID, (id_t)child->pid, &information, WEXITED | WNOHANG | WNOWAIT);
+    } while (result < 0 && errno == EINTR);
+    if (result < 0) {
+        child->status = -1;
+        if (errno == ECHILD)
+            child->pid = -1;
+        return -1;
+    }
+    return information.si_pid == child->pid ? 1 : 0;
+}
+
+/* Call only after child_exited proves the leader is still our unreaped child. */
+static void child_finish(wifi_child_t *child) {
+    kill(-child->pid, SIGKILL);
+    kill(child->pid, SIGKILL);
+    int status;
+    pid_t result;
+    do {
+        result = waitpid(child->pid, &status, 0);
+    } while (result < 0 && errno == EINTR);
+    child->status = result == child->pid ? status : -1;
+    if (result == child->pid || (result < 0 && errno == ECHILD))
+        child->pid = -1;
+}
+
+bool wifi_child_running(wifi_child_t *child) {
+    const int exited = child_exited(child);
+    if (exited > 0)
+        child_finish(child);
+    /* Unexpected observation failures retain ownership for a later stop. */
+    return child->pid > 0;
 }
 
 bool wifi_child_succeeded(const wifi_child_t *child) {
@@ -120,20 +153,19 @@ bool wifi_child_succeeded(const wifi_child_t *child) {
 }
 
 void wifi_child_stop(wifi_child_t *child) {
-    if (!wifi_child_running(child))
+    const int exited = child_exited(child);
+    if (exited < 0)
         return;
+    if (exited) {
+        child_finish(child);
+        return;
+    }
     kill(-child->pid, SIGTERM);
     uint64_t deadline = wifi_now_ms() + 400;
     while (wifi_child_running(child) && wifi_now_ms() < deadline)
         wifi_sleep_ms(10);
-    if (child->pid > 0) {
-        kill(-child->pid, SIGKILL);
-        int status = 0;
-        while (waitpid(child->pid, &status, 0) < 0 && errno == EINTR) {
-        }
-        child->pid = -1;
-        child->status = status;
-    }
+    if (child_exited(child) >= 0)
+        child_finish(child);
 }
 
 bool wifi_command(const char *const *arguments, unsigned timeout_ms, const wifi_cancel_t *cancel,

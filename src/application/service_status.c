@@ -14,7 +14,30 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-int rv1126b_service_status(const char *state) {
+const char *rv1126b_app_state_name(rv1126b_app_state_t state) {
+    static const char *const names[RV1126B_APP_STATE_COUNT] = {
+        [RV1126B_APP_STARTING] = "starting",
+        [RV1126B_APP_READY] = "ready",
+        [RV1126B_APP_PAIRING] = "pairing",
+        [RV1126B_APP_CONVERSATION] = "conversation",
+        [RV1126B_APP_OFFLINE] = "offline",
+        [RV1126B_APP_FAILED] = "failed",
+        [RV1126B_APP_STARTING_SERVICES] = "starting_services",
+        [RV1126B_APP_POWERING_OFF] = "powering_off",
+        [RV1126B_APP_WAITING_NETWORK] = "waiting_network",
+        [RV1126B_APP_WAITING_CLOCK] = "waiting_clock",
+        [RV1126B_APP_AP] = "ap",
+        [RV1126B_APP_WIFI_ERROR] = "wifi_error",
+        [RV1126B_APP_STOPPING] = "stopping",
+        [RV1126B_APP_STOPPED] = "stopped",
+    };
+    return (unsigned int)state < RV1126B_APP_STATE_COUNT ? names[state] : NULL;
+}
+
+int rv1126b_service_status(rv1126b_app_state_t value) {
+    const char *state = rv1126b_app_state_name(value);
+    if (!state)
+        return -1;
     static char previous_path[PATH_MAX], previous_state[32];
     const char *path = getenv("MYBOT_STATUS_PATH");
     if (!path || !*path)

@@ -7,6 +7,10 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Private deterministic clock/process seam; production uses the default backend.
  * helper_exited observes without reaping so its PID cannot be reused before
  * cancel_helper signals the owned process group. reap_helper returns 1/0/-1. */
@@ -23,8 +27,14 @@ typedef struct {
 rv1126b_time_sync_t *
 rv1126b_time_sync_create_with_backend(const rv1126b_time_sync_config_t *config,
                                       const rv1126b_time_sync_backend_t *backend, void *context);
+
 const rv1126b_time_sync_backend_t *rv1126b_time_sync_default_backend(void);
+
 /* cmdline is the bounded NUL-separated /proc/PID/cmdline payload. */
 bool rv1126b_time_sync_process_is_service(const char *comm, const char *cmdline, size_t length);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

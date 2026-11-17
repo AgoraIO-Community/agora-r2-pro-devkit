@@ -2,86 +2,60 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-A Linux application for running agent-studio-device-firmware 1.3.0 on the **RV1126B TEST2 RK805B V10** board. It provides AP Wi-Fi setup with voice guidance, HTTPS pairing, bidirectional voice, persistent device identity and output volume, a pixel-glasses UI, and an optional V4L2/MPP JPEG uplink.
+An official Agora Linux application for RV1126B, built on agent-studio-device-firmware 1.3.0. It provides AP Wi-Fi setup with voice guidance, HTTPS pairing, bidirectional voice, persistent device identity and volume, a pixel-glasses UI, and optional V4L2/MPP JPEG uplink.
 
-The current source is the **<!-- project-version -->0.5.2<!-- /project-version --> deployment candidate**. The 0.1.0 voice/UI flow and 0.1.1 text-rendering improvement passed user testing on hardware. AP Wi-Fi setup, voice guidance, persistent volume and time handling require device testing; optional video and extended stability testing remain incomplete. [Validation status](docs/validation/README.md) is the single source for results.
+The current source version is **<!-- project-version -->0.5.3<!-- /project-version -->**, targeting **RV1126B TEST2 RK805B V10**. [Validation status](docs/validation/README.md) distinguishes source checks, cross-builds and hardware evidence. New packages require their own hardware acceptance.
 
-## Platform and behavior
+## Use
 
-The recorded device baseline is AArch64 Buildroot 2024.02, Linux 6.1, glibc 2.41, ALSA, DRM/KMS and a physical 480×640 DSI screen. The UI renders at 640×480 with a default 270° rotation and statically linked LVGL 9.5. Audio uses 16 kHz mono signed-16 PCM, 20 ms frames and Cloud AEC.
+Follow the [illustrated English operations manual (PDF)](docs/device-operations.en.pdf) for build, deployment and daily use. A [Chinese edition](docs/device-operations.zh-CN.pdf) is also available.
 
-Output volume is saved in the private runtime directory and restored across application restarts and manual Wi-Fi setup. The existing keys, terminal commands and cloud volume controls use the same 0–100 scale; 100 preserves the previous output level. Application volume controls apply playback gain once and do not adjust capture gain or system mixer settings. See [configuration](docs/user/configuration.zh-CN.md).
+The application keeps an existing usable network. If offline recovery fails, connect a phone to the displayed open `mybot-xxxx` hotspot and visit `http://192.168.4.1/`. For manual setup, choose Wi-Fi setup from the top-right settings menu. A short screen touch or Menu press starts/ends a conversation; holding either does not trigger conversation or setup. Settings also provides poweroff confirmation. Preserve the server, device identity and data directory to retain pairing across restarts, updates and Wi-Fi setup.
 
-The application preserves an existing usable network and the system's ALSA configuration. When offline, it tries saved Wi-Fi networks for up to 30 seconds, then starts an open `mybot-xxxx` hotspot. Connect a phone and open `http://192.168.4.1/` to select a 2.4 GHz network or enter a hidden SSID. The bilingual page supports saved networks, connection progress and retries. A short touch or short Menu press starts/stops a conversation. To configure Wi-Fi manually, open the top-right settings gear and choose “设备配网” (Wi-Fi setup); this is the only manual entry point and is available before the SDK starts. Holding the screen or Menu key does not start a conversation or Wi-Fi setup. The application stops agent-studio-device-firmware before manual Wi-Fi setup and restarts it after setup completes. [Wi-Fi setup guide](docs/user/wifi-provisioning.zh-CN.md).
+Chinese builds default to the domestic service; English builds default to the international service, with CLI and environment overrides. The default data directory, `/userdata/mybot-rv1126b`, contains sensitive credentials. The references below define the complete behavior and configuration.
 
-Once the hotspot and portal are ready, the application plays the bundled setup guidance once per setup session, using `MYBOT_LOCALE` and the saved output volume. Muting also silences guidance. Leaving setup or exiting cancels playback and releases the audio device before agent-studio-device-firmware resumes; a guidance failure is reported while the portal remains available.
+| Task | Authoritative reference |
+| --- | --- |
+| Build, host tests, target SDK and packaging | [Build guide](docs/user/build.zh-CN.md) |
+| Direct execution and UI/voice smoke checks | [Getting started](docs/user/getting-started.zh-CN.md) |
+| Install startup service, update, inspect health and roll back | [Device deployment](docs/user/deployment.zh-CN.md) |
+| Phone setup, network ownership and verification | [AP Wi-Fi setup](docs/user/wifi-provisioning.zh-CN.md) |
+| Settings, shutdown and power on | [Device settings](docs/user/settings.zh-CN.md) |
+| Servers, identity, persistence and media options | [Configuration](docs/user/configuration.zh-CN.md) |
+| System time and fault diagnosis | [Time guide](docs/user/time-sync.zh-CN.md), [troubleshooting](docs/user/troubleshooting.zh-CN.md) |
 
-Before starting agent-studio-device-firmware, the application waits up to 30 seconds for plausible system time after the network is ready and AP setup has ended. It uses existing OS time services by default; an optional foreground helper must be selected explicitly. A timeout or helper failure reports the cause and exits with a nonzero status. The 2026-01-01 threshold only rejects obviously invalid dates and does not establish accurate NTP synchronization. See the [time setup guide](docs/user/time-sync.zh-CN.md).
+Direct execution of `run.sh` does not install startup services or modify system ALSA configuration files. Explicit supervised deployment installs startup scripts, disables the original application's startup and updates board network policies; each service launch applies capture mixer settings through `amixer`. Deployment checks and backs up the device before switching releases. Build, packaging and check scripts do not connect to devices.
 
-AP setup requires target-side `iw`, `hostapd`, `dnsmasq`, `wpa_supplicant`, `udhcpc`, `ip` and a driver with nl80211 AP support. These programs are supplied by the target system; only the DHCP hook is bundled. AP+STA is preferred; a single-interface fallback requires application ownership of the station. Existing network managers are never globally stopped. `--no-wifi-provisioning` retains network monitoring only. The application does not include firmware installation, OTA, wakeword/NPU, video downlink or a local camera preview. Runtime data defaults to `/userdata/mybot-rv1126b`; upgrades preserve pairing when server and identity configuration stay the same.
+## Develop
 
-Directly running `run.sh` does not install startup services or modify system ALSA configuration files. Explicit [supervised deployment](docs/user/deployment.zh-CN.md) installs `/etc/init.d/S99mybot`, disables the original application startup, and updates `dnsmasq`/`dhcpcd` policies and a lease hook. Each service launch applies the board's capture mixer settings through `amixer`; it preserves ALSA configuration files. The operator reloads network policies separately after checking the connection conditions.
-
-## Build and test
-
-Use **Python 3.10+**, **CMake 3.25+**, a C/C++ compiler, OpenSSL development files and libdrm development headers. Host UI/tests do not load the target RTSA library or require a target SDK. On Ubuntu 24.04, install the development packages and the pinned formatting tool in an ignored virtual environment:
+Ubuntu 24.04 needs Python 3.10+, CMake 3.25+, C/C++ compilers, OpenSSL and libdrm development files:
 
 ```sh
 sudo apt install build-essential pkg-config libssl-dev libdrm-dev cmake python3 python3-venv
 python3 -m venv local/dev-tools
 local/dev-tools/bin/python -m pip install -r requirements-dev.txt
-```
-
-The quality check automatically selects `local/dev-tools/bin/clang-format` and verifies its version; activating the virtual environment is not required.
-
-```sh
 python3 scripts/doctor.py --host
 python3 scripts/check-dependencies.py
 python3 scripts/check-quality.py
-cmake --preset host-zh
-cmake --build --preset host-zh
-ctest --preset host-zh
+cmake --preset host-en
+cmake --build --preset host-en
+ctest --preset host-en
 ```
 
-Use `host-en` for English and `host-ubsan` for undefined-behavior checks. On macOS, explicitly provide the libdrm header directory when it is not installed as a native development package; see [build instructions](docs/user/build.zh-CN.md). Host CI runs on Linux; only the environment recorded in the validation matrix has been tested locally.
+The quality check selects pinned clang-format 11 automatically. Use `host-zh` or `host-ubsan` for Chinese or undefined-behavior checks; see the build guide for explicit macOS header setup. Host tests do not load target RTSA or need a target SDK.
 
-The complete pinned Agora RTSA 1.10.1 package is included in `vendor/rtsa/`; target builds automatically use its AArch64 library. Supply a matching AArch64 compiler, development staging/sysroot and a runtime-library manifest as described in [independent target setup](docs/user/build.zh-CN.md).
+Target builds use the complete bundled Agora RTSA 1.10.1 package and additionally require a matching AArch64 compiler, development staging/sysroot and runtime manifest. After following target setup in the build guide:
 
 ```sh
-sh scripts/build-rv1126b.sh
-RV1126B_BUILD_DIR="$PWD/build/rv1126b-video-zh" sh scripts/build-rv1126b.sh -DMYBOT_ENABLE_VIDEO=ON
-python3 scripts/package-rv1126b.py --profile all --language zh-CN
+RV1126B_BUILD_DIR="$PWD/build/rv1126b-voice-en" sh scripts/build-rv1126b.sh -DRV1126B_LANGUAGE=en-US
+RV1126B_BUILD_DIR="$PWD/build/rv1126b-video-en" sh scripts/build-rv1126b.sh -DRV1126B_LANGUAGE=en-US -DMYBOT_ENABLE_VIDEO=ON
+python3 scripts/package-rv1126b.py --profile all --language en-US
 ```
 
-Build and packaging commands run locally and do not deploy to a device. [Getting started](docs/user/getting-started.zh-CN.md) covers manual installation, service ownership, upgrade and rollback.
+## Architecture and contribution
 
-## Project layout
+`src/application/` owns configuration, identity and product lifecycle; `src/platform/` owns Linux services and hardware; `src/ui/` is a pure renderer. `vendor/` holds independently pinned agent-studio-device-firmware/AOSL/LVGL and the complete RTSA package. Build integration lives in `cmake/`, automation in `scripts/` and developer programs in `tools/`. The board baseline is AArch64 Buildroot 2024.02, Linux 6.1 and glibc 2.41, with a logical 640×480 UI and 16 kHz mono S16 audio in 20 ms frames.
 
-| Directory | Responsibility |
-| --- | --- |
-| `src/application/` | Configuration, identity, process guards and application lifecycle |
-| `src/platform/` | Board defaults, Linux services and hardware drivers |
-| `src/ui/` | Pure renderer, pixel-glasses view, expressions and compiled fonts |
-| `cmake/` | Dependency integration and toolchain configuration |
-| `vendor/mybot/`, `vendor/aosl/`, `vendor/lvgl/`, `vendor/rtsa/` | Independently pinned dependencies, including the complete RTSA package; build integration stays in `cmake/dependencies/` |
-| `tests/` | Unit, integration and automation-tool verification |
-| `tools/` | Developer programs, including the standalone `ui_preview/` |
-| `scripts/` | Build, check, code-generation and packaging automation |
-| `packaging/` | Delivery templates, startup script and example configuration |
-| `docs/` | User/developer guides, validation and historical evidence |
-| `githooks/` | Conventional Commit message validation |
+See [architecture](docs/development/architecture.zh-CN.md), [testing](docs/development/testing.zh-CN.md), [contributing](CONTRIBUTING.md), [support](SUPPORT.md) and [security reporting](SECURITY.md). The [documentation index](docs/README.md) links all guides; the [changelog](CHANGELOG.md) records version changes.
 
-Project-maintained modules live under `src/`; pinned dependency snapshots live under `vendor/`. Public include namespaces (`mybot_platform/`, `mybot_ui/`) and CMake target names remain stable when directories move. See the [architecture guide](docs/development/architecture.zh-CN.md) for the dependency boundaries.
-
-## Documentation and contribution
-
-- [Documentation index](docs/README.md), [configuration](docs/user/configuration.zh-CN.md), [Wi-Fi setup](docs/user/wifi-provisioning.zh-CN.md), [system time](docs/user/time-sync.zh-CN.md), [troubleshooting](docs/user/troubleshooting.zh-CN.md)
-- [Architecture](docs/development/architecture.zh-CN.md), [testing](docs/development/testing.zh-CN.md), [release process](docs/development/releasing.zh-CN.md)
-- [Dependency layout](docs/development/third-party-layout.zh-CN.md), [source provenance](VENDORED_SOURCES.md)
-- [Contributing](CONTRIBUTING.md), [support](SUPPORT.md), [changelog](CHANGELOG.md)
-
-Project-maintained code is [Apache-2.0](LICENSE) unless a file carries another notice. agent-studio-device-firmware/AOSL, LVGL and fonts retain their own terms; file-level notices also apply to the pixel-glasses view. The bundled RTSA package retains its vendor terms and is not covered by this project's license. Read [third-party notices](THIRD_PARTY_NOTICES.md) and [vendored sources](VENDORED_SOURCES.md) before redistributing source or packages.
-
-Versioned installation, system Wi-Fi integration, service controls and rollback are described in the [device deployment guide](docs/user/deployment.zh-CN.md). Build and packaging scripts never deploy to a device.
-
-The top-right settings entry opens Wi-Fi setup and poweroff confirmation; see the [settings guide](docs/user/settings.zh-CN.md).
+Project-maintained code is [Apache-2.0](LICENSE) unless a file states otherwise. Dependencies and fonts retain their own terms, including AOSL's additional conditions and the applicable RTSA terms. Read [third-party notices](THIRD_PARTY_NOTICES.md), [provenance](VENDORED_SOURCES.md) and [authorization and commercial contacts](docs/dependencies/licensing.md).

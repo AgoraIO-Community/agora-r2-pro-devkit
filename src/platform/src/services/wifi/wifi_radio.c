@@ -4,9 +4,53 @@
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
+#include <openssl/evp.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static int mac_nibble(unsigned char byte) {
+    if (byte >= '0' && byte <= '9')
+        return byte - '0';
+    if (byte >= 'a' && byte <= 'f')
+        return byte - 'a' + 10;
+    if (byte >= 'A' && byte <= 'F')
+        return byte - 'A' + 10;
+    return -1;
+}
+
+bool wifi_hotspot_ssid_from_mac(const char *mac, char *output, size_t capacity) {
+    if (output && capacity)
+        output[0] = '\0';
+    if (!mac || !output || capacity < sizeof("mybot-ffff"))
+        return false;
+    const size_t length = strlen(mac);
+    if (length != 17 && !(length == 18 && mac[17] == '\n') &&
+        !(length == 19 && mac[17] == '\r' && mac[18] == '\n'))
+        return false;
+    unsigned char bytes[6], any = 0;
+    for (size_t i = 0; i < sizeof(bytes); ++i) {
+        const int high = mac_nibble((unsigned char)mac[i * 3]);
+        const int low = mac_nibble((unsigned char)mac[i * 3 + 1]);
+        if (high < 0 || low < 0 || (i < sizeof(bytes) - 1 && mac[i * 3 + 2] != ':'))
+            return false;
+        bytes[i] = (unsigned char)((high << 4) | low);
+        any |= bytes[i];
+    }
+    if (!any || (bytes[0] & 1U))
+        return false;
+    /* A fixed namespace and binary octets keep names stable across text forms.
+     * This 16-bit display suffix is not a unique identity or authentication. */
+    static const char domain[] = "mybot:RV1126B:ap-ssid:v1:";
+    unsigned char input[sizeof(domain) - 1 + sizeof(bytes)], digest[EVP_MAX_MD_SIZE];
+    memcpy(input, domain, sizeof(domain) - 1);
+    memcpy(input + sizeof(domain) - 1, bytes, sizeof(bytes));
+    unsigned int digest_length = 0;
+    if (EVP_Digest(input, sizeof(input), digest, &digest_length, EVP_sha256(), NULL) != 1 ||
+        digest_length < 2)
+        return false;
+    return snprintf(output, capacity, "mybot-%02x%02x", digest[0], digest[1]) == 10;
+}
 
 int wifi_frequency_channel(int frequency) {
     if (frequency == 2484)

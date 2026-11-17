@@ -13,6 +13,9 @@ import shlex
 import struct
 import subprocess
 import tarfile
+import time
+
+from build_metadata import MANIFEST_SCHEMA, inputs_digest
 
 ROOT = Path(__file__).resolve().parents[1]
 DEVICE_ROOT = "/userdata/mybot"
@@ -22,6 +25,9 @@ SERVICE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
                   "assets/service/mybot-rv1126b.conf", "assets/service/audio-prepare.sh",
                   "assets/network/99-mybot-lease", "bin/mybot-supervisor",
                   "supervisor-manifest.json", "abi-report-supervisor.json")
+EXECUTABLE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
+                     "assets/service/audio-prepare.sh", "assets/network/99-mybot-lease",
+                     "assets/wifi/udhcpc.script", "assets/time/sync-busybox.sh", "bin/mybot-supervisor")
 NAME = re.compile(r"mybot-rv1126b-(\d+\.\d+\.\d+)(?:-en-US)?-aarch64(?:-voice|-video)?\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 TAG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}\Z")
@@ -48,7 +54,7 @@ def verify_package(path, expected, legacy=False):
         raise ValueError("Package must be a bounded regular archive")
     if sha256(path.read_bytes()) != expected:
         raise ValueError("Archive SHA256 mismatch")
-    files, names, root, total = {}, set(), None, 0
+    files, modes, names, root, total = {}, {}, set(), None, 0
     with tarfile.open(path, "r:gz") as archive:
         for member in archive:
             name = member.name.rstrip("/")
@@ -63,11 +69,15 @@ def verify_package(path, expected, legacy=False):
                 root = parts[0]
             if root != parts[0] or not NAME.fullmatch(root):
                 raise ValueError("Archive must contain one named release directory")
+            if member.isdir() and member.mode & 0o500 != 0o500:
+                raise ValueError("Package directories require owner read/search permission")
             if member.isfile():
                 total += member.size
                 if total > MAX_PACKAGE_BYTES:
                     raise ValueError("Unpacked package is too large")
-                files["/".join(parts[1:])] = archive.extractfile(member).read()
+                relative = "/".join(parts[1:])
+                files[relative] = archive.extractfile(member).read()
+                modes[relative] = member.mode
     if not root or "SHA256SUMS" not in files:
         raise ValueError("Missing package checksum manifest")
     checksums = {}
@@ -94,7 +104,7 @@ def verify_package(path, expected, legacy=False):
         if report_name not in files:
             raise ValueError("Missing executable ABI report")
         report = json.loads(files[report_name])
-        if (report.get("errors") or report["binary"]["machine"] != 183 or
+        if (report.get("errors") != [] or report["binary"]["machine"] != 183 or
                 report["binary"]["sha256"] != sha256(files[executable]) or
                 "$ORIGIN/../lib" not in report["binary"].get("runpaths", [])):
             raise ValueError("ABI report does not match the AArch64 executable")
@@ -103,30 +113,39 @@ def verify_package(path, expected, legacy=False):
                 raise ValueError("Missing executable build manifest")
             manifest = json.loads(files["build-manifest-" + profile + ".json"])
             config = manifest["inputs"]["config"]
-            if (manifest.get("schema") != 1 or config["version"] != version or
+            if (manifest.get("schema") != MANIFEST_SCHEMA or config["version"] != version or
                     config["board"] != "rv1126b-test2-rk805b-v10" or
                     config["ptime_ms"] != 20 or type(config["video"]) is not bool or
                     config["video"] != (profile == "video") or
                     manifest["binary_sha256"] != sha256(files[executable]) or
                     manifest["abi_report_sha256"] != sha256(files[report_name])):
                 raise ValueError("Build manifest does not match the selected package")
+            if manifest["inputs"]["dependencies"].get("rtsa_sha256") != sha256(files.get("lib/libagora-rtc-sdk.so", b"")):
+                raise ValueError("RTSA runtime does not match its bound build manifest")
             language = "en-US" if "-en-US-" in root else "zh-CN"
             marker = (f"MYBOT_RV1126B_BUILD_CONFIG:{version};{language};"
                       f"video={int(profile == 'video')};ptime_ms=20;"
                       "board=rv1126b-test2-rk805b-v10\0").encode()
             source_marker = ("MYBOT_RV1126B_SOURCE:" +
                              manifest["inputs"]["source"]["sha256"] + "\0").encode()
-            inputs_marker = re.search(rb"MYBOT_RV1126B_INPUTS:([0-9a-f]{64})\0", files[executable])
+            inputs_marker = ("MYBOT_RV1126B_INPUTS:" +
+                             inputs_digest(manifest["inputs"], public=True) + "\0").encode()
             if (config["language"] != language or marker not in files[executable] or
-                    source_marker not in files[executable] or inputs_marker is None):
+                    source_marker not in files[executable] or inputs_marker not in files[executable]):
                 raise ValueError("Executable provenance markers do not match its manifest")
-            inputs_markers[profile] = inputs_marker[0]
+            inputs_markers[profile] = inputs_marker
     if not profiles or "run.sh" not in files or "lib/libagora-rtc-sdk.so" not in files:
         raise ValueError("Missing application/runtime package contents")
-    elf_aarch64(files["lib/libagora-rtc-sdk.so"])
+    executables = ["run.sh", *("bin/mybot-rv1126b" + ("-video" if profile == "video" else "")
+                              for profile in profiles)]
     if not legacy:
         if any(name not in files for name in SERVICE_ASSETS):
             raise ValueError("Package lacks supervised deployment assets")
+        executables.extend(EXECUTABLE_ASSETS)
+    if any(name not in modes or modes[name] & 0o500 != 0o500 for name in executables):
+        raise ValueError("Package startup files require owner read/execute permission")
+    elf_aarch64(files["lib/libagora-rtc-sdk.so"])
+    if not legacy:
         binary = files["bin/mybot-supervisor"]
         elf_aarch64(binary)
         manifest = json.loads(files["supervisor-manifest.json"])
@@ -139,14 +158,16 @@ def verify_package(path, expected, legacy=False):
                   "board=rv1126b-test2-rk805b-v10\0").encode()
         source_marker = ("MYBOT_RV1126B_SOURCE:" + source + "\0").encode()
         app_manifest = json.loads(files["build-manifest-" + profiles[0] + ".json"])
-        if (manifest.get("role") != "supervisor" or manifest.get("schema") != 1 or
+        if (manifest.get("role") != "supervisor" or manifest.get("schema") != MANIFEST_SCHEMA or
                 config != app_manifest["inputs"]["config"] or
                 source != app_manifest["inputs"]["source"]["sha256"] or
                 manifest["binary_sha256"] != sha256(binary) or
                 manifest["abi_report_sha256"] != sha256(report_bytes) or
-                report.get("errors") or report["binary"]["machine"] != 183 or
+                report.get("errors") != [] or report["binary"]["machine"] != 183 or
                 report["binary"]["sha256"] != sha256(binary) or
                 marker not in binary or source_marker not in binary or
+                inputs_digest(manifest["inputs"], public=True) !=
+                inputs_digest(app_manifest["inputs"], public=True) or
                 inputs_markers[profiles[0]] not in binary):
             raise ValueError("Supervisor ABI/provenance does not match its independent manifest")
     return {"path": path.resolve(), "name": root, "version": version,
@@ -202,17 +223,21 @@ class Adb:
         else:
             self.serial = devices[0]
 
-    def command(self, arguments, data=None):
-        result = subprocess.run([self.executable, "-s", self.serial, *arguments], input=data,
-                                capture_output=True, text=True)
+    def command(self, arguments, data=None, timeout=None):
+        try:
+            result = subprocess.run([self.executable, "-s", self.serial, *arguments], input=data,
+                                    capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError(f"ADB {arguments[0]} operation timed out; inspect the private "
+                               "on-device deployment state") from error
         if result.returncode:
             # Do not echo subprocess output: service/network diagnostics may contain credentials.
             raise RuntimeError(f"ADB {arguments[0]} operation failed (exit {result.returncode}); "
                                "inspect the private on-device deployment state")
         return result.stdout
 
-    def shell(self, script):
-        return self.command(["shell", "sh", "-s"], "set -eu\numask 077\n" + script)
+    def shell(self, script, timeout=None):
+        return self.command(["shell", "sh", "-s"], "set -eu\numask 077\n" + script, timeout=timeout)
 
 
 def identity_check(settings):
@@ -264,6 +289,58 @@ if [ -e /userdata/mybot-rv1126b ]; then
     [ "$(stat -c %a /userdata/mybot-rv1126b)" = 700 ] || exit 16
 fi
 printf 'platform=ready\\n'
+"""
+
+
+def capability_preflight(runtime=None):
+    """Read target capabilities before any backup, upload or service changes."""
+    if runtime is None:
+        runtime = json.loads((ROOT / "dependencies.lock.json").read_text())["external"]["runtime"]["libraries"]
+    if not isinstance(runtime, dict) or not runtime:
+        raise ValueError("Missing pinned target runtime baseline")
+    for path, expected in runtime.items():
+        if (not isinstance(path, str) or not re.fullmatch(r"(?:lib|usr/lib)/[A-Za-z0-9_.+-]+", path) or
+                not isinstance(expected, str) or not SHA256.fullmatch(expected)):
+            raise ValueError("Invalid pinned target runtime baseline")
+    checksums = "\n".join(expected + "  /" + path for path, expected in sorted(runtime.items()))
+    return """
+for tool in amixer ip iw hostapd dnsmasq wpa_supplicant udhcpc; do
+    command -v "$tool" >/dev/null || exit 90
+done
+[ -x /sbin/poweroff ] && [ -x /lib/ld-linux-aarch64.so.1 ] || exit 91
+[ -r /proc/device-tree/model ] || exit 92
+model=$(tr -d '\\000' < /proc/device-tree/model)
+[ "$model" = 'Rockchip RV1126B TEST2 RK805B V10 Board' ] || exit 92
+[ -d /lib/dhcpcd/dhcpcd-hooks ] && [ ! -L /lib/dhcpcd/dhcpcd-hooks ] &&
+    [ "$(stat -c %u /lib/dhcpcd/dhcpcd-hooks)" = 0 ] || exit 93
+for path in /run/mybot-network /run/mybot-network/leases /run/mybot-rv1126b \\
+    /run/mybot-rv1126b-service; do
+    [ ! -L "$path" ] || exit 94
+    if [ -e "$path" ]; then
+        [ -d "$path" ] && [ "$(stat -c %u "$path")" = 0 ] || exit 94
+    fi
+done
+for setting in 'ACodec_LP Digital Gain Volume:0' 'ACodec_LP PGA Gain Volume:23'; do
+    control=${setting%:*}
+    expected=${setting##*:}
+    information=$(amixer -c 0 cget "name=$control" 2>/dev/null) || exit 95
+    printf '%s\\n' "$information" | awk -F, -v expected="$expected" '
+        /type=INTEGER/ && /access=rw/ {
+            for (i = 1; i <= NF; i++) {
+                field = $i
+                gsub(/^[[:space:]]+|[[:space:]]+$/, "", field)
+                if (field ~ /^min=-?[0-9]+$/) { minimum = substr(field, 5); have_minimum = 1 }
+                if (field ~ /^max=-?[0-9]+$/) { maximum = substr(field, 5); have_maximum = 1 }
+            }
+            if (have_minimum && have_maximum && minimum <= expected && maximum >= expected) valid = 1
+        }
+        END { exit !valid }
+    ' || exit 95
+done
+sha256sum -c - >/dev/null <<'MYBOT_RUNTIME_BASELINE'
+""" + checksums + """
+MYBOT_RUNTIME_BASELINE
+printf 'capabilities=ready\\n'
 """
 
 
@@ -322,6 +399,28 @@ rm "$archive"
 """
 
 
+def release_load_check(name, video):
+    """Load only the selected package entry point's information-only command."""
+    match = NAME.fullmatch(name)
+    if not match:
+        raise ValueError("Invalid installed release name")
+    executable = "mybot-rv1126b-video" if video else "mybot-rv1126b"
+    language = "en-US" if "-en-US-" in name else "zh-CN"
+    return f"""
+release={shlex.quote(DEVICE_ROOT + '/releases/' + name)}
+[ -d "$release" ] && [ ! -L "$release" ] || exit 82
+[ -d "$release/bin" ] && [ ! -L "$release/bin" ] || exit 87
+for executable in "$release/run.sh" "$release/bin/{executable}"; do
+    [ -f "$executable" ] && [ ! -L "$executable" ] && [ -x "$executable" ] || exit 87
+done
+version=$(RV1126B_VIDEO={int(video)} "$release/run.sh" --version 2>/dev/null) || exit 88
+case "$version" in
+    "mybot-rv1126b {match[1]}, MyBot "*", video={int(video)}, UI={language}") ;;
+    *) exit 88;;
+esac
+"""
+
+
 INSTALL_FILE = """
 install_file() {
     deployment_source=$1
@@ -350,7 +449,9 @@ fi
 for comm in /proc/[0-9]*/comm; do
     [ -r "$comm" ] || continue
     IFS= read -r name < "$comm" || continue
-    case "$name" in botstation-devi|botstation-device|mybot-rv1126b) exit 52;; esac
+    # Linux comm contains at most 15 characters; retain both full names and
+    # their truncated forms. This check refuses deployment without signaling.
+    case "$name" in botstation-devi|botstation-device|mybot-rv1126b|mybot-rv1126b-v|mybot-rv1126b-video) exit 52;; esac
 done
 mkdir -p /etc/mybot-rv1126b/disabled
 chmod 755 /etc/mybot-rv1126b /etc/mybot-rv1126b/disabled
@@ -405,17 +506,154 @@ printf 'current=%s\\n' "$target"
 """
 
 
-def status_script():
+def rollback_release_check(name, settings):
+    """Check the preserved service profile and load the target before stopping it."""
+    match = NAME.fullmatch(name)
+    if not match:
+        raise ValueError("Invalid installed release name")
+    video = int(settings.get("video", False))
     return f"""
+configuration=/etc/mybot-rv1126b.conf
+[ -f "$configuration" ] && [ ! -L "$configuration" ] &&
+    [ "$(stat -c '%u:%a' "$configuration")" = '0:600' ] || exit 85
+actual_video=$(
+    unset RV1126B_VIDEO
+    . "$configuration"
+    printf '%s\\n' "${{RV1126B_VIDEO:-0}}"
+)
+case "$actual_video" in 0|1) ;; *) exit 86;; esac
+[ "$actual_video" = {video} ] || exit 86
+release={shlex.quote(DEVICE_ROOT + '/releases/' + name)}
+[ -d "$release" ] && [ ! -L "$release" ] || exit 82
+[ -d "$release/bin" ] && [ ! -L "$release/bin" ] || exit 87
+[ -f "$release/.archive-sha256" ] && [ ! -L "$release/.archive-sha256" ] || exit 83
+recorded=$(cat "$release/.archive-sha256")
+[ "${{#recorded}}" = 64 ] || exit 84
+case "$recorded" in *[!0-9a-f]*) exit 84;; esac
+(cd "$release" && sha256sum -c SHA256SUMS >/dev/null) || exit 81
+""" + release_load_check(name, bool(video))
+
+
+def status_script(expected_release=None, video=None):
+    if expected_release is not None and not NAME.fullmatch(expected_release):
+        raise ValueError("Invalid installed release name")
+    selected = "mybot-rv1126b-video" if video else "mybot-rv1126b"
+    executable_check = (f'[ "$executable" = "$release/bin/{selected}" ]' if video is not None else
+                        '[ "$executable" = "$release/bin/mybot-rv1126b" ] || '
+                        '[ "$executable" = "$release/bin/mybot-rv1126b-video" ]')
+    return f"""
+[ "$(id -u)" = 0 ] || exit 10
+current=
 for item in current previous; do
     target=$(readlink {DEVICE_ROOT}/"$item" 2>/dev/null || true)
-    case "$target" in ''|releases/mybot-rv1126b-*) printf '%s=%s\\n' "$item" "$target";; *) exit 70;; esac
+    case "$target" in ''|releases/mybot-rv1126b-*) ;; *) exit 70;; esac
+    tail=${{target#releases/}}
+    case "$tail" in *[!A-Za-z0-9.-]*|*..*) exit 70;; esac
+    printf '%s=%s\\n' "$item" "$target"
+    if [ "$item" = current ]; then current=$target; fi
 done
+service_state=not_installed
 if [ -x {SERVICE} ]; then
-    if {SERVICE} status >/dev/null 2>&1; then printf 'service=running\\n';
-    else printf 'service=stopped_or_failed\\n'; fi
-else printf 'service=not_installed\\n'; fi
+    service_state=$({SERVICE} status 2>/dev/null) || :
+    case "$service_state" in starting|running|backoff|stopping|stopped|failed|poweroff_pending|poweroff) ;;
+        *) service_state=query_failed;; esac
+fi
+printf 'service=%s\\n' "$service_state"
+health=not_ready
+verified=no
+version=
+pid=
+state=unavailable
+release={DEVICE_ROOT}/$current
+expected_version=${{current#releases/mybot-rv1126b-}}
+expected_version=${{expected_version%%-*}}
+wanted={shlex.quote('releases/' + expected_release) if expected_release else '"$current"'}
+status=/run/mybot-rv1126b/application.status
+if [ "$expected_version" != 0.1.1 ] &&
+   [ ! -L /run/mybot-rv1126b ] && [ -d /run/mybot-rv1126b ] &&
+   [ "$(stat -c '%u:%a' /run/mybot-rv1126b)" = '0:700' ] &&
+   [ -f "$status" ] && [ ! -L "$status" ] &&
+   [ "$(stat -c '%u:%a:%h' "$status")" = '0:600:1' ] &&
+   [ "$(stat -c %s "$status")" -le 128 ] &&
+   information=$(cat "$status") && printf '%s\\n' "$information" | awk -F= '
+       NF != 2 {{ exit 1 }}
+       $1 == "version" && $2 ~ /^[0-9]+\\.[0-9]+\\.[0-9]+$/ {{ version++; next }}
+       $1 == "pid" && $2 ~ /^[0-9]+$/ && length($2) <= 10 && $2 + 0 > 1 {{ pid++; next }}
+       $1 == "state" && $2 ~ /^[a-z_]+$/ && length($2) < 32 {{ state++; next }}
+       {{ exit 1 }}
+       END {{ if (version != 1 || pid != 1 || state != 1) exit 1 }}
+   '; then
+    version=$(printf '%s\\n' "$information" | awk -F= '$1 == "version" {{print $2}}')
+    pid=$(printf '%s\\n' "$information" | awk -F= '$1 == "pid" {{print $2}}')
+    state=$(printf '%s\\n' "$information" | awk -F= '$1 == "state" {{print $2}}')
+    executable=$(readlink /proc/"$pid"/exe 2>/dev/null || true)
+    if [ -n "$current" ] && [ "$current" = "$wanted" ] && [ "$version" = "$expected_version" ] &&
+       [ -d "$release" ] && [ ! -L "$release" ] && kill -0 "$pid" 2>/dev/null &&
+       {{ {executable_check}; }}; then
+        verified=yes
+        if [ "$service_state" = running ]; then
+            case "$state" in
+                ready|conversation) health=ready;;
+                waiting_network|waiting_clock|wifi_error|ap|pairing|offline) health=degraded;;
+                starting_services) health=started;;
+            esac
+        fi
+    fi
+fi
+# The accepted 0.1.1 application predates application.status. Its local
+# lifetime can be confirmed, but its business state cannot be reported.
+if [ "$expected_version" = 0.1.1 ] && [ "$service_state" = running ] &&
+   [ "$current" = "$wanted" ] && [ -d "$release" ] && [ ! -L "$release" ]; then
+    for process in /proc/[0-9]*/exe; do
+        executable=$(readlink "$process" 2>/dev/null || true)
+        {{ {executable_check}; }} || continue
+        candidate=${{process%/exe}}
+        candidate=${{candidate##*/}}
+        kill -0 "$candidate" 2>/dev/null || continue
+        parent=$(awk '$1 == "PPid:" && $2 ~ /^[0-9]+$/ && length($2) <= 10 && $2 + 0 > 1 {{print $2}}' \\
+            /proc/"$candidate"/status 2>/dev/null) || continue
+        [ -n "$parent" ] && kill -0 "$parent" 2>/dev/null || continue
+        [ "$(readlink /proc/"$parent"/exe 2>/dev/null)" = /etc/mybot-rv1126b/mybot-supervisor ] || continue
+        tr '\\000' '\\n' < /proc/"$parent"/cmdline 2>/dev/null | awk '
+            NR == 1 {{ if ($0 != "/etc/mybot-rv1126b/mybot-supervisor") invalid=1 }}
+            NR == 2 {{ if ($0 == "supervise") supervise=1; else invalid=1 }}
+            $0 == "--" {{ separator=1; exit }}
+            pending {{ if ($0 == "/run/mybot-rv1126b-service") runtime++; else invalid=1; pending=0; next }}
+            $0 == "--runtime" {{ pending=1 }}
+            END {{ exit !supervise || runtime != 1 || pending || !separator || invalid }}
+        ' || continue
+        version=0.1.1
+        pid=$candidate
+        state=unsupported
+        verified=yes
+        health=legacy_running
+        break
+    done
+fi
+if [ -n "$version" ] && [ -n "$pid" ]; then
+    printf 'application_version=%s\\napplication_pid=%s\\n' "$version" "$pid"
+fi
+printf 'application_state=%s\\napplication_verified=%s\\napplication_health=%s\\n' "$state" "$verified" "$health"
 """
+
+
+def wait_for_application(adb, release, video, timeout=30):
+    """Confirm a local application lifetime; cloud readiness is independent."""
+    deadline = time.monotonic() + timeout
+    while True:
+        remaining = max(0.1, deadline - time.monotonic())
+        output = adb.shell(status_script(release, video), timeout=min(5, remaining))
+        status = dict(line.split("=", 1) for line in output.splitlines() if "=" in line)
+        legacy = (NAME.fullmatch(release)[1] == "0.1.1" and
+                  status.get("application_health") == "legacy_running" and
+                  status.get("application_state") == "unsupported")
+        if (status.get("service") == "running" and status.get("application_verified") == "yes" and
+                (status.get("application_health") in ("ready", "degraded", "started") or legacy)):
+            return output
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Selected application did not reach a verified local startup state; "
+                               "inspect the private on-device service state")
+        time.sleep(0.2)
 
 
 def receipt(tag, action, values, output_root=ROOT / "local/deployment"):
@@ -476,12 +714,12 @@ def main(argv=None):
             return 0
         adb = Adb(args.adb, args.serial)
         adb.select()
-        output = adb.shell(PREFLIGHT + (identity_check(settings) if settings else ""))
-        if args.action == "preflight":
-            print(output.strip())
-            return 0
         if args.action == "status":
             print(adb.shell(status_script()).strip())
+            return 0
+        output = adb.shell(PREFLIGHT + capability_preflight() + (identity_check(settings) if settings else ""))
+        if args.action == "preflight":
+            print(output.strip())
             return 0
         rollback_target = args.release
         if args.action == "rollback":
@@ -490,15 +728,7 @@ def main(argv=None):
                 if not value.startswith("releases/") or not NAME.fullmatch(value[9:]):
                     raise ValueError("No checked previous release is available")
                 rollback_target = value[9:]
-            adb.shell(f"""
-release={shlex.quote(DEVICE_ROOT + '/releases/' + rollback_target)}
-[ -d "$release" ] && [ ! -L "$release" ] || exit 82
-[ -f "$release/.archive-sha256" ] && [ ! -L "$release/.archive-sha256" ] || exit 83
-recorded=$(cat "$release/.archive-sha256")
-[ "${{#recorded}}" = 64 ] || exit 84
-case "$recorded" in *[!0-9a-f]*) exit 84;; esac
-(cd "$release" && sha256sum -c SHA256SUMS >/dev/null) || exit 81
-""")
+            adb.shell(rollback_release_check(rollback_target, settings))
         # Backup completes before uploads, system changes, or link replacement.
         output = adb.shell(begin_transaction(tag))
         if args.action == "deploy":
@@ -506,6 +736,7 @@ case "$recorded" in *[!0-9a-f]*) exit 84;; esac
             if rollback:
                 staging_script += install_release(adb, rollback, tag)
             staging_script += install_release(adb, package, tag)
+            staging_script += release_load_check(package["name"], settings.get("video", False))
             adb.shell(staging_script)
             config = configuration(package["files"]["assets/service/mybot-rv1126b.conf"], settings)
             deployment = f"base={DEVICE_ROOT}\ntag={shlex.quote(tag)}\nbackup=\"$base/backups/$tag\"\n"
@@ -533,10 +764,13 @@ install_file "$backup/service.conf.new" /etc/mybot-rv1126b.conf 600
         else:
             rollback_script = f"base={DEVICE_ROOT}\ntag={shlex.quote(tag)}\n"
             rollback_script += identity_check(settings)
+            rollback_script += rollback_release_check(rollback_target, settings)
             rollback_script += f"{SERVICE} stop >/dev/null 2>&1 || exit 80\n"
-            rollback_script += f"(cd {shlex.quote(DEVICE_ROOT + '/releases/' + rollback_target)} && sha256sum -c SHA256SUMS >/dev/null) || exit 81\n"
             rollback_script += switch_release(rollback_target, None, args.start)
             output += adb.shell(rollback_script)
+        if args.start:
+            selected = package["name"] if args.action == "deploy" else rollback_target
+            print(wait_for_application(adb, selected, settings.get("video", False)).strip())
         adb.shell("rmdir /run/mybot-deploy.lock\n")
         values = {"tag": tag, "backup": DEVICE_ROOT + "/backups/" + tag,
                   "package_sha256": package["sha256"] if package else None,

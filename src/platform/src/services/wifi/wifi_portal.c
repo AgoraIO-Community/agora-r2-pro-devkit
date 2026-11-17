@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #define _POSIX_C_SOURCE 200809L
 #include "wifi_portal.h"
-#include "portal_page.h"
+#include "wifi_portal_page.h"
 
 #include <arpa/inet.h>
 #include <errno.h>
@@ -562,6 +562,26 @@ static bool authorized(const socket_portal_t *portal, const request_t *request) 
            strcmp(trim(media), "application/json") == 0;
 }
 
+/* HTTP exposes only fixed classifications, never backend diagnostics. */
+static const char *error_code_name(wifi_portal_error_t code) {
+    switch (code) {
+    case WIFI_PORTAL_ERROR_NONE:
+        return "none";
+    case WIFI_PORTAL_ERROR_CONNECT:
+        return "connect";
+    case WIFI_PORTAL_ERROR_SAVE:
+        return "save";
+    case WIFI_PORTAL_ERROR_COMMIT:
+        return "commit";
+    case WIFI_PORTAL_ERROR_AP:
+        return "ap";
+    case WIFI_PORTAL_ERROR_SAVED_UPDATE:
+        return "saved_update";
+    default:
+        return "unknown";
+    }
+}
+
 static bool route_get(socket_portal_t *portal, int fd, const request_t *request) {
     if (request->content_length) {
         reject(portal, fd, 400);
@@ -619,6 +639,8 @@ static bool route_get(socket_portal_t *portal, int fd, const request_t *request)
         status.state[sizeof(status.state) - 1] = status.ssid[sizeof(status.ssid) - 1] = 0;
         ok = wifi_buffer_text(&body, "{\"state\":") && json_string(&body, status.state) &&
              wifi_buffer_text(&body, ",\"ssid\":") && json_string(&body, status.ssid) &&
+             wifi_buffer_text(&body, ",\"error_code\":") &&
+             json_string(&body, error_code_name(status.error_code)) &&
              wifi_buffer_printf(&body, ",\"concurrent\":%s,\"busy\":%s}",
                                 status.concurrent ? "true" : "false",
                                 status.busy ? "true" : "false");
