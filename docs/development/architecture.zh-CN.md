@@ -24,7 +24,7 @@
 
 ```mermaid
 flowchart TD
-    app[application: config / identity / guard / lifecycle] --> platform[platform module]
+    app[application: main / controller / config / identity / guard] --> platform[platform module]
     app --> sdk[MyBot public API]
     platform --> sdk
     platform --> display[Linux display worker / DRM]
@@ -40,13 +40,16 @@ flowchart TD
 
 | 位置 | 职责 / 资源 |
 | --- | --- |
-| `src/application/main.c` | 组织启动、信号/定时退出与统一清理，保持 SDK/UI 关闭顺序 |
+| `src/application/main.c` | 配置和稳定身份装配、信号、运行锁、环境/私有存储准备及最终退出码 |
+| `src/application/controller.*` | 单一产品生命周期 owner，串行处理网络/授时门槛、SDK/配网切换、提示音、设置关机及服务回收 |
+| `src/application/service_status.*` | 类型化应用状态与稳定 wire 名称映射，原子发布私有 `application.status` |
 | `src/application/config.*` | 环境/CLI 解析、范围校验和覆盖优先级；help/version 不触发运行资源 |
 | `src/application/runtime_guard.*` | 旧服务/单实例互斥、私有存储准备与锁生命周期 |
 | `src/application/device_identity.*` | CPU Serial / 永久 MAC 的稳定身份派生 |
 | `src/platform/boards/rv1126b-test2-rk805b-v10/` | 唯一已记录板型的屏幕、旋转、ALSA、输入和相机默认值 |
 | `src/platform/src/drivers/` | ALSA、evdev、DRM、像素旋转及可选视频硬件边界 |
 | `src/platform/src/services/` | 网络监测、显示 worker 等 Linux 服务 |
+| `src/platform/src/services/network_route.*` | 共用只读 IPv4 地址/默认路由检查；不接管关联、DHCP 或恢复策略 |
 | `src/platform/src/services/audio_volume.c` | 输出音量状态、私有持久化和 MyBot 设备音量适配；播放驱动在写入 ALSA 前应用一次增益 |
 | `src/platform/src/services/audio_prompt.c` | SDK 停机期间的独立 PCM 播放 worker、取消和声卡回收；不接管业务会话 |
 | `src/platform/src/services/time_sync.c` | 网络就绪后的时间合理性检查、单调超时、既有服务检测及可选自有 helper 生命周期 |
@@ -66,9 +69,13 @@ UI 通过 present 回调交付画布，不依赖 DRM、ALSA、MPP 或 pthread。
 
 ## 生命周期契约
 
-启动先解析并验证配置，再取得互斥、准备私有存储，启动显示与平台，最后接入 SDK 生命周期。失败走对应清理路径；已获得的线程/回调资源在销毁前等待完成。输入发送 SDK 控制动作或设置页配网请求，不拥有会话状态。手动配网仅由设置页“设备配网”触发；触屏和 Menu 长按不发布配网或会话事件，终端没有配网命令。应用主循环先关闭 SDK，再请求 Wi-Fi 服务进入 AP；UI 通过有界快照显示热点、地址与连接进度。
+main 先解析配置和稳定身份、取得互斥并准备环境/私有存储，再交由 controller 持有显示、输入、音量、授时、Wi-Fi、提示音和 SDK 的完整启停。失败走对应清理路径；已获得的线程/回调资源在销毁前等待完成。输入发送 SDK 控制动作或设置页配网请求，不拥有会话状态。手动配网仅由设置页“设备配网”触发；触屏和 Menu 长按不发布配网或会话事件，终端没有配网命令。controller 先关闭 SDK，再请求 Wi-Fi 服务进入 AP；UI 通过有界快照显示热点、地址与连接进度。
 
 显示 worker 在自身执行上下文调用 LVGL；renderer 接收有界状态副本。DRM backend 拥有 fd、buffers 和原显示状态，失败/正常退出时释放并恢复已保存的原输出。音频采集与播放维持各自生命周期，不能释放仍被回调使用的对象。视频初始化与启动分开，停止后不继续提交借用帧。
+
+视频 worker 的可 join 句柄与启动、运行、重试、失败和退出状态分别记录。初始化或采集/编码失败时，先回收自有 pipeline，再在同一会话内重试，总计最多三次；两次退避使用单调时间的 250/500 ms 等待，停止请求会立即唤醒退避。清理失败保留资源并停止重试，SDK 停止时先 join 再尝试回收。耗尽重试或清理失败经线程安全的平台健康查询回传应用，应用有序停止 SDK 并以失败退出，由现有监督器处理重启/退避；这一步会中断当前语音会话。普通错误期间的前两次恢复保留会话。
+
+公开 SDK 的 start 接口及时接受异步启动，不同步调用帧 handler；不能把“等待超时但 worker 仍存活”伪装成 start 失败后允许销毁。初始化结果由 worker 状态发布，线程创建失败同步报告且不留下可 join 资源。现有 MPP 超时和采集轮询保持有效；不可返回的内核/MPP 调用没有被承诺为可取消或有界退出。停止会等待在途帧 handler，只有成功停止后才销毁上下文。
 
 平台音量服务通过 `mybot_platform/volume.h` 在 SDK 初始化前恢复保存值，并通过 MyBot 公共设备音量接口接入按键、终端和 RTM 控制。SDK 不再重复缩放输出，平台播放驱动在写入 ALSA 前对副本应用一次增益；原始 PCM、采集路径和系统 mixer 不变。云端 AEC 参考音频保留设备音量之前的信号，符合设备音量的接口语义，实际回声消除效果仍需真机回归。音量服务不随 SDK 停启销毁，因此手动配网不会重置音量。设置采用私有的 `MYBOT_KV_STORE_DIR/volume.settings`（0600）原子保存，只有持久化成功才发布新增益。
 
@@ -78,9 +85,15 @@ AP 提示音由产品生命周期通过 `mybot_platform/prompt.h` 触发，只�
 
 原厂 `botstation-device` 和本应用共享硬件；进程检查与锁共同阻止并行占用。设备现有 ISP、时间及外部网络管理服务不归本应用销毁。Wi-Fi 后端只停止本应用创建的子进程/虚拟接口，已附着的外部 supplicant 不被全局停止。`/userdata/mybot-rv1126b` 保留绑定凭据，与版本解包目录分离。
 
+应用状态由 `rv1126b_app_state_t` 及一个 wire 名称表发布；它描述本进程的产品阶段，不复制 SDK 会话状态机，也不代表监督器状态。时钟展示采用 `mybot_display_clock_state_t`，避免跨模块传递含义分散的整数。现有状态文件字符串保持兼容。
+
+网络观察器、Wi-Fi 控制服务及 Linux 后端共用 `network_route` 的基础地址/路由检查。后端额外排除本应用热点地址 `192.168.4.1`，关联状态、选定 profile、新租约代次和路由 fingerprint 继续由 Wi-Fi 后端核验，不能用通用“路由可用”替代凭据提交条件。SDK 网络观察器只产生连接事件，controller 持有产品恢复/SDK 停机策略。
+
 ## Wi-Fi 配网边界
 
 Wi-Fi 模块由 C99 实现，`mybot_platform/wifi.h` 提供公共 C 接口；内部使用上下文结构体与操作函数表注入后端和门户，pthread 管理线程、互斥与条件等待。控制器串行执行扫描、连接、保存及 AP 切换。HTTP/DNS 各有独立 socket worker，处理线程只读取缓存快照或排队操作，连接尝试有总预算并支持取消。候选网络获得可用 IPv4 和路由后才更新私有凭据；SDK 在配网退出、网络就绪后恢复启动。
+
+热点名保持 `mybot-xxxx` 共 10 字符。后端要求所选 STA 的 `addr_assign_type` 为 0，并校验完整六字节单播 MAC；对固定命名空间 `mybot:RV1126B:ap-ssid:v1:` 紧接六个二进制 MAC 字节计算 SHA-256，取摘要前两字节输出四位小写十六进制。文本大小写与末尾换行不影响结果；永久地址无法确认或格式无效时失败，不使用随机回退。该后缀只用于辨认屏幕上的热点，不保证全局唯一，也不用于认证或设备身份。
 
 优先创建独立 AP 虚拟接口并保留 STA；单接口回退只接管本应用拥有的 STA，无法安全接管时明确报错。门户绑定 AP 地址，原生提供 HTTP 80 和 captive DNS 53；dnsmasq 只提供 DHCP，不与 DNS worker 争用 53 端口。HTTP 写操作要求同源 Origin、Host 和每次启动更新的 CSRF token，解析限制为 1 KiB header 与 1 KiB body；SSID/密码不进入 URL 或日志，页面使用 `textContent` 显示动态网络名称。DNS 不转发到外部服务器。
 

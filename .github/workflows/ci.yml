@@ -40,8 +40,8 @@ jobs:
           else
             range="$HEAD_SHA^!"
           fi
-          git log --no-merges --format='%s' "$range" | while IFS= read -r subject; do
-            printf '%s\n' "$subject" | ./githooks/commit-msg --subject-only
+          git rev-list --no-merges "$range" | while IFS= read -r revision; do
+            git show -s --format=%B "$revision" | ./githooks/commit-msg --stdin
           done
   host:
     runs-on: ubuntu-24.04
@@ -64,6 +64,20 @@ jobs:
         with:
           name: ${{ matrix.preset }}-test-log
           path: build/${{ matrix.preset }}/Testing/Temporary/LastTest.log
+  manual:
+    runs-on: ubuntu-24.04
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update && sudo apt-get install -y build-essential cmake pkg-config libssl-dev
+      - run: python -m pip install -r scripts/requirements-manual.txt
+      - run: cmake --preset host-zh -DRV1126B_BUILD_TESTS=OFF
+      - run: cmake --preset host-en -DRV1126B_BUILD_TESTS=OFF
+      - run: python scripts/check-device-manual.py --reproduce
   target:
     if: github.event_name == 'workflow_dispatch' && inputs.target_build
     runs-on: [self-hosted, rv1126b-sdk]

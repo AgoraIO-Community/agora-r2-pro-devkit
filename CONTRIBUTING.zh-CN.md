@@ -58,4 +58,12 @@ git diff --check
 ./scripts/setup-githooks.sh
 ```
 
+本地 hook 与 CI 使用同一规则检查完整消息。带 `!` 的标题必须包含一个独立且
+说明非空的 `BREAKING CHANGE:` footer；该 footer 也必须对应标题中的 `!`。
+可用以下命令检查已有完整消息：
+
+```sh
+git show -s --format=%B HEAD | ./githooks/commit-msg --stdin
+```
+
 PR 描述问题、最终行为、兼容性、实际检查及剩余硬件验证。贡献默认适用 [LICENSE](LICENSE)，具体文件的其他兼容许可优先。

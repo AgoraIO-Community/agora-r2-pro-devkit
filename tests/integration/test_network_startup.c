@@ -187,6 +187,14 @@ static void acknowledgement_guards(void) {
     CHECK(rv1126b_network_gate_poll(&gate, true, true, false, 0, &status) ==
           RV1126B_NETWORK_GATE_RECOVER);
     gate = (rv1126b_network_gate_t){0};
+    status.state = RV1126B_WIFI_ERROR;
+    CHECK(rv1126b_network_gate_poll(&gate, true, true, false, 1, &status) ==
+          RV1126B_NETWORK_GATE_WAIT);
+    CHECK(rv1126b_network_gate_poll(&gate, true, true, false, 0, &status) ==
+          RV1126B_NETWORK_GATE_WAIT);
+    CHECK(!gate.recovery_requested);
+    CHECK(rv1126b_network_gate_poll(&gate, true, false, false, 1, &status) ==
+          RV1126B_NETWORK_GATE_READY);
     CHECK(rv1126b_network_gate_poll(&gate, false, false, false, 1, &status) ==
           RV1126B_NETWORK_GATE_READY);
     CHECK(!gate.recovery_requested);

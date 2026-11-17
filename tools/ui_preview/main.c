@@ -48,9 +48,86 @@ static int save(const char *directory, const char *name, unsigned rotation) {
     return failed ? -1 : 0;
 }
 
+typedef struct {
+    const char *name;
+    mybot_lcd_screen_t screen;
+    const char *state;
+    const char *ssid;
+    mybot_display_clock_state_t clock;
+    uint32_t indicators;
+    mybot_settings_page_t settings;
+} manual_scene_t;
+
+static int render_manual(const char *directory) {
+    /* Synthetic examples only: no device identities, credentials or events. */
+    static const manual_scene_t scenes[] = {
+        {"starting", MYBOT_LCD_SCREEN_STARTING, "starting", NULL, MYBOT_DISPLAY_CLOCK_INACTIVE, 0,
+         MYBOT_SETTINGS_CLOSED},
+        {"waiting-network", MYBOT_LCD_SCREEN_WIFI_PROVISIONING, "waiting_network", NULL,
+         MYBOT_DISPLAY_CLOCK_INACTIVE, 0, MYBOT_SETTINGS_CLOSED},
+        {"connecting-services", MYBOT_LCD_SCREEN_STARTING_SERVICES, "starting_services", NULL,
+         MYBOT_DISPLAY_CLOCK_INACTIVE, 0, MYBOT_SETTINGS_CLOSED},
+        {"ready", MYBOT_LCD_SCREEN_READY, "ready", NULL, MYBOT_DISPLAY_CLOCK_INACTIVE, 0,
+         MYBOT_SETTINGS_CLOSED},
+        {"ap-hotspot", MYBOT_LCD_SCREEN_WIFI_PROVISIONING, "waiting_network", "mybot-a1b2",
+         MYBOT_DISPLAY_CLOCK_INACTIVE, 0, MYBOT_SETTINGS_CLOSED},
+        {"pairing-wait", MYBOT_LCD_SCREEN_PAIRING, "pairing", NULL, MYBOT_DISPLAY_CLOCK_INACTIVE, 0,
+         MYBOT_SETTINGS_CLOSED},
+        {"pairing-code", MYBOT_LCD_SCREEN_PAIR_CODE, "pairing", NULL, MYBOT_DISPLAY_CLOCK_INACTIVE,
+         0, MYBOT_SETTINGS_CLOSED},
+        {"conversation-listening", MYBOT_LCD_SCREEN_IN_CONVERSATION, "in_conversation", NULL,
+         MYBOT_DISPLAY_CLOCK_INACTIVE, MYBOT_LCD_INDICATOR_LISTENING, MYBOT_SETTINGS_CLOSED},
+        {"conversation-thinking", MYBOT_LCD_SCREEN_IN_CONVERSATION, "in_conversation", NULL,
+         MYBOT_DISPLAY_CLOCK_INACTIVE, MYBOT_LCD_INDICATOR_THINKING, MYBOT_SETTINGS_CLOSED},
+        {"conversation-speaking", MYBOT_LCD_SCREEN_IN_CONVERSATION, "in_conversation", NULL,
+         MYBOT_DISPLAY_CLOCK_INACTIVE, MYBOT_LCD_INDICATOR_SPEAKING, MYBOT_SETTINGS_CLOSED},
+        {"settings-menu", MYBOT_LCD_SCREEN_READY, "ready", NULL, MYBOT_DISPLAY_CLOCK_INACTIVE, 0,
+         MYBOT_SETTINGS_MENU},
+        {"settings-confirm", MYBOT_LCD_SCREEN_READY, "ready", NULL, MYBOT_DISPLAY_CLOCK_INACTIVE, 0,
+         MYBOT_SETTINGS_CONFIRM_POWEROFF},
+        {"settings-powering-off", MYBOT_LCD_SCREEN_READY, "ready", NULL,
+         MYBOT_DISPLAY_CLOCK_INACTIVE, 0, MYBOT_SETTINGS_POWERING_OFF},
+        {"settings-error", MYBOT_LCD_SCREEN_READY, "ready", NULL, MYBOT_DISPLAY_CLOCK_INACTIVE, 0,
+         MYBOT_SETTINGS_POWEROFF_ERROR},
+        {"clock-error", MYBOT_LCD_SCREEN_STARTING_SERVICES, "starting_services", NULL,
+         MYBOT_DISPLAY_CLOCK_FAILED, 0, MYBOT_SETTINGS_CLOSED},
+    };
+    for (size_t i = 0; i < sizeof(scenes) / sizeof(scenes[0]); ++i) {
+        const manual_scene_t *scene = &scenes[i];
+        if (rv1126b_renderer_create(NULL, NULL, 1) < 0)
+            return 1;
+        mybot_display_runtime_status_t status = {0};
+        mybot_lcd_content_t content = {scene->screen, "000042", scene->indicators};
+        snprintf(status.state, sizeof(status.state), "%s", scene->state);
+        if (scene->ssid)
+            snprintf(status.provisioning_ssid, sizeof(status.provisioning_ssid), "%s", scene->ssid);
+        status.in_conversation = scene->screen == MYBOT_LCD_SCREEN_IN_CONVERSATION;
+        status.clock_state = scene->clock;
+        rv1126b_renderer_update(&content, &status, 100);
+        rv1126b_renderer_settings(scene->settings);
+        for (uint32_t now = 400; now <= 1600; now += 300)
+            rv1126b_renderer_step(now);
+        const int failed = save(directory, scene->name, 0) < 0;
+        rv1126b_renderer_destroy();
+        if (failed) {
+            perror("manual preview");
+            return 1;
+        }
+    }
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+    const char *language = "zh-CN";
+#else
+    const char *language = "en-US";
+#endif
+    printf("Rendered 15 manual scenes; language=%s; output=%s\n", language, directory);
+    return 0;
+}
+
 int main(int argc, char **argv) {
+    if (argc == 3 && !strcmp(argv[1], "--manual"))
+        return render_manual(argv[2]);
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s EXISTING_OUTPUT_DIRECTORY\n", argv[0]);
+        fprintf(stderr, "Usage: %s [--manual] EXISTING_OUTPUT_DIRECTORY\n", argv[0]);
         return 2;
     }
     if (rv1126b_renderer_create(NULL, NULL, 1) < 0)

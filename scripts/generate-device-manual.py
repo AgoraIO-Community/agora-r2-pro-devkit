@@ -2,26 +2,25 @@
 # SPDX-License-Identifier: Apache-2.0
 """Render a maintained operations manual and its matching UI images into an A4 PDF.
 
-Install scripts/requirements-manual.txt in an isolated environment. On Ubuntu,
-install fonts-wqy-zenhei or supply --font and --bold-font TrueType files.
+Install scripts/requirements-manual.txt in an isolated environment. Canonical
+generation uses the committed, redistributable fonts on every host.
 Screenshots live with the Markdown source and are embedded in the output PDF.
 This tool never builds, deploys, or connects to a device.
 """
 
 import argparse
-from datetime import datetime
 from html import escape
 from pathlib import Path
 import re
-import subprocess
+import json
 import tempfile
-from zoneinfo import ZoneInfo
 
 from reportlab import rl_config
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (Image, PageBreak, Paragraph,
@@ -41,7 +40,7 @@ LANGUAGES = {
         'platform': 'Ubuntu 24.04  ·  AArch64 Buildroot  ·  中文操作指南',
         'workflow': '构建  →  打包  →  部署  →  配网  →  使用',
         'hardware': '适用板卡  RV1126B TEST2 RK805B V10',
-        'baseline': '应用基线  {version} / {revision}    文档日期  {date}',
+        'baseline': '应用基线  {version} / {baseline}    文档日期  {date}',
         'illustrations': '内含当前 UI 渲染示意图；热点、配对码为示例。',
         'header': 'MYBOT · RV1126B 设备操作手册',
         'footer': '操作步骤 / ',
@@ -61,7 +60,7 @@ LANGUAGES = {
         'platform': 'Ubuntu 24.04  ·  AArch64 Buildroot  ·  English edition',
         'workflow': 'Build  →  Package  →  Deploy  →  Connect  →  Talk',
         'hardware': 'Hardware  RV1126B TEST2 RK805B V10',
-        'baseline': 'Application  {version} / {revision}    Document date  {date}',
+        'baseline': 'Application  {version} / {baseline}    Document date  {date}',
         'illustrations': 'Includes current UI renderings with sample hotspot names and pairing codes.',
         'header': 'MYBOT · RV1126B Device Operations Manual',
         'footer': 'Operating steps / ',
@@ -90,40 +89,29 @@ def inline(text):
 
 
 def find_fonts(args):
-    if args.font:
-        regular = (args.font, args.font_index)
-    elif args.language == 'en-US':
-        latin = Path('/System/Library/Fonts/Supplemental/Arial.ttf')
-        if not latin.is_file():
-            latin = Path('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf')
-        regular = (latin, 0)
-    elif Path('/System/Library/Fonts/STHeiti Light.ttc').is_file():
-        regular = (Path('/System/Library/Fonts/STHeiti Light.ttc'), 1)
-    else:
-        regular = (Path('/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc'), 0)
-    if args.bold_font:
-        bold = (args.bold_font, args.bold_index)
-    elif args.language == 'en-US' and not args.font:
-        latin = Path('/System/Library/Fonts/Supplemental/Arial Bold.ttf')
-        if not latin.is_file():
-            latin = Path('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf')
-        bold = (latin, 0)
-    elif Path('/System/Library/Fonts/STHeiti Medium.ttc').is_file() and not args.font:
-        bold = (Path('/System/Library/Fonts/STHeiti Medium.ttc'), 1)
-    else:
-        bold = regular
+    fonts = ROOT / 'docs/user/assets/fonts'
+    regular = (args.font or fonts / 'MyBotManualSans.ttf', args.font_index)
+    bold = (args.bold_font, args.bold_index) if args.bold_font else regular
     for name, (path, index) in (('CJK', regular), ('CJK-Bold', bold)):
         if not path.is_file():
-            raise ValueError('Missing TrueType font; supply --font, or install '
-                             'fonts-wqy-zenhei (Chinese) / fonts-dejavu-core (English)')
+            raise ValueError('Missing committed manual font: ' + str(path))
         pdfmetrics.registerFont(TTFont(name, str(path), subfontIndex=index))
     pdfmetrics.registerFontFamily('CJK', normal='CJK', bold='CJK-Bold',
                                  italic='CJK', boldItalic='CJK-Bold')
-    mono = ROOT / 'local/fonts/DejaVuSansMono-Bold.ttf'
-    if mono.is_file():
-        pdfmetrics.registerFont(TTFont('Mono', str(mono)))
-    else:
-        pdfmetrics.registerFont(TTFont('Mono', str(regular[0]), subfontIndex=regular[1]))
+    mono = fonts / 'DejaVuSansMono-Bold.ttf'
+    if not mono.is_file():
+        raise ValueError('Missing committed monospace manual font: ' + str(mono))
+    pdfmetrics.registerFont(TTFont('Mono', str(mono)))
+
+
+def check_glyphs(source, language):
+    text = LANGUAGES[language]
+    required = set(source.read_text(encoding='utf-8') + ''.join(value for value in text.values() if isinstance(value, str)))
+    available = pdfmetrics.getFont('CJK').face.charToGlyph
+    missing = sorted(ord(char) for char in required if ord(char) >= 32 and ord(char) not in available)
+    if missing:
+        raise ValueError('Manual font lacks glyphs; run scripts/generate-manual-font.py: ' +
+                         ', '.join(f'U+{point:04X}' for point in missing))
 
 
 def styles(language):
@@ -277,7 +265,7 @@ class Manual(SimpleDocTemplate):
                 self.canv.addOutlineEntry(text, key, level=0)
 
 
-def draw_cover(canvas, version, revision, date, hero, text):
+def draw_cover(canvas, version, baseline, date, hero, text):
     canvas.setFillColor(INK)
     canvas.rect(0, 0, PAGE_WIDTH, PAGE_HEIGHT, fill=1, stroke=0)
     canvas.setFillColor(colors.HexColor('#8EDAD3'))
@@ -298,26 +286,25 @@ def draw_cover(canvas, version, revision, date, hero, text):
     canvas.setFillColor(colors.HexColor('#263F4E'))
     canvas.roundRect(image_x - 8, image_y - 8, image_width + 16, image_height + 16,
                      12, fill=1, stroke=0)
-    canvas.drawImage(str(hero), image_x, image_y, image_width, image_height)
+    canvas.drawImage(ImageReader(str(hero)), image_x, image_y, image_width, image_height)
     canvas.setFillColor(colors.HexColor('#8EDAD3'))
     canvas.setFont('CJK', 12)
     canvas.drawCentredString(PAGE_WIDTH / 2, 205, text['workflow'])
     canvas.setFillColor(colors.HexColor('#B8D1DB'))
     canvas.setFont('CJK', 9.5)
     canvas.drawString(46, 116, text['hardware'])
-    canvas.drawString(46, 94, text['baseline'].format(version=version, revision=revision, date=date))
+    canvas.drawString(46, 94, text['baseline'].format(version=version, baseline=baseline, date=date))
     canvas.setFont('CJK', 8.3)
     canvas.drawString(46, 62, text['illustrations'])
 
 
-def render(source, output, date, language):
+def render(source, output, date, language, baseline):
     text = LANGUAGES[language]
     chapters = sections(source)
     titles = [title for title, _ in chapters]
     version = re.search(r'project\(mybot_rv1126b\s+VERSION\s+([\d.]+)',
                         (ROOT / 'CMakeLists.txt').read_text()).group(1)
-    revision = subprocess.check_output(['git', 'rev-parse', '--short=7', 'HEAD'],
-                                       cwd=ROOT, text=True).strip()
+    check_glyphs(source, language)
     sheet = styles(language)
     total = len(chapters) + 2
     hero = source.parent / 'assets' / text['images'] / 'ready.png'
@@ -325,7 +312,7 @@ def render(source, output, date, language):
     def page_frame(canvas, doc):
         canvas.saveState()
         if doc.page == 1:
-            draw_cover(canvas, version, revision, date, hero, text)
+            draw_cover(canvas, version, baseline, date, hero, text)
         else:
             canvas.setStrokeColor(LINE)
             canvas.setLineWidth(0.6)
@@ -376,7 +363,7 @@ def render(source, output, date, language):
             raise ValueError(f'Manual layout overflow: expected {total} pages, got {doc.last_page}')
         output.write_bytes(draft.read_bytes())
     print(f'Generated {output.relative_to(ROOT) if output.is_relative_to(ROOT) else output}: '
-          f'{total} pages, version {version}, revision {revision}')
+          f'{total} pages, version {version}, baseline {baseline}')
 
 
 def main():
@@ -388,14 +375,21 @@ def main():
     parser.add_argument('--font-index', type=int, default=0, help='TTC subfont index')
     parser.add_argument('--bold-font', type=Path, help='Optional bold TrueType/TTC')
     parser.add_argument('--bold-index', type=int, default=0)
-    parser.add_argument('--date', default=datetime.now(ZoneInfo('Asia/Shanghai')).strftime('%Y-%m-%d'))
+    parser.add_argument('--date', help='document date; default: committed manual manifest')
+    parser.add_argument('--baseline', help='content baseline; default: committed UI source digest')
     args = parser.parse_args()
     rl_config.invariant = 1
     try:
+        manifest_path = ROOT / 'docs/user/assets/manual-manifest.json'
+        manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
+        date = args.date or manifest.get('document_date')
+        baseline = args.baseline or ('ui-' + manifest.get('ui_source_sha256', '')[:12])
+        if not date or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', date) or baseline == 'ui-':
+            raise ValueError('Provide --date and --baseline, or refresh the committed manual manifest')
         find_fonts(args)
         language = LANGUAGES[args.language]
         render((args.source or language['source']).resolve(),
-               (args.output or language['output']).resolve(), args.date, args.language)
+               (args.output or language['output']).resolve(), date, args.language, baseline)
     except (OSError, ValueError) as error:
         parser.error(str(error))
 

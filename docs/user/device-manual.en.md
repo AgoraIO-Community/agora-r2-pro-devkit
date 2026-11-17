@@ -282,7 +282,7 @@ adb -s "$serial" shell /userdata/mybot/current/run.sh --version
 
 Expected: the service runs with the installed version. An online, bound device eventually reaches `ready`; a new device may show `ap`, `waiting_network` or `pairing`. Follow the next sections.
 
-Deployment status and `S99mybot status` report release links and process supervision. Check `state` in `application.status` and the screen for application readiness. Do not start a second `run.sh` instance.
+Deployment status separates supervision from the verified application version, PID, state and local health. `S99mybot status` only describes supervision. `degraded` can mean offline, setup or pairing; it does not establish cloud readiness. Do not start a second `run.sh` instance.
 
 <!-- page -->
 
@@ -309,7 +309,7 @@ The top-right gear opens settings, including during network setup and first pair
 ![Settings: choose Wi-Fi setup; Back is at top left](assets/device-manual-en/settings-menu.png)
 ![Wi-Fi setup: use the hotspot shown on your device](assets/device-manual-en/ap-hotspot.png)
 
-2. In your phone's Wi-Fi settings, join the displayed `mybot-xxxx` hotspot. It has no password. Choose to stay connected if the phone reports no internet.
+2. In your phone's Wi-Fi settings, join the displayed `mybot-xxxx` hotspot. Its four-character suffix comes from a digest of the full permanent MAC; collisions are possible, so use the name on the screen. It has no password; choose to stay connected if there is no internet.
 3. Wait for the setup page to open. If it does not, browse to `http://192.168.4.1/` using HTTP.
 4. Select a 2.4 GHz network and enter its password. Enter hidden network names manually; leave the password blank for an open network.
 5. Tap Connect and wait. System mode also verifies association, lease and routing, so “Connecting” may remain visible.

@@ -4,31 +4,29 @@
 
 MyBot、AOSL、LVGL、RTSA 分别位于 `vendor/mybot/`、`vendor/aosl/`、`vendor/lvgl/`、`vendor/rtsa/`，各自拥有独立依赖快照。RTSA 是工程必需依赖，完整保留官方包。MyBot 通过父工程设置的 `AOSL_DIR` 引用平级 AOSL，只创建一个 `aosl` target。视图和生成字库属于 `src/ui/` 的项目管理资源，不作为第三方源码依赖。目录范围及不可删除的构建输入见[第三方目录规则](third-party-layout.zh-CN.md)。
 
-## 清单职责
+## 当前清单与历史档案
 
 | 记录 | 作用 |
 | --- | --- |
-| `dependencies.lock.json` | 独立依赖快照、项目管理资源、版本/身份、结果哈希、路径映射、显式省略与必需输入 |
-| `docs/dependencies/imported-sources.json` | 原始导入时的历史路径及哈希；不能当作当前工作树哈希直接比较 |
-| `docs/dependencies/patches/` | 有意保留的本地上游修补 |
-| `docs/dependencies/RTSA_SOURCE.txt` | 内置完整 RTSA 包的官方归档、目标库身份、固定路径、配置和厂商条款边界 |
+| `dependencies.lock.json`，schema 2 | 当前四项 vendor 快照、补丁、字库、许可、必需输入和外部运行库身份 |
+| `docs/history/dependencies-lock-v1.json` | 最后一个 schema 1 清单的原始字节，保留此前目录迁移、适配和省略记录 |
+| `docs/dependencies/imported-sources.json` | 原始导入记录；字节不变，不按其中的旧路径检查当前源码 |
+| `docs/dependencies/patches/` | 上游本地修补及其原始输入、补丁和当前结果身份 |
 | `src/ui/fonts/sources.json` | 字体输入、字符集、生成工具版本与输出身份 |
+
+活动 lock 通过 `history` 中的路径和 SHA256 固定两份历史档案，只校验档案身份，不将历史映射作为当前源码约束。应用与平台的正常维护不再需要更新历史导入记录。生成字库及适用许可仍有当前资源记录；自有 UI 视图源码不再另行冻结。
 
 ```sh
 python3 scripts/check-dependencies.py
 ```
 
-该检查验证已登记的快照、迁移/裁剪结果和生成资源。依赖快照目录互不重叠，每个第三方文件有唯一归属，`vendor_root` 内未登记文件会失败。历史导入记录保持原样，旧路径通过当前锁中的映射或显式省略解释；已应用补丁的文件应等于登记的修补结果，不能要求其回到原始导入哈希。省略项必须记录原始哈希、先前目标路径和理由，且这些位置不能残留文件。许可、补丁和 `required_inputs` 中的构建输入受保护，不能作为普通裁剪项。
+该检查离线验证当前目录与哈希、快照唯一归属、补丁结果、生成资源、许可和必需输入。`vendor_root` 中存在未登记文件或目录会失败。路径不能越界、含歧义或通过符号链接引用输入。完整 RTSA 另按官方包内清单核对，不能以重写普通文件列表接受裁剪。
 
 ## 更新流程
 
-先选择准确的源版本或归档，核对官方来源、SHA256 与实际许可证；记录导入范围及原有本地修改。将可复用的修补保存为有序补丁，确认补丁适用于新的上游输入。分别更新当前内容哈希、来源记录和许可，不把原始导入历史改写成新基线。
+先核对准确的上游版本、官方来源、实际许可证和完整构建/头文件闭包，再修改依赖。更新当前来源、revision、范围、补丁及哈希时应解释原因；不要改写历史档案。新增依赖先登记名称、来源、revision、目录和范围，再显式选择该快照；目录调整直接审查当前路径差异，不维护新的历史映射链。
 
-变更 SDK 时验证公共 API 兼容、音频 20 ms 契约、Linux adapters 和 RTSA exports；变更 LVGL 时保留 mask callback 类型修补或确认上游已包含等价修复。执行依赖检查、双语/UBSan、受影响目标构建和预览。说明新增许可或分发条件，更新验证矩阵；不得由版本号推断设备已通过。
-
-[LVGL 集成说明](../dependencies/lvgl.md)与像素眼镜来源说明记录集成范围与适用许可，当前 Linux 构建以本目录和现行架构指南为准。`imported-sources.json` 内历史 `local_patches` 路径属于原始记录，补丁现位于 `docs/dependencies/patches/`。
-
-更新结果哈希使用仓库维护脚本，先预览再写入：
+正常自有源码更新无需刷新依赖锁。重新生成字库后可预览：
 
 ```sh
 python3 scripts/update-dependencies-lock.py
@@ -36,26 +34,33 @@ python3 scripts/update-dependencies-lock.py --write
 python3 scripts/check-dependencies.py
 ```
 
-更新器保留原始哈希及适配理由，拒绝历史清单被改写。新增或改变布局时使用以下参数；更新已有哈希不需要再次提供身份参数：
+更新器默认只刷新生成字库。vendor 内容改变时必须显式指定快照；补丁或结果、许可文字、必需输入改变时有独立选择项。参数路径均相对于仓库根目录：
 
 | 参数 | 用途 |
 | --- | --- |
-| `--map ORIGINAL=CURRENT` 与 `--reason ORIGINAL=说明` | 登记单文件迁移或新适配 |
-| `--map-prefix OLD=NEW` 与 `--reason-prefix OLD=说明` | 将目录移动展开成逐文件映射，拒绝重复、重叠和循环规则 |
-| `--relocate-prefix OLD_DIRECTORY=NEW_DIRECTORY` 与 `--relocation-reason OLD_DIRECTORY=说明` | 整体迁移当前锁中的目录路径，覆盖独立快照、资源、补丁与必需输入，同时核对快照字节不变 |
-| `--omit ORIGINAL=理由` | 为已经审查并删除的历史输入登记省略，保留原始 SHA256 与此前目标位置 |
-| `--add-snapshot NAME=DIR`、`--revision NAME=HASH`、`--source NAME=URL` | 登记独立的第三方依赖快照及准确来源 |
-| `--managed-asset NAME=DIR` | 登记项目管理资源分组 |
-| `--required-input PATH`、`--license PATH` | 固定构建必需输入或保留许可，保护其不被裁剪 |
-| `--vendor-root vendor` | 要求第三方根目录仅含 README 与已登记的直接依赖目录 |
+| `--snapshot NAME` | 接受已经核对的普通 vendor 快照内容；不刷新完整官方包 |
+| `--patch PATH` | 接受已审查的补丁及结果，不修改登记的原始上游哈希 |
+| `--license PATH` | 接受或新增已核对的保留许可身份 |
+| `--required-input PATH` | 接受或新增已经确认的构建必需输入身份 |
+| `--write` | 原子写入；默认仅预览 |
+| `--json` | 输出结构化变化，便于自动检查 |
 
-同一变更先执行不带 `--write` 的预览，核对每项变化，再以相同参数加 `--write` 写入。映射和省略不能同时作用于同一个历史输入。先平移再裁剪时，先登记完整移动，再逐文件登记删除；省略记录会替代该文件的适配记录，历史原路径和此前目标均不能残留。移动到 `docs/dependencies/` 的集成文档仍是映射保留，不登记为省略。
+例如核对过的 LVGL 修补变更，先预览，再用相同参数写入：
 
-`--relocate-prefix` 用于整体目录重构，物理移动需先完成，再同步当前锁路径；每条规则必须有对应理由。它区别于只处理历史导入映射的 `--map-prefix`，还覆盖后来独立内置的 RTSA 等快照。记录写入 `path_migrations`，每项保存 `from`、`to`、`reason`；检查器拒绝旧目录重新出现、目标目录缺失和循环规则。相同规则可重复运行，已登记规则的理由和目标必须保持一致。
+```sh
+python3 scripts/update-dependencies-lock.py \
+  --snapshot lvgl \
+  --patch docs/dependencies/patches/lvgl-mask-callbacks.patch
+python3 scripts/update-dependencies-lock.py \
+  --snapshot lvgl \
+  --patch docs/dependencies/patches/lvgl-mask-callbacks.patch --write
+```
 
-整体迁移保留历史导入键、原始哈希及省略项的历史 `previous_path`，更新 `import_adaptations` 的当前目标与解释。RTSA 的 `archive_files` 使用包内相对路径，随仓库目录移动保持不变；完整文件集合和厂商内容不接受顺带修改。当前 `src/` 与 `vendor/` 布局由迁移记录及逐文件映射共同解释，不能改写原始导入清单来消除旧路径。
+选择快照不会自动接受许可文字变更，也不能移除已固定的必需输入或许可/notice 文件。确需改变这些依赖契约时，应单独审查当前清单和构建，明确结果，保留所需版权与许可。工具保护不能代替上游身份和许可判断。
 
-裁剪前从实际编译命令与头依赖确定闭包，并显式保留 CMake、模板、配置、许可证等必要输入。`required_inputs` 的更新不是自动允许删除文件：先核对构建与许可契约，再审查锁差异。更新器再次运行应无变化。更新锁后重新运行显式 SDK 配置，避免旧本地配置继续绑定过期锁；旧二进制/manifest/ABI 报告必须重建。
+同一变更重复更新应无差异。更新锁后重新执行 SDK 配置，旧本地配置绑定的是旧 lock 哈希；目标二进制、manifest 和 ABI 报告需重新构建。运行双语、UBSan、相关目标构建、资源基线及制品检查，并记录实际证据；不将旧包的真机结果算作新制品验收。
+
+旧版 `--map`、`--omit`、目录迁移等参数已退出活动工具；其历史结果完整保存在 schema 1 档案。schema 2 不再按旧路径冻结当前自有源码。
 
 ## 完整 RTSA 包与外部系统依赖
 

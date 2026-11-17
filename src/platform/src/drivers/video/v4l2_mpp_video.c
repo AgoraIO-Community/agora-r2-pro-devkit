@@ -2,6 +2,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include <mybot/platform/mybot_video.h>
 #include "board_config.h"
+#include "video_lifecycle.h"
+#include "mybot_platform/video.h"
 #include <api/aosl_log.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -43,8 +45,8 @@ typedef struct {
     mybot_video_frame_handler_t handler;
     void *user_data;
     pthread_mutex_t mutex;
-    pthread_t thread;
-    bool thread_started, stopping, streaming, buffers_requested;
+    rv1126b_video_lifecycle_t lifecycle;
+    bool streaming, buffers_requested;
     int fd;
     enum v4l2_buf_type type;
     unsigned int buffer_count, pitch;
@@ -57,7 +59,8 @@ typedef struct {
     MppFrame frame;
     MppPacket packet;
     uint32_t target_bps;
-    int64_t last_send_ms, stats_start_ms;
+    int64_t last_send_ms, stats_start_ms, last_frame_ms, last_received_ms;
+    uint32_t applied_bps;
     size_t last_send_bytes;
     uint64_t encoded_bytes, submitted_bytes;
     unsigned int encoded_frames, submitted_frames, budget_drops;
@@ -86,10 +89,7 @@ static int capture_ioctl(video_context_t *ctx, unsigned long request, void *arg,
 }
 
 static bool is_stopping(video_context_t *ctx) {
-    pthread_mutex_lock(&ctx->mutex);
-    bool stopping = ctx->stopping;
-    pthread_mutex_unlock(&ctx->mutex);
-    return stopping;
+    return rv1126b_video_lifecycle_stopping(&ctx->lifecycle);
 }
 
 static int64_t monotonic_ms(void) {
@@ -524,68 +524,99 @@ static int release_pipeline(video_context_t *ctx) {
     return 0;
 }
 
-static void *video_worker(void *arg) {
-    video_context_t *ctx = arg;
-    if (prepare_capture(ctx) || is_stopping(ctx) || prepare_encoder(ctx))
-        goto done;
-    if (capture_ioctl(ctx, VIDIOC_STREAMON, &ctx->type, "start capture"))
-        goto done;
+/* The singleton hardware source publishes copied diagnostic state without
+ * exposing SDK-owned context pointers to the product controller. */
+static pthread_mutex_t s_health_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bool s_video_failed;
+
+bool rv1126b_video_failed(void) {
+    pthread_mutex_lock(&s_health_mutex);
+    bool failed = s_video_failed;
+    pthread_mutex_unlock(&s_health_mutex);
+    return failed;
+}
+
+static void video_changed(void *argument, const rv1126b_video_status_t *status) {
+    (void)argument;
+    pthread_mutex_lock(&s_health_mutex);
+    s_video_failed = status->state == RV1126B_VIDEO_FAILED;
+    pthread_mutex_unlock(&s_health_mutex);
+    const char *states[] = {"stopped", "starting", "running", "retrying", "failed"};
+    const char *faults[] = {"none", "startup", "capture", "cleanup"};
+    AOSL_LOG_NTC("camera: state=%s fault=%s attempt=%u/3 exited=%d cleanup_pending=%d",
+                 states[status->state], faults[status->fault], status->attempts, status->exited,
+                 status->cleanup_pending);
+}
+
+static int pipeline_prepare(void *argument) {
+    video_context_t *ctx = argument;
+    if (prepare_capture(ctx) || is_stopping(ctx) || prepare_encoder(ctx) || is_stopping(ctx) ||
+        capture_ioctl(ctx, VIDIOC_STREAMON, &ctx->type, "start capture"))
+        return -1;
     ctx->streaming = true;
-    int64_t last_frame = -1, last_received = monotonic_ms();
-    uint32_t applied_bps = 0;
-    ctx->stats_start_ms = last_received;
-    while (!is_stopping(ctx) && last_received >= 0) {
-        struct pollfd fd = {.fd = ctx->fd, .events = POLLIN};
-        int ret = poll(&fd, 1, 200);
-        if (ret < 0 && errno == EINTR)
-            continue;
-        if (ret < 0 || (fd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
-            AOSL_LOG_ERR("camera: capture poll failed ret=%d revents=%#x errno=%d", ret, fd.revents,
-                         errno);
-            break;
-        }
-        int64_t now = monotonic_ms();
-        if (now < 0)
-            break;
-        if (!ret) {
-            if (now - last_received >= 5000) {
-                AOSL_LOG_ERR(
-                    "camera: no frames for 5 seconds; check sensor/media links/3A service");
-                break;
-            }
-            continue;
-        }
-        struct v4l2_buffer buffer;
-        struct v4l2_plane plane;
-        buffer_args(ctx, &buffer, &plane);
-        if (camera_ioctl(ctx->fd, VIDIOC_DQBUF, &buffer)) {
-            if (errno == EAGAIN && now - last_received < 5000)
-                continue;
-            AOSL_LOG_ERR("camera: dequeue: %s", strerror(errno));
-            break;
-        }
-        last_received = now;
-        bool selected = last_frame < 0 || now - last_frame >= (1000 + VIDEO_FPS - 1) / VIDEO_FPS;
-        ret = selected ? copy_nv12(ctx, &buffer, &plane) : 0;
-        if (capture_ioctl(ctx, VIDIOC_QBUF, &buffer, "requeue capture buffer") || ret)
-            break;
-        if (!selected || is_stopping(ctx))
-            continue;
-        pthread_mutex_lock(&ctx->mutex);
-        uint32_t bps = ctx->target_bps;
-        pthread_mutex_unlock(&ctx->mutex);
-        if (bps != applied_bps) {
-            if (apply_bitrate(ctx, bps))
-                break;
-            applied_bps = bps;
-        }
-        if (encode_frame(ctx, now))
-            break;
-        last_frame = now;
+    ctx->last_send_ms = ctx->last_frame_ms = -1;
+    ctx->last_send_bytes = 0;
+    ctx->encoded_bytes = ctx->submitted_bytes = 0;
+    ctx->encoded_frames = ctx->submitted_frames = ctx->budget_drops = 0;
+    ctx->applied_bps = 0;
+    ctx->last_received_ms = ctx->stats_start_ms = monotonic_ms();
+    return ctx->last_received_ms < 0 ? -1 : 0;
+}
+
+static int pipeline_step(void *argument) {
+    video_context_t *ctx = argument;
+    struct pollfd fd = {.fd = ctx->fd, .events = POLLIN};
+    int ret = poll(&fd, 1, 200);
+    if (ret < 0 && errno == EINTR)
+        return 0;
+    if (ret < 0 || (fd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
+        AOSL_LOG_ERR("camera: capture poll failed ret=%d revents=%#x errno=%d", ret, fd.revents,
+                     errno);
+        return -1;
     }
-done:
-    release_pipeline(ctx);
-    return NULL;
+    int64_t now = monotonic_ms();
+    if (now < 0)
+        return -1;
+    if (!ret) {
+        if (now - ctx->last_received_ms >= 5000) {
+            AOSL_LOG_ERR("camera: no frames for 5 seconds; check sensor/media links/3A service");
+            return -1;
+        }
+        return 0;
+    }
+    struct v4l2_buffer buffer;
+    struct v4l2_plane plane;
+    buffer_args(ctx, &buffer, &plane);
+    if (camera_ioctl(ctx->fd, VIDIOC_DQBUF, &buffer)) {
+        if (errno == EAGAIN && now - ctx->last_received_ms < 5000)
+            return 0;
+        AOSL_LOG_ERR("camera: dequeue: %s", strerror(errno));
+        return -1;
+    }
+    ctx->last_received_ms = now;
+    bool selected =
+        ctx->last_frame_ms < 0 || now - ctx->last_frame_ms >= (1000 + VIDEO_FPS - 1) / VIDEO_FPS;
+    ret = selected ? copy_nv12(ctx, &buffer, &plane) : 0;
+    if (capture_ioctl(ctx, VIDIOC_QBUF, &buffer, "requeue capture buffer") || ret)
+        return -1;
+    if (!selected || is_stopping(ctx))
+        return 0;
+    pthread_mutex_lock(&ctx->mutex);
+    uint32_t bps = ctx->target_bps;
+    pthread_mutex_unlock(&ctx->mutex);
+    if (bps != ctx->applied_bps) {
+        if (apply_bitrate(ctx, bps))
+            return -1;
+        ctx->applied_bps = bps;
+    }
+    if (encode_frame(ctx, now))
+        return -1;
+    ctx->last_frame_ms = now;
+    return 0;
+}
+
+static int pipeline_release(void *argument) {
+    return release_pipeline(argument);
 }
 
 static int video_init(void **out, mybot_video_frame_handler_t handler, void *user_data) {
@@ -610,46 +641,32 @@ static int video_init(void **out, mybot_video_frame_handler_t handler, void *use
     ctx->user_data = user_data;
     ctx->target_bps = (VIDEO_MIN_BPS + VIDEO_MAX_BPS) / 2;
     ctx->last_send_ms = -1;
+    const rv1126b_video_lifecycle_ops_t ops = {
+        .prepare = pipeline_prepare,
+        .step = pipeline_step,
+        .release = pipeline_release,
+        .changed = video_changed,
+    };
+    if (rv1126b_video_lifecycle_init(&ctx->lifecycle, &ops, ctx, 250)) {
+        pthread_mutex_destroy(&ctx->mutex);
+        free(ctx);
+        return -1;
+    }
+    pthread_mutex_lock(&s_health_mutex);
+    s_video_failed = false;
+    pthread_mutex_unlock(&s_health_mutex);
     *out = ctx;
     return 0;
 }
 
 static int video_start(void *arg) {
     video_context_t *ctx = arg;
-    if (ctx->thread_started)
-        return 0;
-    if (release_pipeline(ctx))
-        return -1;
-    ctx->last_send_ms = -1;
-    ctx->last_send_bytes = 0;
-    ctx->encoded_bytes = ctx->submitted_bytes = 0;
-    ctx->encoded_frames = ctx->submitted_frames = ctx->budget_drops = 0;
-    pthread_mutex_lock(&ctx->mutex);
-    ctx->stopping = false;
-    pthread_mutex_unlock(&ctx->mutex);
-    int ret = pthread_create(&ctx->thread, NULL, video_worker, ctx);
-    if (ret) {
-        AOSL_LOG_ERR("camera: worker creation failed (%d)", ret);
-        return -1;
-    }
-    ctx->thread_started = true;
-    return 0;
+    return rv1126b_video_lifecycle_start(&ctx->lifecycle);
 }
 
 static int video_stop(void *arg) {
     video_context_t *ctx = arg;
-    pthread_mutex_lock(&ctx->mutex);
-    ctx->stopping = true;
-    pthread_mutex_unlock(&ctx->mutex);
-    if (ctx->thread_started) {
-        int ret = pthread_join(ctx->thread, NULL);
-        if (ret) {
-            AOSL_LOG_ERR("camera: worker join failed (%d)", ret);
-            return -1;
-        }
-        ctx->thread_started = false;
-    }
-    return release_pipeline(ctx);
+    return rv1126b_video_lifecycle_stop(&ctx->lifecycle);
 }
 
 static void video_bitrate(void *arg, uint32_t bps) {
@@ -663,6 +680,7 @@ static void video_bitrate(void *arg, uint32_t bps) {
 
 static void video_destroy(void *arg) {
     video_context_t *ctx = arg;
+    rv1126b_video_lifecycle_destroy(&ctx->lifecycle);
     pthread_mutex_destroy(&ctx->mutex);
     free(ctx);
 }

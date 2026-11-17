@@ -9,10 +9,13 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
+import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -37,11 +40,14 @@ class PackagingTests(unittest.TestCase):
         self.root.mkdir()
         for source, _ in packager.LICENSES:
             self.write(self.root / source, "license fixture\n")
+        self.write(self.root / 'docs/dependencies/cjson-LICENSE.txt',
+                   (ROOT / 'docs/dependencies/cjson-LICENSE.txt').read_text())
         self.write(self.root / "CMakeLists.txt", "project(mybot_rv1126b VERSION 0.2.0 LANGUAGES C CXX)\n")
         self.write(self.root / ".gitignore", "/build*/\n/local/\n/dist/\n")
         self.write(self.root / "packaging/run.sh", 'case "${RV1126B_VIDEO:-0}" in\n0) :;;\n1) :;;\nesac\n')
         self.write(self.root / "packaging/example.env", (ROOT / "packaging/example.env").read_text())
         self.write(self.root / "packaging/README.zh-CN.md", "fixture guide\n")
+        self.write(self.root / "packaging/README.en.md", "English fixture guide\n")
         for source in packager.EXECUTABLE_ASSETS.values():
             self.write(self.root / source, "#!/bin/sh\nexit 0\n")
         for source in packager.DATA_ASSETS.values():
@@ -90,7 +96,7 @@ class PackagingTests(unittest.TestCase):
                   ";ptime_ms=20;board=" + metadata.BOARD + "\0")
         inputs = metadata.build_inputs(self.root, build)
         source_marker = "MYBOT_RV1126B_SOURCE:" + inputs["source"]["sha256"] + "\0"
-        inputs_marker = "MYBOT_RV1126B_INPUTS:" + metadata.json_digest(inputs) + "\0"
+        inputs_marker = "MYBOT_RV1126B_INPUTS:" + metadata.inputs_digest(inputs) + "\0"
         self.write(build / "mybot-rv1126b", "executable " + name + "\0" + marker + source_marker + inputs_marker)
         binary = {"path": str(build / "mybot-rv1126b"), "sha256": metadata.digest(build / "mybot-rv1126b"),
                   "machine": 183, "soname": None, "interpreter": "/lib/ld-linux-aarch64.so.1",
@@ -109,7 +115,7 @@ class PackagingTests(unittest.TestCase):
 
     def seal(self, build):
         metadata.write_json(build / "build-manifest.json",
-                            {"schema": 1, "inputs": metadata.build_inputs(self.root, build),
+                            {"schema": metadata.MANIFEST_SCHEMA, "inputs": metadata.build_inputs(self.root, build),
                              "binary_sha256": metadata.digest(build / "mybot-rv1126b"),
                              "abi_report_sha256": metadata.digest(build / "abi-report.json")})
 
@@ -117,7 +123,7 @@ class PackagingTests(unittest.TestCase):
         binary = build / "mybot-rv1126b"
         inputs = metadata.build_inputs(self.root, build)
         executable = binary.read_bytes()
-        for field, value in (("SOURCE", inputs["source"]["sha256"]), ("INPUTS", metadata.json_digest(inputs))):
+        for field, value in (("SOURCE", inputs["source"]["sha256"]), ("INPUTS", metadata.inputs_digest(inputs))):
             current = ("MYBOT_RV1126B_" + field + ":" + value).encode() + b"\0"
             executable = re.sub(("MYBOT_RV1126B_" + field + ":[0-9a-f]{64}").encode() + b"\0",
                                 current, executable)
@@ -156,11 +162,212 @@ class PackagingTests(unittest.TestCase):
             expected, filename = line.split("  ", 1)
             self.assertEqual(expected, metadata.digest(destination / filename))
 
+    def test_portable_input_identity_survives_relocation_including_zig_wrappers(self):
+        zig = self.base / "toolchain-bin/zig"
+        self.write(zig, "fixture Zig executable bytes")
+        for compiler, tool in ((self.compiler, "cc"), (self.cxx_compiler, "c++")):
+            self.write(compiler, "#!/bin/sh\nexport ZIG_GLOBAL_CACHE_DIR=" +
+                       shlex.quote(str(self.root / "local/cache/global")) +
+                       "\nexport ZIG_LOCAL_CACHE_DIR=" + shlex.quote(str(self.root / "local/cache/local")) +
+                       '\nif [ "$#" -eq 1 ] && [ "$1" = --version ]; then\n  exec ' +
+                       shlex.quote(str(zig)) + " " + tool + " --version\nfi\nexec " +
+                       shlex.quote(str(zig)) + " " + tool +
+                       ' -target aarch64-linux-gnu.2.41 "$@"\n')
+        self.write(self.toolchain, 'set(CMAKE_FIND_ROOT_PATH "' + str(self.staging) + '")\n')
+        config = metadata.read_json(self.voice / "build-config.json")
+        config["flags"]["c"] += (" -I" + str(self.staging / "usr/include") +
+                                 " -isystem " + shlex.quote(str(self.sdk / "include")) +
+                                 " --sysroot=" + str(self.staging) +
+                                 " -ffile-prefix-map=" + str(self.root) + "=. -DRESOURCE_PATH=/target/runtime")
+        config["flags"]["exe_link"] += " -Wl,-rpath-link," + str(self.staging / "lib")
+        metadata.write_json(self.voice / "build-config.json", config)
+        self.refresh_source_marker(self.voice)
+        self.seal(self.voice)
+        before = metadata.build_inputs(self.root, self.voice)
+        with tempfile.TemporaryDirectory(prefix="mybot-relocated-") as temporary:
+            relocated = Path(temporary) / "different-parent"
+            shutil.copytree(self.base, relocated)
+            for filename in ("compiler", "cxx-compiler", "toolchain.cmake", "source/build-voice/build-config.json"):
+                path = relocated / filename
+                path.write_text(path.read_text().replace(str(self.base), str(relocated)))
+            root = relocated / "source"
+            build = root / "build-voice"
+            after = metadata.build_inputs(root, build)
+            self.assertNotEqual(before["config"], after["config"])
+            self.assertNotEqual(before["dependencies"]["compiler"]["sha256"],
+                                after["dependencies"]["compiler"]["sha256"])
+            self.assertEqual(before["identity"], after["identity"])
+            self.assertEqual(metadata.inputs_digest(before), metadata.inputs_digest(after))
+            public_before = metadata.public_manifest({"inputs": before})
+            public_after = metadata.public_manifest({"inputs": after})
+            self.assertEqual(public_before, public_after)
+            self.assertNotIn(str(self.base), json.dumps(public_before))
+            self.assertNotIn(str(relocated), json.dumps(public_after))
+            with self.assertRaisesRegex(ValueError, "Stale build manifest"):
+                metadata.verify_manifest(root, build, "zh-CN", False)
+            self.run_manifest("--prepare")
+            with patch.object(manifest_tool, "ROOT", root), \
+                    patch.object(sys, "argv", ["build-manifest.py", "--build-dir", str(build), "--prepare"]), \
+                    redirect_stdout(io.StringIO()):
+                manifest_tool.main()
+            self.assertEqual((self.voice / "build_source_identity.c").read_bytes(),
+                             (build / "build_source_identity.c").read_bytes())
+
+    def test_portable_identity_keeps_semantic_flags_and_compiler_arguments(self):
+        original = metadata.read_json(self.voice / "build-config.json")
+        before = metadata.inputs_digest(metadata.build_inputs(self.root, self.voice))
+        for option in (" -fno-exceptions", " -DNAME=first", " -DNAME=second",
+                       " -DRESOURCE_PATH=" + str(self.root), " -I/unregistered/headers"):
+            with self.subTest(option=option):
+                config = json.loads(json.dumps(original))
+                config["flags"]["cxx"] += option
+                metadata.write_json(self.voice / "build-config.json", config)
+                self.assertNotEqual(before, metadata.inputs_digest(metadata.build_inputs(self.root, self.voice)))
+        metadata.write_json(self.voice / "build-config.json", original)
+        zig = self.base / "zig"
+        self.write(zig, "compiler contents")
+        wrapper = ('#!/bin/sh\nexport ZIG_GLOBAL_CACHE_DIR=/tmp/fixture-global\n'
+                   'export ZIG_LOCAL_CACHE_DIR=/tmp/fixture-local\nexec ' + shlex.quote(str(zig)) +
+                   ' cc -target aarch64-linux-gnu.2.41 "$@"\n')
+        self.write(self.compiler, wrapper)
+        wrapped_before = metadata.inputs_digest(metadata.build_inputs(self.root, self.voice))
+        self.write(self.compiler, wrapper.replace("aarch64-linux-gnu.2.41", "aarch64-linux-gnu.2.40"))
+        self.assertNotEqual(wrapped_before, metadata.inputs_digest(metadata.build_inputs(self.root, self.voice)))
+        self.write(self.compiler, wrapper.replace('"$@"', '$@'))
+        self.assertNotEqual(wrapped_before, metadata.inputs_digest(metadata.build_inputs(self.root, self.voice)))
+        self.write(self.compiler, wrapper)
+        self.write(zig, "changed compiler contents")
+        self.assertNotEqual(wrapped_before, metadata.inputs_digest(metadata.build_inputs(self.root, self.voice)))
+
+    def test_dependency_directory_links_are_rejected_instead_of_silently_skipped(self):
+        headers = self.base / 'headers'
+        self.write(headers / 'api.h', 'first contents')
+        (self.staging / 'include').symlink_to(headers, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'symlink'):
+            metadata.tree_snapshot(self.staging)
+        self.write(headers / 'api.h', 'changed contents')
+        with self.assertRaisesRegex(ValueError, 'symlink'):
+            metadata.tree_snapshot(self.staging)
+        (self.staging / 'include').unlink()
+        (self.staging / 'include').symlink_to('usr', target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'Directory dependency symlinks'):
+            metadata.tree_snapshot(self.staging)
+
+    def test_dependency_file_links_bind_both_link_text_and_target_bytes(self):
+        include = self.staging / 'usr/include'
+        self.write(include / 'first.h', 'same contents')
+        self.write(include / 'second.h', 'same contents')
+        link = include / 'alias.h'
+        link.symlink_to('first.h')
+        before = metadata.tree_snapshot(self.staging)
+        link.unlink()
+        link.symlink_to('second.h')
+        after = metadata.tree_snapshot(self.staging)
+        self.assertNotEqual(before['sha256'], after['sha256'])
+        self.write(include / 'second.h', 'changed contents')
+        self.assertNotEqual(after['sha256'], metadata.tree_snapshot(self.staging)['sha256'])
+        self.assertEqual(before['file_count'], after['file_count'])
+
+    def test_dependency_links_cannot_cycle_escape_or_hide_missing_inputs(self):
+        outside = self.base / 'external.h'
+        self.write(outside, 'external contents')
+        for target in ('missing', '.', '../external.h', str(outside), 'alias.h'):
+            with self.subTest(target=target):
+                link = self.staging / 'alias.h'
+                link.symlink_to(target)
+                with self.assertRaises(ValueError):
+                    metadata.tree_snapshot(self.staging)
+                link.unlink()
+        directory_link = self.base / 'staging-alias'
+        directory_link.symlink_to(self.staging, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, 'Directory dependency symlinks'):
+            metadata.tree_snapshot(directory_link)
+
+    def test_new_packages_require_portable_identity_manifest_schema(self):
+        manifest = metadata.read_json(self.voice / "build-manifest.json")
+        manifest["schema"] = 1
+        metadata.write_json(self.voice / "build-manifest.json", manifest)
+        with self.assertRaisesRegex(ValueError, "Unsupported build manifest"):
+            packager.package(self.root, self.args)
+
     def test_missing_video_is_rejected_in_all_profile(self):
         (self.video / "build-manifest.json").unlink()
         with self.assertRaisesRegex(ValueError, "valid JSON"):
             packager.package(self.root, self.args)
         self.assertFalse(self.args.output_dir.exists())
+
+    def test_runtime_readme_matches_package_language_and_is_checksummed(self):
+        for language, readme, other in (("zh-CN", "README.zh-CN.md", "README.en.md"),
+                                       ("en-US", "README.en.md", "README.zh-CN.md")):
+            with self.subTest(language=language):
+                self.args.language = language
+                self.args.output_dir = self.base / ("readme-" + language)
+                if language == "en-US":
+                    self.args.voice_build = self.create_build("voice-en", False, language)
+                    self.args.video_build = self.create_build("video-en", True, language)
+                destination, archive, _ = packager.package(self.root, self.args)
+                expected = (self.root / "packaging" / readme).read_bytes()
+                self.assertEqual((destination / readme).read_bytes(), expected)
+                self.assertFalse((destination / other).exists())
+                checksums = dict((name, checksum) for checksum, name in
+                                 (line.split("  ", 1) for line in
+                                  (destination / "SHA256SUMS").read_text().splitlines()))
+                self.assertEqual(checksums[readme], metadata.digest(destination / readme))
+                with tarfile.open(archive) as stream:
+                    self.assertEqual(stream.extractfile(destination.name + "/" + readme).read(), expected)
+
+    def test_packaged_authorization_preserves_text_and_resolves_source_links(self):
+        statement = ('Official statement. [Project](../../LICENSE) and [AOSL](../../vendor/aosl/LICENSE).\n'
+                     '[Notices](../../THIRD_PARTY_NOTICES.md), [RTSA](RTSA_SOURCE.txt), '
+                     '[Provenance](../../VENDORED_SOURCES.md).\n'
+                     '[Business](https://www.shengwang.cn/contact-sales/).\n')
+        self.write(self.root / 'docs/dependencies/licensing.md', statement)
+        root_notice = '[Terms](vendor/aosl/LICENSE), [font inputs](src/ui/fonts/sources.json), [source](VENDORED_SOURCES.md).\n'
+        original_vendor_notice = '[Original upstream link](../aosl/LICENSE).\n'
+        self.write(self.root / 'THIRD_PARTY_NOTICES.md', root_notice)
+        self.write(self.root / 'vendor/mybot/THIRD_PARTY_NOTICES.md', original_vendor_notice)
+        for build in (self.voice, self.video):
+            self.refresh_source_marker(build)
+            self.seal(build)
+        destination, archive, _ = packager.package(self.root, self.args)
+        filename = 'licenses/DEPENDENCY_LICENSING.md'
+        actual = (destination / filename).read_text()
+        strip_targets = lambda text: re.sub(r'\]\([^)]+\)', ']()', text)
+        self.assertEqual(strip_targets(statement), strip_targets(actual))
+        self.assertIn('https://www.shengwang.cn/contact-sales/', actual)
+        self.assertIn('https://github.com/junlon2006/mybot-rv1126b/blob/dev/VENDORED_SOURCES.md', actual)
+        packaged_root_notice = (destination / 'licenses/THIRD_PARTY_NOTICES.md').read_text()
+        self.assertEqual(strip_targets(root_notice), strip_targets(packaged_root_notice))
+        self.assertEqual((destination / 'licenses/mybot-THIRD_PARTY_NOTICES.md').read_text(), original_vendor_notice)
+        for link in re.findall(r'\]\(([^)]+)\)', actual + packaged_root_notice):
+            if not link.startswith('https://'):
+                self.assertTrue((destination / 'licenses' / link).is_file(), link)
+        with tarfile.open(archive) as stream:
+            self.assertEqual(stream.extractfile(destination.name + '/' + filename).read(), actual.encode())
+
+    def test_cjson_mit_notice_matches_upstream_and_complete_archive(self):
+        sources = ('vendor/mybot/src/support/mybot_json.c', 'vendor/mybot/src/internal/mybot_json.h')
+        expected = (ROOT / 'docs/dependencies/cjson-LICENSE.txt').read_bytes()
+        before = {name: metadata.digest(ROOT / name) for name in sources}
+        for name in sources:
+            comments = re.findall(r'/\*(.*?)\*/', (ROOT / name).read_text(), re.S)
+            comment = next(block for block in comments if 'Copyright (c) 2009 Dave Gamble' in block)
+            self.assertEqual(expected, (textwrap.dedent(comment).strip() + '\n').encode())
+        self.write(self.root / 'THIRD_PARTY_NOTICES.md', (ROOT / 'THIRD_PARTY_NOTICES.md').read_text())
+        for build in (self.voice, self.video):
+            self.refresh_source_marker(build)
+            self.seal(build)
+        destination, archive, _ = packager.package(self.root, self.args)
+        filename = 'licenses/cjson-LICENSE.txt'
+        self.assertEqual((destination / filename).read_bytes(), expected)
+        self.assertIn('](cjson-LICENSE.txt)', (destination / 'licenses/THIRD_PARTY_NOTICES.md').read_text())
+        checksums = dict((name, checksum) for checksum, name in
+                         (line.split('  ', 1) for line in
+                          (destination / 'SHA256SUMS').read_text().splitlines()))
+        self.assertEqual(checksums[filename], metadata.digest(destination / filename))
+        with tarfile.open(archive) as stream:
+            self.assertEqual(stream.extractfile(destination.name + '/' + filename).read(), expected)
+        self.assertEqual(before, {name: metadata.digest(ROOT / name) for name in sources})
 
     def test_example_environment_matches_each_package_and_is_reproducible(self):
         for language, server in (("zh-CN", "https://botstation.shengwang.cn/api"),

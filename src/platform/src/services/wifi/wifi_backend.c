@@ -1,10 +1,13 @@
 /* SPDX-License-Identifier: Apache-2.0 */
-#define _DEFAULT_SOURCE
+#ifndef _DEFAULT_SOURCE
+#define _DEFAULT_SOURCE 1
+#endif
 #ifndef _DARWIN_C_SOURCE
 #define _DARWIN_C_SOURCE
 #endif
 #define _POSIX_C_SOURCE 200809L
 #include "wifi_backend_internal.h"
+#include "../network_route.h"
 #include "system_wifi_profile.h"
 #include <arpa/inet.h>
 #include <ctype.h>
@@ -128,45 +131,8 @@ static bool has_address(const char *interface_name, const char *expected) {
 static bool online(void *context) {
 #ifdef __linux__
     linux_backend_t *backend = context;
-    if (!backend->interface_name[0])
-        return false;
-    FILE *routes = fopen("/proc/net/route", "r");
-    if (!routes)
-        return false;
-    char line[1024];
-    bool routed = false;
-    while (fgets(line, sizeof(line), routes)) {
-        char name[IFNAMSIZ] = "";
-        unsigned long destination = 0, gateway = 0, flags = 0, mask = 0;
-        if (sscanf(line, "%15s %lx %lx %lx %*u %*u %*u %lx", name, &destination, &gateway, &flags,
-                   &mask) == 5 &&
-            !strcmp(name, backend->interface_name) && !destination && !mask && (flags & 1UL) &&
-            !(flags & 0x200UL)) {
-            routed = true;
-            break;
-        }
-    }
-    fclose(routes);
-    if (!routed)
-        return false;
-    struct ifaddrs *addresses = NULL;
-    if (getifaddrs(&addresses))
-        return false;
-    bool found = false;
-    for (struct ifaddrs *item = addresses; item; item = item->ifa_next) {
-        if (!item->ifa_addr || item->ifa_addr->sa_family != AF_INET ||
-            strcmp(item->ifa_name, backend->interface_name) || !(item->ifa_flags & IFF_UP) ||
-            !(item->ifa_flags & IFF_RUNNING) || (item->ifa_flags & IFF_LOOPBACK))
-            continue;
-        uint32_t address = ntohl(((const struct sockaddr_in *)item->ifa_addr)->sin_addr.s_addr);
-        if (address && (address >> 24) != 127 && (address >> 16) != 0xa9fe &&
-            (address >> 28) < 14 && address != 0xc0a80401U) {
-            found = true;
-            break;
-        }
-    }
-    freeifaddrs(addresses);
-    return found;
+    return backend->interface_name[0] &&
+           rv1126b_network_route_ready(backend->interface_name, 0xc0a80401U) > 0;
 #else
     (void)context;
     return false;
@@ -288,16 +254,22 @@ static bool initialize(void *context, char *error) {
         wifi_error(error, "No nl80211 Wi-Fi interface; configure the Wi-Fi interface explicitly");
         return false;
     }
-    snprintf(path, sizeof(path), "/sys/class/net/%s/address", backend->interface_name);
+    snprintf(path, sizeof(path), "/sys/class/net/%s/addr_assign_type", backend->interface_name);
     wifi_buffer_t mac;
     wifi_buffer_init(&mac, 256);
-    bool valid_mac = wifi_read_text(path, &mac) && mac.length >= 5 && mac.data[2] == ':' &&
-                     isxdigit((unsigned char)mac.data[0]) && isxdigit((unsigned char)mac.data[1]) &&
-                     isxdigit((unsigned char)mac.data[3]) && isxdigit((unsigned char)mac.data[4]);
-    if (valid_mac)
-        snprintf(backend->ssid, sizeof(backend->ssid), "mybot-%c%c%c%c",
-                 tolower((unsigned char)mac.data[0]), tolower((unsigned char)mac.data[1]),
-                 tolower((unsigned char)mac.data[3]), tolower((unsigned char)mac.data[4]));
+    const bool permanent_mac = wifi_read_text(path, &mac) &&
+                               (mac.length == 1 || (mac.length == 2 && mac.data[1] == '\n')) &&
+                               mac.data[0] == '0';
+    wifi_buffer_free(&mac);
+    if (!permanent_mac) {
+        wifi_error(error, "Wi-Fi interface does not report a permanent MAC address");
+        return false;
+    }
+    snprintf(path, sizeof(path), "/sys/class/net/%s/address", backend->interface_name);
+    wifi_buffer_init(&mac, 256);
+    const bool valid_mac =
+        wifi_read_text(path, &mac) &&
+        wifi_hotspot_ssid_from_mac(mac.data, backend->ssid, sizeof(backend->ssid));
     wifi_buffer_free(&mac);
     if (!valid_mac) {
         wifi_error(error, "Cannot read Wi-Fi MAC address");

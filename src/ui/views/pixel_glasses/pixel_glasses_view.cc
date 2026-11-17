@@ -235,11 +235,13 @@ void update_terminal(mybot_expression_t expression) {
 
 void update_runtime_terminal(const mybot_lcd_content_t &content,
                              const mybot_display_runtime_status_t &status) {
-    const bool conversation = !status.clock_state && status.in_conversation &&
+    const bool conversation = !status.wifi_failed && !status.clock_state &&
+                              status.in_conversation &&
                               content.screen == MYBOT_LCD_SCREEN_IN_CONVERSATION;
-    const char *state = status.clock_state == 1   ? "waiting_time"
-                        : status.clock_state == 2 ? "time_failed"
-                                                  : status.state;
+    const char *state = status.wifi_failed                                  ? "wifi_error"
+                        : status.clock_state == MYBOT_DISPLAY_CLOCK_WAITING ? "waiting_time"
+                        : status.clock_state == MYBOT_DISPLAY_CLOCK_FAILED  ? "time_failed"
+                                                                            : status.state;
     const char *voiceprint = "";
     if (conversation) {
         /* A malformed multi-phase mask has a deterministic display priority. */
@@ -571,7 +573,9 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
             copied_status.state[i] = status->state[i];
         }
         copied_status.in_conversation = status->in_conversation;
-        if (status->clock_state == 1 || status->clock_state == 2)
+        copied_status.wifi_failed = status->wifi_failed;
+        if (status->clock_state == MYBOT_DISPLAY_CLOCK_WAITING ||
+            status->clock_state == MYBOT_DISPLAY_CLOCK_FAILED)
             copied_status.clock_state = status->clock_state;
     }
     if (!copied_status.state[0]) {
@@ -592,6 +596,7 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
         !s_view->has_content || normalized.screen != s_view->previous.screen ||
         std::strcmp(normalized.pair_code, s_view->previous.pair_code) != 0 ||
         std::strcmp(copied_ssid, s_view->provisioning_ssid) != 0 ||
+        copied_status.wifi_failed != s_view->runtime_status.wifi_failed ||
         copied_status.clock_state != s_view->runtime_status.clock_state;
     const bool status_changed =
         !s_view->has_content || normalized.indicators != s_view->previous.indicators ||
@@ -604,8 +609,16 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
     /* The display owner chooses face expressions after updating this snapshot.
      * Workflow/status changes never insert an intermediate default face or
      * restart either expression clock. Guidance still replaces a visible face. */
-    if (workflow_changed && copied_status.clock_state) {
-        if (copied_status.clock_state == 1)
+    if (workflow_changed && copied_status.wifi_failed) {
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+        show_guide({"配网失败", "请在设置中重试", kError});
+#else
+        show_guide({"Wi-Fi setup failed", "Open settings to retry", kError});
+#endif
+        set_text(s_view->detail, "");
+        set_hidden(s_view->detail, true);
+    } else if (workflow_changed && copied_status.clock_state) {
+        if (copied_status.clock_state == MYBOT_DISPLAY_CLOCK_WAITING)
             show_guide({"System time", "Checking system time", kGreeting});
         else
             show_guide({"Time unavailable", "Check time service; restart", kError});
@@ -640,7 +653,8 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
 }
 
 int mybot_pixel_glasses_show_expression(mybot_expression_t expression) {
-    if (!s_view || !s_view->root || !s_view->has_content || s_view->runtime_status.clock_state ||
+    if (!s_view || !s_view->root || !s_view->has_content || s_view->runtime_status.wifi_failed ||
+        s_view->runtime_status.clock_state ||
         (s_view->previous.screen != MYBOT_LCD_SCREEN_READY &&
          s_view->previous.screen != MYBOT_LCD_SCREEN_IN_CONVERSATION) ||
         expression < MYBOT_EXPRESSION_NEUTRAL || expression >= MYBOT_EXPRESSION_COUNT)
@@ -651,7 +665,8 @@ int mybot_pixel_glasses_show_expression(mybot_expression_t expression) {
 }
 
 int mybot_pixel_glasses_replay_expression(mybot_expression_t expression) {
-    if (!s_view || !s_view->root || !s_view->has_content || s_view->runtime_status.clock_state ||
+    if (!s_view || !s_view->root || !s_view->has_content || s_view->runtime_status.wifi_failed ||
+        s_view->runtime_status.clock_state ||
         (s_view->previous.screen != MYBOT_LCD_SCREEN_READY &&
          s_view->previous.screen != MYBOT_LCD_SCREEN_IN_CONVERSATION) ||
         expression < MYBOT_EXPRESSION_NEUTRAL || expression >= MYBOT_EXPRESSION_COUNT)
@@ -661,8 +676,8 @@ int mybot_pixel_glasses_replay_expression(mybot_expression_t expression) {
 }
 
 void mybot_lvgl_view_destroy(void) {
-    /* The display owner holds the LVGL lock, excluding timers and drawing while
-     * retained points, event userdata and static-label buffers are released. */
+    /* The owning UI worker serializes timer handling, drawing and destruction.
+     * Remove the timer before releasing retained points and callback data. */
     if (!s_view) {
         return;
     }

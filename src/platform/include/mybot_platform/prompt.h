@@ -14,9 +14,11 @@ extern "C" {
  * call stop to join it before starting another prompt. Playback failures are
  * logged and do not change provisioning state. */
 int rv1126b_prompt_start(const char *assets_directory, const char *locale);
+
 /* Cancels and joins the sole worker. All PCM/file ownership is released before
  * returning, so the SDK can safely open playback. Safe to call repeatedly. */
 void rv1126b_prompt_stop(void);
+
 /* A nonblocking snapshot; false includes normal EOF, error and cancellation. */
 bool rv1126b_prompt_active(void);
 

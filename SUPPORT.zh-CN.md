@@ -2,6 +2,8 @@
 
 [English](SUPPORT.md) | [简体中文](SUPPORT.zh-CN.md)
 
+安全漏洞请通过[安全政策](SECURITY.zh-CN.md)中的私密渠道报告。
+
 先阅读[上手指南](docs/user/getting-started.zh-CN.md)、[故障排查](docs/user/troubleshooting.zh-CN.md)和[验证矩阵](docs/validation/README.md)。当前仅记录一个 RV1126B 板型/系统基线；主机编译通过不能证明其他固件镜像兼容。
 
 报告缺陷时使用仓库 issue 模板，并提供：

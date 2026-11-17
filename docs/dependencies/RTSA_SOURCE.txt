@@ -43,3 +43,11 @@ The official archive provides no standalone license file. Its original notices
 and documentation are preserved. Vendor use and distribution terms remain
 applicable; this project's Apache-2.0 license and this provenance record do not
 grant additional redistribution or product-use rights for RTSA.
+
+Project authorization: This is an official Agora project. The maintainer confirms
+authorization for inclusion and use of this required RTSA package in the project.
+Original terms remain applicable. For commercial cooperation, product integration
+and the terms for your deployment or redistribution, contact Agora business:
+https://www.shengwang.cn/contact-sales/
+The contact page is an inquiry channel, not a software license. This statement
+is not a transfer of the project's authorization to downstream products.

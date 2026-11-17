@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #ifndef RV1126B_UI_H
 #define RV1126B_UI_H
+#include <stdbool.h>
 #include <mybot/mybot.h>
 #include <mybot/platform/mybot_lcd.h>
 #include <mybot_ui/settings.h>
+#include <mybot_ui/display_status.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,10 +27,13 @@ void rv1126b_ui_show(const mybot_lcd_content_t *content);
 /* Show actual AP guidance only after the portal has started. NULL clears it. */
 void rv1126b_ui_provisioning(const char *ssid);
 
-/* Product startup clock gate: 0 clears, 1 waits, 2 reports failure.
+/* Copies a setup failure flag; settings remain available for an explicit retry. */
+void rv1126b_ui_wifi_failed(bool failed);
+
+/* Copies the typed product startup clock gate.
  * Readiness means the supported clock range, not proof of NTP synchronization.
  * Invalid values are ignored. */
-void rv1126b_ui_time_status(int status);
+void rv1126b_ui_time_status(mybot_display_clock_state_t status);
 
 /* Copies a product-owned menu state; only the display worker touches LVGL. */
 void rv1126b_ui_settings(mybot_settings_page_t page);

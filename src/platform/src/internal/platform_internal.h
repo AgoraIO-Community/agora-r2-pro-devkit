@@ -5,13 +5,26 @@
 #include "mybot_platform/platform.h"
 #include "mybot_platform/audio.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Borrowed immutable configuration, valid after registration for process lifetime. */
 const rv1126b_platform_config_t *rv1126b_platform_config(void);
+
 const mybot_audio_capture_ops_t *rv1126b_capture_ops(void);
+
 const mybot_wifi_ops_t *rv1126b_network_ops(void);
+
 const mybot_key_ops_t *rv1126b_key_ops(void);
+
 #if MYBOT_ENABLE_VIDEO
 const mybot_video_ops_t *rv1126b_video_ops(void);
+
+#endif
+
+#ifdef __cplusplus
+}
 #endif
 
 #endif

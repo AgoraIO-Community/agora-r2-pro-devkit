@@ -8,9 +8,19 @@
 extern "C" {
 #endif
 
+typedef enum {
+    WIFI_PORTAL_ERROR_NONE,
+    WIFI_PORTAL_ERROR_CONNECT,
+    WIFI_PORTAL_ERROR_SAVE,
+    WIFI_PORTAL_ERROR_COMMIT,
+    WIFI_PORTAL_ERROR_AP,
+    WIFI_PORTAL_ERROR_SAVED_UPDATE
+} wifi_portal_error_t;
+
 typedef struct {
     char state[16], error[WIFI_ERROR_CAPACITY], ssid[WIFI_SSID_CAPACITY];
     bool concurrent, busy;
+    wifi_portal_error_t error_code;
 } wifi_portal_status_t;
 
 typedef struct {
