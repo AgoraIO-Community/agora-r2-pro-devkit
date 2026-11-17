@@ -129,26 +129,42 @@ static void check_menu_gestures(void) {
     s_attachment = &attachment;
     input_source_t source = {.fd = descriptors[0]};
     __atomic_store_n(&s_wifi_requested, 0, __ATOMIC_RELEASE);
-    menu_edge(&context, &source, descriptors[1], 1);
-    CHECK(menu_calls == 0);
-    menu_edge(&context, &source, descriptors[1], 0);
-    CHECK(menu_calls == 1 && !rv1126b_key_wifi_requested());
-    menu_edge(&context, &source, descriptors[1], 1);
-    context.talk_pressed_at = now_ms() - 3000;
+    const uint32_t durations[] = {20, 100, 500, 1000, 2999, 3000, 10000};
+    unsigned expected = 0;
+    for (size_t i = 0; i < sizeof(durations) / sizeof(durations[0]); ++i) {
+        menu_edge(&context, &source, descriptors[1], 1);
+        context.talk_pressed_at = now_ms() - durations[i];
+        menu_edge(&context, &source, descriptors[1], 2);
+        CHECK(menu_calls == expected && !rv1126b_key_wifi_requested());
+        /* A duplicate press must not restart a long contact's short-tap timer. */
+        menu_edge(&context, &source, descriptors[1], 1);
+        menu_edge(&context, &source, descriptors[1], 0);
+        expected += durations[i] >= 50 && durations[i] < 1000;
+        CHECK(menu_calls == expected && !rv1126b_key_wifi_requested());
+        menu_edge(&context, &source, descriptors[1], 0);
+        CHECK(menu_calls == expected && !rv1126b_key_wifi_requested());
+    }
+    /* An orphan auto-repeat or a lost-frame release cannot become a short tap. */
     menu_edge(&context, &source, descriptors[1], 2);
     menu_edge(&context, &source, descriptors[1], 0);
-    CHECK(menu_calls == 1 && rv1126b_key_wifi_requested());
-    CHECK(!rv1126b_key_wifi_requested());
     menu_edge(&context, &source, descriptors[1], 1);
-    context.talk_long_sent = true;
+    context.talk_pressed_at = now_ms() - 100;
+    const struct input_event dropped = {.type = EV_SYN, .code = SYN_DROPPED};
+    CHECK(write(descriptors[1], &dropped, sizeof(dropped)) == (ssize_t)sizeof(dropped));
+    CHECK(drain_input(&context, &source, false) == 0);
     menu_edge(&context, &source, descriptors[1], 0);
-    CHECK(menu_calls == 1 && !rv1126b_key_wifi_requested());
+    CHECK(menu_calls == expected && !rv1126b_key_wifi_requested());
     rv1126b_input_settings_page(MYBOT_SETTINGS_MENU);
     menu_edge(&context, &source, descriptors[1], 1);
-    context.talk_pressed_at = now_ms() - 3000;
-    poll_gestures(&context);
+    context.talk_pressed_at = now_ms() - 100;
+    rv1126b_input_settings_page(MYBOT_SETTINGS_CLOSED);
     menu_edge(&context, &source, descriptors[1], 0);
-    CHECK(menu_calls == 1 && !rv1126b_key_wifi_requested());
+    CHECK(menu_calls == expected && !rv1126b_key_wifi_requested());
+    stdin_key('w');
+    CHECK(!rv1126b_key_wifi_requested());
+    rv1126b_input_settings_page(MYBOT_SETTINGS_MENU);
+    stdin_key('w');
+    CHECK(settings_page() == MYBOT_SETTINGS_MENU && !rv1126b_key_wifi_requested());
     rv1126b_input_settings_page(MYBOT_SETTINGS_CLOSED);
     s_attachment = NULL;
     close(descriptors[0]);
@@ -202,7 +218,6 @@ static void check_retained_mt_axes(void) {
     CHECK(settings_page() == MYBOT_SETTINGS_MENU && !rv1126b_key_poweroff_requested());
     touch_contact(&context, &source, descriptors[1], 6, 200, 180, false, true);
     CHECK(settings_page() == MYBOT_SETTINGS_CLOSED);
-    poll_gestures(&context);
     CHECK(rv1126b_key_wifi_requested() && !rv1126b_key_wifi_requested());
     touch_contact(&context, &source, descriptors[1], 7, 640, 180, true, false);
     CHECK(settings_page() == MYBOT_SETTINGS_CLOSED);
@@ -292,15 +307,20 @@ static void *destroy_worker(void *ctx) {
     return NULL;
 }
 
-static void wait_wifi(void) {
-    bool requested = false;
-    const struct timespec pause = {.tv_sec = 0, .tv_nsec = 1000000};
-    for (unsigned attempt = 0; attempt < 1000 && !requested; ++attempt) {
-        requested = rv1126b_key_wifi_requested() != 0;
-        if (!requested)
-            nanosleep(&pause, NULL);
-    }
-    CHECK(requested && !rv1126b_key_wifi_requested());
+static void settings_wifi(input_context_t *reader) {
+    int descriptors[2];
+    CHECK(native_pipe2(descriptors, 0) == 0);
+    input_source_t source = {.fd = descriptors[0]};
+    /* The lifecycle fixture's worker owns stdin; this independent source uses
+     * its persistent touch state, as the real device source does. */
+    rv1126b_touch_configure(&reader->touch_state, 0, 639, 0, 479, 0);
+    touch_contact(reader, &source, descriptors[1], 100, 596, 44, true, true);
+    CHECK(settings_page() == MYBOT_SETTINGS_MENU && !rv1126b_key_wifi_requested());
+    touch_contact(reader, &source, descriptors[1], 101, 200, 180, true, true);
+    CHECK(settings_page() == MYBOT_SETTINGS_CLOSED);
+    CHECK(rv1126b_key_wifi_requested() && !rv1126b_key_wifi_requested());
+    close(descriptors[0]);
+    close(descriptors[1]);
 }
 
 int main(void) {
@@ -324,14 +344,15 @@ int main(void) {
     CHECK(rv1126b_input_start(&config, 270) == 0);
     CHECK(rv1126b_input_start(&config, 270) < 0);
     input_context_t *reader = s_context;
-    CHECK(write(input[1], "w", 1) == 1);
-    wait_wifi();
+    stdin_key('w');
+    CHECK(!rv1126b_key_wifi_requested());
+    settings_wifi(reader);
     CHECK(calls == 0);
     CHECK(rv1126b_key_ops()->init(&ctx, handler, &calls) == 0);
     void *duplicate = NULL;
     CHECK(rv1126b_key_ops()->init(&duplicate, handler, &calls) < 0);
     CHECK(s_context == reader);
-    CHECK(write(input[1], "p", 1) == 1);
+    CHECK(write(input[1], "wp", 2) == 2);
     struct timespec deadline;
     CHECK(clock_gettime(CLOCK_REALTIME, &deadline) == 0);
     deadline.tv_sec += 3;
@@ -339,6 +360,7 @@ int main(void) {
     while (!callback_entered)
         CHECK(pthread_cond_timedwait(&changed, &lock, &deadline) == 0);
     pthread_mutex_unlock(&lock);
+    CHECK(!rv1126b_key_wifi_requested());
     pthread_t stopping;
     CHECK(pthread_create(&stopping, NULL, destroy_worker, ctx) == 0);
     const struct timespec pause = {.tv_sec = 0, .tv_nsec = 30000000};
@@ -350,12 +372,13 @@ int main(void) {
     pthread_mutex_unlock(&lock);
     CHECK(pthread_join(stopping, NULL) == 0);
     CHECK(destroyed && calls == 1 && s_context == reader);
-    CHECK(write(input[1], "p", 1) == 1);
+    CHECK(write(input[1], "wp", 2) == 2);
     nanosleep(&pause, NULL);
-    CHECK(calls == 1);
-    /* Detaching the SDK leaves product provisioning available on the same reader. */
-    CHECK(write(input[1], "w", 1) == 1);
-    wait_wifi();
+    CHECK(calls == 1 && !rv1126b_key_wifi_requested());
+    /* Detaching the SDK leaves settings provisioning available on the same reader. */
+    stdin_key('w');
+    CHECK(!rv1126b_key_wifi_requested());
+    settings_wifi(reader);
     CHECK(rv1126b_input_stop() == 0);
     CHECK(rv1126b_input_stop() == 0);
     CHECK(dup2(saved, STDIN_FILENO) >= 0);

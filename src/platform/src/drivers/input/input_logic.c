@@ -246,8 +246,6 @@ int rv1126b_touch_event(rv1126b_touch_t *touch, unsigned type, unsigned code, in
         bool located = current_position(touch, &x, &y);
         if (down && !touch->down) {
             touch->pressed_at = now;
-            touch->long_sent = false;
-            touch->long_pending = false;
             touch->blocked = touch->invalid_contact;
             touch->pressed_x = x;
             touch->pressed_y = y;
@@ -282,28 +280,15 @@ int rv1126b_touch_event(rv1126b_touch_t *touch, unsigned type, unsigned code, in
                 settings_click(touch, touch->pressed_control);
             return 0;
         }
-        if (duration >= 3000 && !touch->long_sent)
-            touch->long_pending = true;
         if (duration >= 50 && duration < 1000)
             return talk(state, event);
     }
     return 0;
 }
 
-int rv1126b_touch_provisioning_request(rv1126b_touch_t *touch, uint32_t now) {
-    if (!touch)
+int rv1126b_touch_wifi_requested(rv1126b_touch_t *touch) {
+    if (!touch || !touch->wifi_pending)
         return 0;
-    if (touch->wifi_pending) {
-        touch->wifi_pending = false;
-        return 1;
-    }
-    if (touch->dropped || touch->await_release || touch->long_sent || touch->settings_owned ||
-        touch->blocked)
-        return 0;
-    if (touch->long_pending || (touch->down && (uint32_t)(now - touch->pressed_at) >= 3000)) {
-        touch->long_pending = false;
-        touch->long_sent = true;
-        return 1;
-    }
-    return 0;
+    touch->wifi_pending = false;
+    return 1;
 }
