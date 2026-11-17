@@ -4,7 +4,7 @@
 
 面向 **RV1126B TEST2 RK805B V10** 的 MyBot 1.3.0 Linux 应用，提供 AP 配网与语音引导、HTTPS 配对、双向语音、稳定设备身份与音量持久化、像素眼镜 UI，以及可选的 V4L2/MPP JPEG 上行。
 
-当前源码为 **<!-- project-version -->0.5.3<!-- /project-version --> 设备部署候选版**。0.1.0 的语音/UI业务流程和 0.1.1 的文字渲染优化已由用户真机验收；AP 配网、语音引导、音量持久化与时间处理仍需设备验证。可选视频和长时间稳定性专项尚未完成。[验证状态](docs/validation/README.md)是结果的唯一现行入口。
+当前源码为 **<!-- project-version -->0.5.3<!-- /project-version --> 设备部署候选版**。0.1.0 的语音/UI业务流程和 0.1.1 的文字渲染优化已由用户真机验收；设备 AP、本机 HTTP 提交保存及业务恢复已有验证记录；手机 DHCP/captive browser、完整语音和声学、可选视频及长时间稳定性仍需专项验证。[验证状态](docs/validation/README.md)是结果的唯一现行入口。
 
 ## 平台与行为
 
