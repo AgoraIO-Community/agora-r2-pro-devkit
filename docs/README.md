@@ -4,6 +4,8 @@
 
 | 用户指南 | 内容 |
 | --- | --- |
+| [中文操作手册（PDF）](device-operations.zh-CN.pdf) / [图文源稿](user/device-manual.zh-CN.md) | 从 Ubuntu 构建、打包、部署到配网、对话、关机与维护，附中文 UI 图示 |
+| [English operations manual (PDF)](device-operations.en.pdf) / [Source](user/device-manual.en.md) | Equivalent steps with English build/package examples and English UI illustrations |
 | [上手与升级](user/getting-started.zh-CN.md) | 设备要求、解包、资源占用、UI/语音检查、回退 |
 | [设备部署](user/deployment.zh-CN.md) | 受监督服务、版本切换、系统策略、备份与回退 |
 | [构建](user/build.zh-CN.md) | 主机开发、独立目标 SDK、presets 与交付包 |
@@ -20,6 +22,7 @@
 | [依赖与字体](development/dependencies.zh-CN.md) | 锁文件、快照、补丁、生成资源和 SDK 输入 |
 | [第三方目录规则](development/third-party-layout.zh-CN.md) | 平级源码快照、唯一归属、迁移和显式裁剪 |
 | [发布](development/releasing.zh-CN.md) | 制品身份、打包、验证及版本发布 |
+| [手册生成](development/manual.zh-CN.md) | 图文源稿、UI 配图、中英文 PDF 生成与检查 |
 
 [验证状态](validation/README.md)是当前结果的唯一来源。[依赖来源](../VENDORED_SOURCES.md)与[许可声明](../THIRD_PARTY_NOTICES.md)说明分发范围。
 

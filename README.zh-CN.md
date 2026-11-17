@@ -75,6 +75,7 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 
 ## 文档与贡献
 
+- 图文设备操作手册：[简体中文 PDF](docs/device-operations.zh-CN.pdf) · [English PDF](docs/device-operations.en.pdf)
 - [文档索引](docs/README.md)、[配置](docs/user/configuration.zh-CN.md)、[AP 配网](docs/user/wifi-provisioning.zh-CN.md)、[系统时间](docs/user/time-sync.zh-CN.md)、[故障排查](docs/user/troubleshooting.zh-CN.md)
 - [架构](docs/development/architecture.zh-CN.md)、[测试](docs/development/testing.zh-CN.md)、[发布流程](docs/development/releasing.zh-CN.md)
 - [依赖目录规则](docs/development/third-party-layout.zh-CN.md)、[源码来源](VENDORED_SOURCES.md)
