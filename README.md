@@ -75,6 +75,7 @@ Project-maintained modules live under `src/`; pinned dependency snapshots live u
 
 ## Documentation and contribution
 
+- Illustrated device manual: [English PDF](docs/device-operations.en.pdf) · [简体中文 PDF](docs/device-operations.zh-CN.pdf)
 - [Documentation index](docs/README.md), [configuration](docs/user/configuration.zh-CN.md), [Wi-Fi setup](docs/user/wifi-provisioning.zh-CN.md), [system time](docs/user/time-sync.zh-CN.md), [troubleshooting](docs/user/troubleshooting.zh-CN.md)
 - [Architecture](docs/development/architecture.zh-CN.md), [testing](docs/development/testing.zh-CN.md), [release process](docs/development/releasing.zh-CN.md)
 - [Dependency layout](docs/development/third-party-layout.zh-CN.md), [source provenance](VENDORED_SOURCES.md)

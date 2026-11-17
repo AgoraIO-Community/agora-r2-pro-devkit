@@ -1,2 +1,5 @@
 # Preserve vendored snapshots exactly for source provenance checks.
 vendor/** -text
+
+# Preserve PDF manuals as binary documents during diff, merge and checkout.
+*.pdf binary
