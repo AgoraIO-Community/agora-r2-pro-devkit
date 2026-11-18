@@ -104,7 +104,11 @@ ctest --test-dir build/host-asan --output-on-failure \
 
 工具验证：macOS 新 helper **10/10**、部署 **58/58**、打包 **41/41**；Ubuntu 24.04 的独立临时快照对最终 helper 测试源执行 **10/10**，使用假 sysfs/假关机并清理快照。macOS 新隔离主机构建中 `ui-runtime`、`drm-lifecycle`、`supervisor`、`power-control`、`product-controller` **5/5**。最初 host fixture 因 macOS `/var` 与 `/private/var` 规范路径差异提前拒绝，修正 fixture 后通过；生产 helper 未为此修改。 0.5.4 双语手册刷新及字节重现通过，各 24 页、22 个书签，48 页文字边界检查通过；固定手册字体按原输入正规补充“背”“光”两个字形。
 
-这证明 PWM 背光控制和失败恢复在本机可执行；未执行真实关机，也未验证电池/USB 供电下的所有电源轨断电、关机后屏幕目视效果或再次按键开机。最终包构建与部署结果在完成后补充，不把可逆测试写成实际断电验收。
+最终交付从干净提交 `fc715ac` 构建中文 voice/video，应用与监督器 ABI 均 `errors=[]`；新包包含 **66** 项内部摘要并通过归档语义验证。`mybot-rv1126b-0.5.4-aarch64.tar.gz` 位于 `dist/backlight-poweroff-0.5.4/`，SHA256 为 `e2fc1f3d97a96340155a4a9fb1e6e0c97eb024624f4d3eb32d3a6246a3067cb8`，源码 SHA256 为 `f503baf1aa6ad3713ac95d60bf7ec62bd1e865efb4e499312301e8d7e5e56809`。本页后续文档结果提交不改变该制品归属。
+
+以 tag `20261118-backlight-054` 部署至当前设备，保留 0.5.3 为 previous，默认视频开启。实际运行路径、版本及 PID 核对通过，服务 running、应用 ready；安装后的 helper 与上面已测试字节一致，监督器实际 `--poweroff-command` 指向该 helper。66 项内部摘要、身份/绑定、两个私有 KV 与 Wi-Fi 配置均核对通过，最新启动日志无错误、清理或监督失败；普通升级后的背光仍为 200/200/0。脱敏回执和结果位于 `local/deployment/20261118-backlight-054/`。
+
+这证明 PWM 背光控制、失败恢复及新关机入口安装在本机可执行；未执行真实关机，也未验证电池/USB 供电下的所有电源轨断电、关机后屏幕目视效果或再次按键开机，不把可逆测试写成实际断电验收。
 
 ## 如何复核
 
