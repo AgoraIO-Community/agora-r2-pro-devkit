@@ -15,7 +15,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define POWEROFF_ACK_TIMEOUT_MS 1500
+#define CONTROL_ACK_TIMEOUT_MS 1500
 
 static int64_t power_now_ms(void) {
     struct timespec now;
@@ -47,7 +47,7 @@ static int power_wait(int fd, short events, int64_t deadline) {
     }
 }
 
-int rv1126b_poweroff_request(void) {
+static int request_transition(const char *request) {
     const char *runtime = getenv("MYBOT_SUPERVISOR_RUNTIME");
     if (!runtime || runtime[0] != '/') {
         errno = ENOTCONN;
@@ -77,7 +77,7 @@ int rv1126b_poweroff_request(void) {
     int64_t now = power_now_ms();
     if (now < 0)
         return -1;
-    int64_t deadline = now + POWEROFF_ACK_TIMEOUT_MS;
+    int64_t deadline = now + CONTROL_ACK_TIMEOUT_MS;
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (fd < 0)
         return -1;
@@ -104,15 +104,15 @@ int rv1126b_poweroff_request(void) {
             goto done;
         }
     }
-    const char request[] = "poweroff\n";
+    const size_t length_to_send = strlen(request);
     size_t used = 0;
-    while (used < sizeof(request) - 1) {
+    while (used < length_to_send) {
         if (power_wait(fd, POLLOUT, deadline) < 0)
             goto done;
 #ifdef MSG_NOSIGNAL
-        ssize_t written = send(fd, request + used, sizeof(request) - 1 - used, MSG_NOSIGNAL);
+        ssize_t written = send(fd, request + used, length_to_send - used, MSG_NOSIGNAL);
 #else
-        ssize_t written = send(fd, request + used, sizeof(request) - 1 - used, 0);
+        ssize_t written = send(fd, request + used, length_to_send - used, 0);
 #endif
         if (written < 0 && (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK))
             continue;
@@ -138,7 +138,7 @@ int rv1126b_poweroff_request(void) {
     }
     if (used == 9 && !memcmp(response, "accepted\n", 9)) {
         /* A lost acknowledgement leaves the application running. The
-         * supervisor reserves poweroff only after this explicit commit. */
+         * supervisor acts only after this explicit commit. */
         const char commit[] = "commit\n";
         used = 0;
         while (used < sizeof(commit) - 1) {
@@ -182,4 +182,12 @@ done:
     close(fd);
     errno = saved_errno;
     return result;
+}
+
+int rv1126b_poweroff_request(void) {
+    return request_transition("poweroff\n");
+}
+
+int rv1126b_factory_reset_request(void) {
+    return request_transition("factory_reset\n");
 }

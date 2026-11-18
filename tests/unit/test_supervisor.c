@@ -96,7 +96,7 @@ static void prepare(void) {
     CHECK(write(fd, script, (size_t)length) == length && close(fd) == 0);
 }
 
-static void power_request_delayed_commit(bool commit) {
+static void delayed_commit(const char *request, bool commit) {
     struct sockaddr_un address = {.sun_family = AF_UNIX};
     const char *runtime = getenv("MYBOT_SUPERVISOR_RUNTIME");
     CHECK(runtime);
@@ -104,7 +104,7 @@ static void power_request_delayed_commit(bool commit) {
           (int)sizeof(address.sun_path));
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     CHECK(fd >= 0 && connect(fd, (struct sockaddr *)&address, sizeof(address)) == 0);
-    CHECK(write(fd, "poweroff\n", 9) == 9);
+    CHECK(write(fd, request, strlen(request)) == (ssize_t)strlen(request));
     char response[16] = {0};
     CHECK(read(fd, response, sizeof(response) - 1) == 9);
     CHECK(!strcmp(response, "accepted\n"));
@@ -121,15 +121,47 @@ static void power_request_delayed_commit(bool commit) {
 static int child_payload(const char *mode, const char *marker) {
     int fd = open(marker, O_WRONLY | O_CREAT | O_APPEND, 0600);
     CHECK(fd >= 0);
+    if (!strncmp(mode, "reset-", 6)) {
+        struct stat status;
+        CHECK(fstat(fd, &status) == 0);
+        char pending[PATH_MAX];
+        /* The harness passes a fresh private directory in place of /userdata/mybot. */
+        CHECK(snprintf(pending, sizeof(pending), "%s/../factory-reset.pending",
+                       getenv("MYBOT_SUPERVISOR_RUNTIME")) < (int)sizeof(pending));
+        if (!strcmp(mode, "reset-clean") && status.st_size > 0) {
+            CHECK(lstat(pending, &status) == 0 && S_ISREG(status.st_mode));
+            CHECK(unlink(pending) == 0);
+            CHECK(write(fd, "relaunched\n", 11) == 11);
+            close(fd);
+            return 0;
+        }
+        if (!strcmp(mode, "reset-no-commit")) {
+            delayed_commit("factory_reset\n", false);
+            for (;;)
+                pause();
+        }
+        int result = rv1126b_factory_reset_request();
+        if (!strcmp(mode, "reset-disabled") || !strcmp(mode, "reset-unsafe")) {
+            close(fd);
+            return result < 0 ? 0 : 8;
+        }
+        CHECK(result == 0);
+        CHECK(lstat(pending, &status) == 0 && S_ISREG(status.st_mode) && status.st_nlink == 1 &&
+              status.st_uid == geteuid() && (status.st_mode & 07777) == 0600 &&
+              status.st_size == 0);
+        CHECK(write(fd, "committed\n", 10) == 10);
+        close(fd);
+        return !strcmp(mode, "reset-fail") ? 1 : 0;
+    }
     if (!strncmp(mode, "power-", 6)) {
         close(fd);
         if (!strcmp(mode, "power-no-commit")) {
-            power_request_delayed_commit(false);
+            delayed_commit("poweroff\n", false);
             for (;;)
                 pause();
         }
         if (!strcmp(mode, "power-delayed-commit")) {
-            power_request_delayed_commit(true);
+            delayed_commit("poweroff\n", true);
             return 0;
         }
         int accepted = rv1126b_poweroff_request();
@@ -230,6 +262,8 @@ static pid_t start_supervisor(const char *mode, size_t log_limit) {
                                               .log_limit_bytes = log_limit};
         if (!strncmp(mode, "power-", 6) && strcmp(mode, "power-disabled"))
             config.poweroff_command = power_command;
+        if (!strncmp(mode, "reset-", 6) && strcmp(mode, "reset-disabled"))
+            config.reset_directory = temporary;
         _exit(rv1126b_supervisor_run(&config));
     }
     return pid;
@@ -500,6 +534,55 @@ static void test_poweroff_peer_and_commit(void) {
     remove_tree(temporary);
 }
 
+static void test_factory_reset(void) {
+    char pending[PATH_MAX];
+    prepare();
+    CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
+          (int)sizeof(pending));
+    CHECK(await_exit(start_supervisor("reset-clean", 8192)) == 0);
+    FILE *file = fopen(marker_path, "r");
+    char text[32] = {0};
+    CHECK(file && fread(text, 1, sizeof(text) - 1, file) > 0 && fclose(file) == 0);
+    CHECK(!strcmp(text, "committed\nrelaunched\n"));
+    CHECK(access(pending, F_OK) < 0 && errno == ENOENT);
+    CHECK(access(power_marker, F_OK) < 0 && errno == ENOENT);
+    remove_tree(temporary);
+
+    prepare();
+    CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
+          (int)sizeof(pending));
+    CHECK(await_exit(start_supervisor("reset-disabled", 128)) == 0);
+    CHECK(access(pending, F_OK) < 0 && errno == ENOENT);
+    CHECK(symlink("unrelated", pending) == 0);
+    CHECK(await_exit(start_supervisor("reset-unsafe", 128)) == 0);
+    struct stat status;
+    CHECK(lstat(pending, &status) == 0 && S_ISLNK(status.st_mode));
+    remove_tree(temporary);
+
+    prepare();
+    CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
+          (int)sizeof(pending));
+    pid_t supervisor = start_supervisor("reset-no-commit", 128);
+    await_state("running\n");
+    CHECK(setenv("MYBOT_SUPERVISOR_RUNTIME", runtime_path, 1) == 0);
+    CHECK(rv1126b_factory_reset_request() < 0);
+    CHECK(unsetenv("MYBOT_SUPERVISOR_RUNTIME") == 0);
+    CHECK(access(pending, F_OK) < 0 && errno == ENOENT);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 0 && await_exit(supervisor) == 0);
+    remove_tree(temporary);
+
+    prepare();
+    CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
+          (int)sizeof(pending));
+    supervisor = start_supervisor("reset-fail", 128);
+    await_state("failed\n");
+    CHECK(lstat(pending, &status) == 0 && S_ISREG(status.st_mode));
+    CHECK(stat(marker_path, &status) == 0 && status.st_size == 10);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 1);
+    end_failed_fixture(supervisor);
+    remove_tree(temporary);
+}
+
 static void check_private_log(const char *message) {
     char path[PATH_MAX], text[2048] = {0};
     CHECK(snprintf(path, sizeof(path), "%s/mybot.log", logs_path) > 0);
@@ -555,6 +638,7 @@ int main(int argc, char **argv) {
     test_unsafe_inputs();
     test_planned_poweroff();
     test_poweroff_peer_and_commit();
+    test_factory_reset();
     test_poweroff_helper_diagnostics();
     puts("Supervisor identity, cleanup, retry budget and planned fake poweroff: PASS");
     return 0;

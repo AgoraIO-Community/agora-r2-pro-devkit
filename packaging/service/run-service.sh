@@ -27,6 +27,11 @@ case "${1:-}" in
     exec)
         [ "$#" -eq 2 ] || fail 'invalid child invocation'
         verify_release "$2"
+        # Resume any confirmed transaction before audio, networking or the SDK starts.
+        "$service_dir/mybot-factory-reset"
+        if [ -e /userdata/mybot/factory-reset.setup ] && [ ! -x "$release/bin/mybot-factory-reset" ]; then
+            fail 'finish Wi-Fi setup with a reset-capable release before rollback'
+        fi
         # Every supervised launch restores the verified capture baseline.
         "$service_dir/audio-prepare.sh"
         exec "$release/run.sh"
@@ -72,5 +77,5 @@ chmod 0700 /userdata/mybot/logs
 [ -x /sbin/poweroff ] || fail 'normal system poweroff command is missing'
 [ -x "$service_dir/poweroff.sh" ] || fail 'backlight poweroff helper is missing'
 exec "$service_dir/mybot-supervisor" supervise --runtime "$runtime" \
-    --log-dir /userdata/mybot/logs --poweroff-command "$service_dir/poweroff.sh" \
+    --log-dir /userdata/mybot/logs --factory-reset --poweroff-command "$service_dir/poweroff.sh" \
     -- "$service_dir/run-service.sh" exec "$release" </dev/null

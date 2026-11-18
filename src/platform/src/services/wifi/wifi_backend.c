@@ -51,8 +51,8 @@ enum {
     CONFIG_SYSTEM,
     CONFIG_LEASES
 };
-static bool initialize(void *context, char *error);
-static bool attach_supplicant(linux_backend_t *backend);
+static wifi_backend_init_result_t initialize(void *context, char *error);
+static wifi_backend_init_result_t probe_supplicant(linux_backend_t *backend);
 static void stop_ap(void *context);
 static bool ap_running(void *context);
 static void stop_dhcp(linux_backend_t *backend);
@@ -210,70 +210,106 @@ static void discard_initialization(linux_backend_t *backend) {
     backend->runtime[0] = 0;
 }
 
-static bool initialize(void *context, char *error) {
+#ifdef __linux__
+static bool device_missing(int code) {
+    return code == ENOENT || code == ENODEV || code == ENXIO;
+}
+
+static wifi_backend_init_result_t discover_interface(linux_backend_t *backend, char *error) {
+    const char *configured = backend->config[CONFIG_INTERFACE];
+    if (*configured && !wifi_valid_interface(configured)) {
+        wifi_error(error, "Invalid Wi-Fi interface name");
+        return WIFI_BACKEND_FAILED;
+    }
+    wifi_copy(backend->interface_name, sizeof(backend->interface_name), configured);
+    struct stat st;
+    char path[PATH_MAX];
+    if (*configured) {
+        snprintf(path, sizeof(path), "/sys/class/net/%s/phy80211", configured);
+        if (!stat(path, &st))
+            return WIFI_BACKEND_READY;
+        int code = errno;
+        wifi_error(error, "Cannot find the configured nl80211 Wi-Fi interface");
+        return device_missing(code) ? WIFI_BACKEND_RETRY : WIFI_BACKEND_FAILED;
+    }
+    DIR *directory = opendir("/sys/class/net");
+    if (!directory) {
+        wifi_error(error, "Cannot enumerate Linux network interfaces");
+        return WIFI_BACKEND_FAILED;
+    }
+    int problem = 0;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(directory);
+        if (!entry) {
+            if (errno)
+                problem = errno;
+            break;
+        }
+        if (!wifi_valid_interface(entry->d_name))
+            continue;
+        snprintf(path, sizeof(path), "/sys/class/net/%s/phy80211", entry->d_name);
+        if (stat(path, &st)) {
+            if (!device_missing(errno))
+                problem = errno;
+            continue;
+        }
+        if (!backend->interface_name[0] || strcmp(entry->d_name, "wlan0") == 0 ||
+            (strcmp(backend->interface_name, "wlan0") &&
+             strcmp(entry->d_name, backend->interface_name) < 0))
+            wifi_copy(backend->interface_name, sizeof(backend->interface_name), entry->d_name);
+    }
+    closedir(directory);
+    if (backend->interface_name[0])
+        return WIFI_BACKEND_READY;
+    wifi_error(error, "No nl80211 Wi-Fi interface found");
+    return problem ? WIFI_BACKEND_FAILED : WIFI_BACKEND_RETRY;
+}
+#endif
+
+static wifi_backend_init_result_t initialize(void *context, char *error) {
 #ifndef __linux__
     (void)discard_initialization;
     (void)context;
     wifi_error(error, "Wi-Fi AP provisioning requires Linux nl80211");
-    return false;
+    return WIFI_BACKEND_FAILED;
 #else
     linux_backend_t *backend = context;
     if (backend->initialized)
-        return true;
+        return WIFI_BACKEND_READY;
     if ((*backend->config[CONFIG_SYSTEM] && *backend->config[CONFIG_SYSTEM] != '/') ||
         (*backend->config[CONFIG_LEASES] && *backend->config[CONFIG_LEASES] != '/')) {
         wifi_error(error, "System Wi-Fi profile and lease paths must be absolute");
-        return false;
+        return WIFI_BACKEND_FAILED;
     }
-    wifi_copy(backend->interface_name, sizeof(backend->interface_name),
-              backend->config[CONFIG_INTERFACE]);
-    if (!*backend->config[CONFIG_INTERFACE]) {
-        DIR *directory = opendir("/sys/class/net");
-        struct dirent *entry;
-        while (directory && (entry = readdir(directory))) {
-            char path[PATH_MAX];
-            struct stat st;
-            snprintf(path, sizeof(path), "/sys/class/net/%s/phy80211", entry->d_name);
-            if (!wifi_valid_interface(entry->d_name) || stat(path, &st))
-                continue;
-            if (!backend->interface_name[0] || strcmp(entry->d_name, "wlan0") == 0 ||
-                (strcmp(backend->interface_name, "wlan0") &&
-                 strcmp(entry->d_name, backend->interface_name) < 0))
-                wifi_copy(backend->interface_name, sizeof(backend->interface_name), entry->d_name);
-        }
-        if (directory)
-            closedir(directory);
-    }
+    wifi_backend_init_result_t radio = discover_interface(backend, error);
+    if (radio != WIFI_BACKEND_READY)
+        return radio;
     char path[PATH_MAX];
     struct stat st;
-    snprintf(path, sizeof(path), "/sys/class/net/%s/phy80211", backend->interface_name);
-    if (!wifi_valid_interface(backend->config[CONFIG_INTERFACE][0]
-                                  ? backend->config[CONFIG_INTERFACE]
-                                  : backend->interface_name) ||
-        stat(path, &st)) {
-        wifi_error(error, "No nl80211 Wi-Fi interface; configure the Wi-Fi interface explicitly");
-        return false;
-    }
     snprintf(path, sizeof(path), "/sys/class/net/%s/addr_assign_type", backend->interface_name);
     wifi_buffer_t mac;
     wifi_buffer_init(&mac, 256);
-    const bool permanent_mac = wifi_read_text(path, &mac) &&
+    bool read_mac = wifi_read_text(path, &mac);
+    const bool permanent_mac = read_mac &&
                                (mac.length == 1 || (mac.length == 2 && mac.data[1] == '\n')) &&
                                mac.data[0] == '0';
     wifi_buffer_free(&mac);
     if (!permanent_mac) {
         wifi_error(error, "Wi-Fi interface does not report a permanent MAC address");
-        return false;
+        return !read_mac && stat(path, &st) && device_missing(errno) ? WIFI_BACKEND_RETRY
+                                                                     : WIFI_BACKEND_FAILED;
     }
     snprintf(path, sizeof(path), "/sys/class/net/%s/address", backend->interface_name);
     wifi_buffer_init(&mac, 256);
+    read_mac = wifi_read_text(path, &mac);
     const bool valid_mac =
-        wifi_read_text(path, &mac) &&
-        wifi_hotspot_ssid_from_mac(mac.data, backend->ssid, sizeof(backend->ssid));
+        read_mac && wifi_hotspot_ssid_from_mac(mac.data, backend->ssid, sizeof(backend->ssid));
     wifi_buffer_free(&mac);
     if (!valid_mac) {
         wifi_error(error, "Cannot read Wi-Fi MAC address");
-        return false;
+        return !read_mac && stat(path, &st) && device_missing(errno) ? WIFI_BACKEND_RETRY
+                                                                     : WIFI_BACKEND_FAILED;
     }
     for (size_t i = 0; i < 6; ++i)
         if (!wifi_find_program(program_names[i], backend->programs[i],
@@ -281,27 +317,27 @@ static bool initialize(void *context, char *error) {
             char message[WIFI_ERROR_CAPACITY];
             snprintf(message, sizeof(message), "Missing required Wi-Fi tool: %s", program_names[i]);
             wifi_error(error, message);
-            return false;
+            return WIFI_BACKEND_FAILED;
         }
     const char *script = backend->config[CONFIG_SCRIPT];
     if (*script != '/' || lstat(script, &st) || !S_ISREG(st.st_mode) || (st.st_mode & 0022) ||
         access(script, X_OK)) {
         wifi_error(error, "Missing or unsafe executable Wi-Fi DHCP hook");
-        return false;
+        return WIFI_BACKEND_FAILED;
     }
     int base = -1;
     if (!wifi_private_directory(backend->config[CONFIG_STORAGE], &base, error))
-        return false;
+        return WIFI_BACKEND_FAILED;
     close(base);
     int used = snprintf(path, sizeof(path), "%s/wifi", backend->config[CONFIG_STORAGE]);
     if (used < 0 || (size_t)used >= sizeof(path) ||
         !wifi_private_directory(path, &backend->storage_fd, error))
-        return false;
+        return WIFI_BACKEND_FAILED;
     const char *runtime_base = *backend->config[CONFIG_RUNTIME] ? backend->config[CONFIG_RUNTIME]
                                                                 : "/run/mybot-rv1126b-wifi";
     if (!wifi_private_directory(runtime_base, &base, error)) {
         discard_initialization(backend);
-        return false;
+        return WIFI_BACKEND_FAILED;
     }
     close(base);
     used = snprintf(backend->runtime, sizeof(backend->runtime), "%s/session-XXXXXX", runtime_base);
@@ -309,44 +345,57 @@ static bool initialize(void *context, char *error) {
         backend->runtime[0] = 0;
         wifi_error(error, "Cannot create private Wi-Fi runtime session");
         discard_initialization(backend);
-        return false;
+        return WIFI_BACKEND_FAILED;
     }
     if (strlen(backend->runtime) > 72 ||
         !wifi_private_directory(backend->runtime, &backend->runtime_fd, error)) {
         wifi_error(error, "Wi-Fi runtime path is unsafe or too long for Unix control sockets");
         discard_initialization(backend);
-        return false;
+        return WIFI_BACKEND_FAILED;
     }
-    backend->initialized = true;
     if (*backend->config[CONFIG_SYSTEM]) {
         wifi_credentials_t profiles;
-        if (!attach_supplicant(backend)) {
-            wifi_error(error, "System Wi-Fi mode requires the existing supplicant control socket");
-            backend->initialized = false;
-            discard_initialization(backend);
-            return false;
-        }
         if (!wifi_read_system_profiles(backend->config[CONFIG_SYSTEM], &profiles, error)) {
-            backend->initialized = false;
             discard_initialization(backend);
-            return false;
+            return WIFI_BACKEND_FAILED;
+        }
+        wifi_backend_init_result_t supplicant = probe_supplicant(backend);
+        if (supplicant != WIFI_BACKEND_READY) {
+            wifi_error(error, "System Wi-Fi mode requires the existing supplicant control socket");
+            discard_initialization(backend);
+            return supplicant;
         }
     }
-    return true;
+    backend->initialized = true;
+    return WIFI_BACKEND_READY;
 #endif
 }
 
-static bool attach_supplicant(linux_backend_t *backend) {
+static wifi_backend_init_result_t probe_supplicant(linux_backend_t *backend) {
     static const char *const bases[] = {"/run/wpa_supplicant/", "/var/run/wpa_supplicant/"};
     char remote[PATH_MAX], local[PATH_MAX];
     snprintf(local, sizeof(local), "%s/wpa-client", backend->runtime);
+    wifi_backend_init_result_t unavailable = WIFI_BACKEND_RETRY;
     for (size_t i = 0; i < 2; ++i) {
         snprintf(remote, sizeof(remote), "%s%s", bases[i], backend->interface_name);
-        if (wifi_control_open(&backend->control, remote, local) && ping(backend, 200))
-            return true;
+        if (!wifi_control_open(&backend->control, remote, local)) {
+            if (errno != ENOENT && errno != ECONNREFUSED && errno != ENODEV && errno != EAGAIN)
+                unavailable = WIFI_BACKEND_FAILED;
+        } else {
+            char response[64];
+            if (query(backend, "PING", 200, response, sizeof(response))) {
+                if (!strncmp(response, "PONG", 4))
+                    return WIFI_BACKEND_READY;
+                unavailable = WIFI_BACKEND_FAILED;
+            }
+        }
     }
     wifi_control_close(&backend->control);
-    return false;
+    return unavailable;
+}
+
+static bool attach_supplicant(linux_backend_t *backend) {
+    return probe_supplicant(backend) == WIFI_BACKEND_READY;
 }
 
 static bool ensure_supplicant(linux_backend_t *backend, char *error) {
@@ -469,7 +518,7 @@ static bool ap_running(void *context) {
 
 static bool start_ap(void *context, char *error) {
     linux_backend_t *backend = context;
-    if (!backend->initialized && !initialize(backend, error))
+    if (!backend->initialized && initialize(backend, error) != WIFI_BACKEND_READY)
         return false;
     if (ap_running(backend))
         return true;
@@ -651,7 +700,7 @@ static void stop_ap(void *context) {
 
 static bool scan(void *context, wifi_scan_t *result, char *error) {
     linux_backend_t *backend = context;
-    if (!backend->initialized && !initialize(backend, error))
+    if (!backend->initialized && initialize(backend, error) != WIFI_BACKEND_READY)
         return false;
     if (!backend->concurrent && ap_running(backend)) {
         *result = backend->cached_scan;
@@ -683,7 +732,7 @@ static bool scan(void *context, wifi_scan_t *result, char *error) {
 
 static bool load(void *context, wifi_credentials_t *result, char *error) {
     linux_backend_t *backend = context;
-    if (!backend->initialized && !initialize(backend, error))
+    if (!backend->initialized && initialize(backend, error) != WIFI_BACKEND_READY)
         return false;
     bool ok = *backend->config[CONFIG_SYSTEM]
                   ? wifi_read_system_profiles(backend->config[CONFIG_SYSTEM], result, error)
@@ -709,7 +758,7 @@ static bool reconfigure(void *context) {
 static bool save(void *context, const wifi_credentials_t *profiles, char *error) {
     linux_backend_t *backend = context;
     backend->commit_pending = false;
-    if (!backend->initialized && !initialize(backend, error))
+    if (!backend->initialized && initialize(backend, error) != WIFI_BACKEND_READY)
         return false;
     if (*backend->config[CONFIG_SYSTEM]) {
         if (backend->owns_supplicant || !ensure_supplicant(backend, error)) {
@@ -889,7 +938,7 @@ static bool connect_network(void *context, const wifi_credential_t *credential, 
         wifi_error(error, "Wi-Fi operation cancelled");
         return false;
     }
-    if (!backend->initialized && !initialize(backend, error))
+    if (!backend->initialized && initialize(backend, error) != WIFI_BACKEND_READY)
         return false;
     char initial_status[WIFI_STATUS_LIMIT], original_route[WIFI_ROUTE_LIMIT];
     if (!query(backend, "STATUS", 200, initial_status, sizeof(initial_status)) &&
@@ -1072,9 +1121,15 @@ static void destroy(void *context) {
     free(backend);
 }
 
+static bool system_station(void *context) {
+    const linux_backend_t *backend = context;
+    return *backend->config[CONFIG_SYSTEM] != 0;
+}
+
 static const wifi_backend_ops_t operations = {
     initialize, ap_ssid, start_ap, stop_ap,        ap_running,      concurrent_ap, online,
-    scan,       load,    save,     wait_committed, connect_network, destroy};
+    scan,       load,    save,     wait_committed, connect_network, destroy,       system_station};
+
 bool wifi_linux_backend_create(const wifi_backend_config_t *config, wifi_backend_t *result,
                                char *error) {
     if (!config || !result) {

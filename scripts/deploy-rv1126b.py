@@ -25,11 +25,12 @@ SERVICE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
                   "assets/service/mybot-rv1126b.conf", "assets/service/audio-prepare.sh",
                   "assets/service/poweroff.sh",
                   "assets/network/99-mybot-lease", "bin/mybot-supervisor",
-                  "supervisor-manifest.json", "abi-report-supervisor.json")
+                  "supervisor-manifest.json", "abi-report-supervisor.json", "bin/mybot-factory-reset",
+                  "factory-reset-manifest.json", "abi-report-factory-reset.json")
 EXECUTABLE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
                      "assets/service/audio-prepare.sh", "assets/network/99-mybot-lease",
                      "assets/service/poweroff.sh",
-                     "assets/wifi/udhcpc.script", "assets/time/sync-busybox.sh", "bin/mybot-supervisor")
+                     "assets/wifi/udhcpc.script", "assets/time/sync-busybox.sh", "bin/mybot-supervisor", "bin/mybot-factory-reset")
 NAME = re.compile(r"mybot-rv1126b-(\d+\.\d+\.\d+)(?:-en-US)?-aarch64(?:-voice|-video)?\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 TAG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}\Z")
@@ -148,30 +149,31 @@ def verify_package(path, expected, legacy=False):
         raise ValueError("Package startup files require owner read/execute permission")
     elf_aarch64(files["lib/libagora-rtc-sdk.so"])
     if not legacy:
-        binary = files["bin/mybot-supervisor"]
-        elf_aarch64(binary)
-        manifest = json.loads(files["supervisor-manifest.json"])
-        report_bytes = files["abi-report-supervisor.json"]
-        report = json.loads(report_bytes)
-        config = manifest["inputs"]["config"]
-        source = manifest["inputs"]["source"]["sha256"]
-        marker = (f"MYBOT_RV1126B_BUILD_CONFIG:{version};{config['language']};"
-                  f"video={int(config['video'])};ptime_ms=20;"
-                  "board=rv1126b-test2-rk805b-v10\0").encode()
-        source_marker = ("MYBOT_RV1126B_SOURCE:" + source + "\0").encode()
-        app_manifest = json.loads(files["build-manifest-" + profiles[0] + ".json"])
-        if (manifest.get("role") != "supervisor" or manifest.get("schema") != MANIFEST_SCHEMA or
-                config != app_manifest["inputs"]["config"] or
-                source != app_manifest["inputs"]["source"]["sha256"] or
-                manifest["binary_sha256"] != sha256(binary) or
-                manifest["abi_report_sha256"] != sha256(report_bytes) or
-                report.get("errors") != [] or report["binary"]["machine"] != 183 or
-                report["binary"]["sha256"] != sha256(binary) or
-                marker not in binary or source_marker not in binary or
-                inputs_digest(manifest["inputs"], public=True) !=
-                inputs_digest(app_manifest["inputs"], public=True) or
-                inputs_markers[profiles[0]] not in binary):
-            raise ValueError("Supervisor ABI/provenance does not match its independent manifest")
+        for role in ("supervisor", "factory-reset"):
+            binary = files["bin/mybot-" + role]
+            elf_aarch64(binary)
+            manifest = json.loads(files[role + "-manifest.json"])
+            report_bytes = files["abi-report-" + role + ".json"]
+            report = json.loads(report_bytes)
+            config = manifest["inputs"]["config"]
+            source = manifest["inputs"]["source"]["sha256"]
+            marker = (f"MYBOT_RV1126B_BUILD_CONFIG:{version};{config['language']};"
+                      f"video={int(config['video'])};ptime_ms=20;"
+                      "board=rv1126b-test2-rk805b-v10\0").encode()
+            source_marker = ("MYBOT_RV1126B_SOURCE:" + source + "\0").encode()
+            app_manifest = json.loads(files["build-manifest-" + profiles[0] + ".json"])
+            if (manifest.get("role") != role or manifest.get("schema") != MANIFEST_SCHEMA or
+                    config != app_manifest["inputs"]["config"] or
+                    source != app_manifest["inputs"]["source"]["sha256"] or
+                    manifest["binary_sha256"] != sha256(binary) or
+                    manifest["abi_report_sha256"] != sha256(report_bytes) or
+                    report.get("errors") != [] or report["binary"]["machine"] != 183 or
+                    report["binary"]["sha256"] != sha256(binary) or
+                    marker not in binary or source_marker not in binary or
+                    inputs_digest(manifest["inputs"], public=True) !=
+                    inputs_digest(app_manifest["inputs"], public=True) or
+                    inputs_markers[profiles[0]] not in binary):
+                raise ValueError(role.capitalize() + " ABI/provenance does not match its independent manifest")
     return {"path": path.resolve(), "name": root, "version": version,
             "sha256": expected, "profiles": profiles, "files": files}
 
@@ -553,6 +555,11 @@ release={shlex.quote(DEVICE_ROOT + '/releases/' + name)}
 [ -d "$release" ] && [ ! -L "$release" ] || exit 82
 [ -d "$release/bin" ] && [ ! -L "$release/bin" ] || exit 87
 [ -f "$release/.archive-sha256" ] && [ ! -L "$release/.archive-sha256" ] || exit 83
+for marker in factory-reset.pending factory-reset.setup; do
+    if [ -e /userdata/mybot/"$marker" ] || [ -L /userdata/mybot/"$marker" ]; then
+        [ -x "$release/bin/mybot-factory-reset" ] || exit 89
+    fi
+done
 recorded=$(cat "$release/.archive-sha256")
 [ "${{#recorded}}" = 64 ] || exit 84
 case "$recorded" in *[!0-9a-f]*) exit 84;; esac
@@ -581,7 +588,7 @@ done
 service_state=not_installed
 if [ -x {SERVICE} ]; then
     service_state=$({SERVICE} status 2>/dev/null) || :
-    case "$service_state" in starting|running|backoff|stopping|stopped|failed|poweroff_pending|poweroff) ;;
+    case "$service_state" in starting|running|backoff|stopping|stopped|failed|poweroff_pending|poweroff|factory_reset_pending) ;;
         *) service_state=query_failed;; esac
 fi
 printf 'service=%s\\n' "$service_state"
@@ -774,6 +781,7 @@ install_file {shlex.quote(release + '/assets/service/S99mybot')} {SERVICE} 755
 install_file {shlex.quote(release + '/assets/service/run-service.sh')} /etc/mybot-rv1126b/run-service.sh 755
 install_file {shlex.quote(release + '/assets/service/audio-prepare.sh')} /etc/mybot-rv1126b/audio-prepare.sh 755
 install_file {shlex.quote(release + '/assets/service/poweroff.sh')} /etc/mybot-rv1126b/poweroff.sh 755
+install_file {shlex.quote(release + '/bin/mybot-factory-reset')} /etc/mybot-rv1126b/mybot-factory-reset 755
 install_file {shlex.quote(release + '/bin/mybot-supervisor')} /etc/mybot-rv1126b/mybot-supervisor 755
 [ -d /lib/dhcpcd/dhcpcd-hooks ] && [ ! -L /lib/dhcpcd/dhcpcd-hooks ] || exit 54
 install_file {shlex.quote(release + '/assets/network/99-mybot-lease')} /lib/dhcpcd/dhcpcd-hooks/99-mybot-lease 644

@@ -18,6 +18,10 @@ typedef struct {
     /* NULL disables poweroff. The command receives no arguments and executes
      * only after an authenticated request and verified clean application exit. */
     const char *poweroff_command;
+    /* Private 0700 directory for the durable factory-reset.pending marker.
+     * NULL disables reset requests. The launcher consumes the marker before
+     * opening application data on startup, including after a power loss. */
+    const char *reset_directory;
     unsigned int terminate_timeout_ms;
     unsigned int cleanup_timeout_ms;
     unsigned int restart_window_ms;

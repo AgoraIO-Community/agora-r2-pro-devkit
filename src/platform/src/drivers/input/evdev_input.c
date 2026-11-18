@@ -51,6 +51,7 @@ static mybot_settings_page_t s_page;
 static int s_exit_requested;
 static int s_wifi_requested;
 static int s_poweroff_requested;
+static int s_reset_requested;
 
 static uint32_t now_ms(void) {
     struct timespec now;
@@ -207,7 +208,7 @@ static void emit(mybot_key_event_t event) {
 }
 
 void rv1126b_input_settings_page(mybot_settings_page_t page) {
-    if ((unsigned)page > MYBOT_SETTINGS_POWEROFF_ERROR)
+    if ((unsigned)page > MYBOT_SETTINGS_RESET_ERROR)
         return;
     pthread_mutex_lock(&s_page_lock);
     s_page = page;
@@ -232,6 +233,10 @@ static void publish_touch(input_context_t *ctx) {
     if (ctx->touch_state.poweroff_pending) {
         ctx->touch_state.poweroff_pending = false;
         __atomic_store_n(&s_poweroff_requested, 1, __ATOMIC_RELEASE);
+    }
+    if (ctx->touch_state.reset_pending) {
+        ctx->touch_state.reset_pending = false;
+        __atomic_store_n(&s_reset_requested, 1, __ATOMIC_RELEASE);
     }
     if (rv1126b_touch_wifi_requested(&ctx->touch_state))
         __atomic_store_n(&s_wifi_requested, 1, __ATOMIC_RELEASE);
@@ -271,7 +276,8 @@ static void back_key(void) {
     mybot_settings_page_t page = settings_page();
     if (page == MYBOT_SETTINGS_MENU)
         rv1126b_input_settings_page(MYBOT_SETTINGS_CLOSED);
-    else if (page == MYBOT_SETTINGS_CONFIRM_POWEROFF || page == MYBOT_SETTINGS_POWEROFF_ERROR)
+    else if (page == MYBOT_SETTINGS_CONFIRM_POWEROFF || page == MYBOT_SETTINGS_POWEROFF_ERROR ||
+             page == MYBOT_SETTINGS_CONFIRM_RESET || page == MYBOT_SETTINGS_RESET_ERROR)
         rv1126b_input_settings_page(MYBOT_SETTINGS_MENU);
 }
 
@@ -440,6 +446,7 @@ int rv1126b_input_start(const rv1126b_platform_config_t *config, unsigned rotati
     __atomic_store_n(&s_exit_requested, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&s_wifi_requested, 0, __ATOMIC_RELEASE);
     __atomic_store_n(&s_poweroff_requested, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_reset_requested, 0, __ATOMIC_RELEASE);
     rv1126b_input_settings_page(MYBOT_SETTINGS_CLOSED);
     if (pthread_create(&ctx->thread, NULL, input_worker, ctx) != 0) {
         close_context(ctx);
@@ -522,6 +529,10 @@ int rv1126b_key_wifi_requested(void) {
 
 int rv1126b_key_poweroff_requested(void) {
     return __atomic_exchange_n(&s_poweroff_requested, 0, __ATOMIC_ACQ_REL);
+}
+
+int rv1126b_key_factory_reset_requested(void) {
+    return __atomic_exchange_n(&s_reset_requested, 0, __ATOMIC_ACQ_REL);
 }
 
 const mybot_key_ops_t *rv1126b_key_ops(void) {

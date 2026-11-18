@@ -30,12 +30,18 @@ add_library(mybot_wifi STATIC "${wifi_portal_header}" src/services/wifi/wifi_com
     src/services/wifi/wifi_backend.c src/services/wifi/wifi_credentials.c
     src/services/wifi/wifi_process.c src/services/wifi/wifi_radio.c
     src/services/wifi/wifi_wpa_control.c src/services/wifi/wifi_portal.c
-    src/services/wifi/wifi_service.c src/services/wifi/system_wifi_profile.c)
+    src/services/wifi/wifi_service.c src/services/wifi/system_wifi_profile.c
+    src/services/wifi/factory_reset_state.c)
 set_target_properties(mybot_wifi PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES C_EXTENSIONS NO)
 target_include_directories(mybot_wifi PUBLIC include PRIVATE src/services/wifi
     "${CMAKE_CURRENT_BINARY_DIR}/generated/wifi")
 target_link_libraries(mybot_wifi PUBLIC Threads::Threads OpenSSL::Crypto PRIVATE mybot_network_route)
 target_compile_options(mybot_wifi PRIVATE -Wall -Wextra -Werror)
+add_executable(mybot-factory-reset src/services/wifi/factory_reset_main.c
+    src/services/wifi/factory_reset.c)
+target_link_libraries(mybot-factory-reset PRIVATE mybot_wifi)
+target_compile_options(mybot-factory-reset PRIVATE -Wall -Wextra -Werror)
+set_target_properties(mybot-factory-reset PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${PROJECT_BINARY_DIR}")
 add_library(mybot_power STATIC src/services/power.c)
 target_include_directories(mybot_power PUBLIC include)
 target_compile_options(mybot_power PRIVATE -Wall -Wextra -Werror)

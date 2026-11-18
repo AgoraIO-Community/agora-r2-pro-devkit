@@ -223,6 +223,27 @@ static void check_retained_mt_axes(void) {
     CHECK(settings_page() == MYBOT_SETTINGS_CLOSED);
     touch_contact(&context, &source, descriptors[1], 8, 596, 44, true, true);
     CHECK(settings_page() == MYBOT_SETTINGS_MENU);
+    touch_contact(&context, &source, descriptors[1], 9, 320, 360, true, true);
+    CHECK(settings_page() == MYBOT_SETTINGS_CONFIRM_RESET);
+    CHECK(!rv1126b_key_factory_reset_requested());
+    /* Double tapping the menu entry cannot confirm the reset. */
+    touch_contact(&context, &source, descriptors[1], 10, 320, 360, false, false);
+    CHECK(settings_page() == MYBOT_SETTINGS_CONFIRM_RESET &&
+          !rv1126b_key_factory_reset_requested());
+    touch_contact(&context, &source, descriptors[1], 11, 60, 44, true, true);
+    CHECK(settings_page() == MYBOT_SETTINGS_MENU && !rv1126b_key_factory_reset_requested());
+    touch_contact(&context, &source, descriptors[1], 12, 320, 360, true, true);
+    CHECK(settings_page() == MYBOT_SETTINGS_CONFIRM_RESET);
+    touch_contact(&context, &source, descriptors[1], 13, 320, 438, false, true);
+    CHECK(settings_page() == MYBOT_SETTINGS_RESETTING);
+    CHECK(rv1126b_key_factory_reset_requested() && !rv1126b_key_factory_reset_requested());
+    touch_contact(&context, &source, descriptors[1], 14, 320, 438, false, false);
+    back_key();
+    CHECK(settings_page() == MYBOT_SETTINGS_RESETTING && !rv1126b_key_factory_reset_requested());
+    rv1126b_input_settings_page(MYBOT_SETTINGS_RESET_ERROR);
+    back_key();
+    CHECK(settings_page() == MYBOT_SETTINGS_MENU && !rv1126b_key_poweroff_requested() &&
+          !rv1126b_key_wifi_requested());
     rv1126b_input_settings_page(MYBOT_SETTINGS_CLOSED);
     close(descriptors[0]);
     close(descriptors[1]);

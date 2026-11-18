@@ -66,6 +66,9 @@ class DeploymentTests(unittest.TestCase):
                       "build-manifest-voice.json": json.dumps(manifest).encode()}
         self.files["abi-report-supervisor.json"] = report_bytes
         self.files["supervisor-manifest.json"] = json.dumps({**manifest, "role": "supervisor"}).encode()
+        self.files["bin/mybot-factory-reset"] = binary
+        self.files["abi-report-factory-reset.json"] = report_bytes
+        self.files["factory-reset-manifest.json"] = json.dumps({**manifest, "role": "factory-reset"}).encode()
         for name in (*deployment.SERVICE_ASSETS, *deployment.EXECUTABLE_ASSETS):
             self.files.setdefault(name, b"#!/bin/sh\n")
         self.settings = {"server": "https://example.invalid/api", "device_id": "FIXTURE-ONLY",
@@ -225,7 +228,7 @@ class DeploymentTests(unittest.TestCase):
                     deployment.verify_package(path, checksum)
 
     def test_missing_deployment_assets_prevent_installation(self):
-        for asset in ("assets/service/S99mybot", "assets/service/poweroff.sh"):
+        for asset in ("assets/service/S99mybot", "assets/service/poweroff.sh", "bin/mybot-factory-reset"):
             with self.subTest(asset=asset):
                 files = dict(self.files)
                 del files[asset]
@@ -261,6 +264,8 @@ class DeploymentTests(unittest.TestCase):
                       "abi-report-video.json": report_bytes, "abi-report-supervisor.json": report_bytes,
                       "build-manifest-video.json": json.dumps(manifest).encode(),
                       "supervisor-manifest.json": json.dumps({**manifest, "role": "supervisor"}).encode()})
+        files.update({"bin/mybot-factory-reset": binary, "abi-report-factory-reset.json": report_bytes,
+                      "factory-reset-manifest.json": json.dumps({**manifest, "role": "factory-reset"}).encode()})
         return self.archive(files, name=self.name + "-video")
 
     def test_video_only_supervisor_uses_selected_profile_markers(self):

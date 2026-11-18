@@ -15,7 +15,7 @@
 #include <unistd.h>
 
 #define VOLUME_FILE "volume.settings"
-#define VOLUME_DEFAULT 100
+#define VOLUME_DEFAULT 70
 
 static pthread_mutex_t volume_lock = PTHREAD_MUTEX_INITIALIZER;
 static int storage_fd = -1;
@@ -79,7 +79,8 @@ static int load_level(int directory, int *level) {
     }
     valid = valid && parsed <= MYBOT_AUDIO_VOLUME_MAX && (used == 2 || text[0] != '0');
     if (!valid) {
-        fprintf(stderr, "Volume: invalid saved level; using 100 until a new level is saved\n");
+        fprintf(stderr, "Volume: invalid saved level; using %d until a new level is saved\n",
+                VOLUME_DEFAULT);
         return 0;
     }
     *level = parsed;

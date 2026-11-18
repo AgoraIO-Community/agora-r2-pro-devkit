@@ -1234,7 +1234,7 @@
   ],
   "generated_fonts": {
     "manifest": "src/ui/fonts/sources.json",
-    "manifest_sha256": "fb61983942cafdf73614e4a4dd15d2bb62cb72cadf8cf71d7d44018e0b7dee54",
+    "manifest_sha256": "a98d5fc19f52bef791f369b1536e17e3b8e2762ab03acdc900849e03060e3e70",
     "inputs": {
       "DejaVuSansMono-Bold.ttf": {
         "url": "https://cdn.jsdelivr.net/gh/matplotlib/matplotlib@v3.8.2/lib/matplotlib/mpl-data/fonts/ttf/DejaVuSansMono-Bold.ttf",
@@ -1254,7 +1254,7 @@
     "pillow_version": "10.2.0",
     "freetype_version": "2.13.2",
     "outputs": {
-      "src/ui/fonts/generated/lvgl_fonts.c": "0df1ed7f1b100587c2672a72dd0e411ff7f5d821391bf4907dc6cf8ecac091c5",
+      "src/ui/fonts/generated/lvgl_fonts.c": "f1d0b1cc038cf70fbe1257708fa6e9a512504e4c7ecbc66515be35aa766ccde7",
       "src/ui/fonts/generated/pair_font.c": "879e3ce6b590b612f8ecc326508678cfbe9747e6f5c606fb10eba6ac53e5747b",
       "src/ui/fonts/generated/pixel_fonts.c": "20122d9384ffebde5f0e412adc2ecc97e33fe56fb932dc39b6de4164b6ba9d35"
     }
@@ -1931,7 +1931,7 @@
     "packaging/time/sync-busybox.sh": "8601480a0493b640cdb9f916fe41f9b43f47c40365216747a1e7995146405329",
     "packaging/network/99-mybot-lease": "a8078a01d4f37dd93d8ae391fc2e338a2fcbcf830424cc466bd19e48b3420464",
     "packaging/service/S99mybot": "807d7a61e952ceb2db23ecd29f47e8cf438146116e9536ea22368e09567b23be",
-    "packaging/service/run-service.sh": "18766617fe15360a1c852d8d9629afac06619a4c666cd1f9d3215832b6d39505",
+    "packaging/service/run-service.sh": "1e6df12233b953ec841f0d9350b5a28ea1d94bb9128041f764bc7f63cef8ee33",
     "packaging/service/audio-prepare.sh": "b17f5f91773709ffeba80582c61b458ab8ba13911451f0a69c10289dd4d2a6db",
     "packaging/service/mybot-rv1126b.conf": "77aef6516ba0d5d962d3f0e1a40d821b5b977c9914af77343118ae567aa9ab87",
     "packaging/service/poweroff.sh": "a545bb921d463720b829d4046a362dc4ef037f040dba69e90a2fe7254c1556f7"
