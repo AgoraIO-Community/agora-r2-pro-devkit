@@ -24,7 +24,7 @@ Chinese builds default to the domestic service; English builds default to the in
 | Servers, identity, persistence and media options | [Configuration](docs/user/configuration.zh-CN.md) |
 | System time and fault diagnosis | [Time guide](docs/user/time-sync.zh-CN.md), [troubleshooting](docs/user/troubleshooting.zh-CN.md) |
 
-Direct execution of `run.sh` does not install startup services or modify system ALSA configuration files. Explicit supervised deployment installs startup scripts, disables the original application's startup and updates board network policies; each service launch applies capture mixer settings through `amixer`. Deployment checks and backs up the device before switching releases. Build, packaging and check scripts do not connect to devices.
+Direct execution of `run.sh` does not install startup services or modify system ALSA configuration files. Explicit supervised deployment installs startup scripts, disables the original application's startup and updates board network policies; each service launch applies capture mixer settings through `amixer`. Deployment defaults to the video profile; set `"video": false` in deployment settings for voice only. The package must contain the selected profile. Deployment checks and backs up the device before switching releases. Build, packaging and check scripts do not connect to devices.
 
 ## Develop
 

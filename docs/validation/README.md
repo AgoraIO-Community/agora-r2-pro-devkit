@@ -1,6 +1,6 @@
 # 当前验证状态
 
-更新日期：2026-11-17。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前治理候选为 **0.5.3**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
+更新日期：2026-11-18。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前治理候选为 **0.5.3**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
 
 ## 治理专项
 
@@ -71,6 +71,16 @@ ctest --test-dir build/host-asan --output-on-failure \
 执行命令为部署工具 `deploy --execute --start`、`status`、release 内 `sha256sum -c SHA256SUMS` / `run.sh --version`（语音和视频）及上述服务 restart；包 SHA256 和 tag 见本页。触摸 fixture 仅用于本轮输入注入，不是常驻服务。脱敏回执与逐项结果保存在忽略目录 `local/deployment/20261117-governance-053/`，本页提供可公开核对的摘要。
 
 这是简单回归。手机错误密码/保存/重启、AP 服务中断与重试、真实语音/音量/AEC、视频首帧/方向/启停/并发、系统授时、关机及再次开机、长期稳定性仍需专项验收。
+
+## 2026-11-18：默认视频部署
+
+按用户要求，受监督部署省略 `video` 时默认选择视频，显式 `false` 仍可选择语音；普通 `run.sh` 和 CMake 的默认值保持原含义。 默认值变更的部署工具测试 **58/58**、打包工具测试 **41/41** 通过，服务模板的受保护摘要已按依赖流程更新；目标 SDK 重新配置及 `doctor.py --target --video` 通过。 双语手册已按 2026-11-18 刷新并完成字节重现，各 24 页、22 个书签，48 页文字边界检查通过。设备复用上表 `9eb72bb` 的完整中文包，归档 SHA256 不变，私有部署设置显式写入 `video: true`，以 tag `20261118-video-default-053` 执行部署。
+
+实际结果：有效配置 `RV1126B_VIDEO=1`，所选 release 内的 `bin/mybot-rv1126b-video` 路径及 PID 核对通过，应用 `ready`、服务 `running`。再次受控 restart 后换为新 PID，视频路径和 ready 状态仍匹配；65 项内部摘要通过，单应用、单监督器，无 AP、unclean 标记或部署锁。设备内与本次备份核对身份、绑定、两个私有 KV 文件及 Wi-Fi 配置均一致，最新启动日志的错误/崩溃/清理失败计数为 0。
+
+相机环境只读检查发现唯一 `rkisp_mainpath` 为 `/dev/video12`，MPP 设备和 `rkaiq_3A_server` 存在。本轮未开始云端会话，因此未初始化采集、未提交 JPEG，**这次通过的是视频程序启用与待机恢复，不是视频出帧或云端接收验收**。短触开始会话后仍需检查首帧、方向、音视频并发及结束停流。
+
+设备内备份为 `/userdata/mybot/backups/20261118-video-default-053/`；回退链接继续保留 0.5.2。主机回执曾因本轮设置备份预占同名目录而写入失败，确认设备切换完成后，将设置备份移到独立的忽略目录并补齐回执，未重复部署。脱敏结果在 `local/deployment/20261118-video-default-053/regression.json`。本轮未重启设备，未导出私有内容或摘要。
 
 ## 如何复核
 
