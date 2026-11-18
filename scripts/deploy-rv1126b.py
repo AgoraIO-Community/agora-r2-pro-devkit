@@ -175,6 +175,7 @@ def verify_package(path, expected, legacy=False):
 
 
 def read_settings(path):
+    """Validate private settings and normalize the deployment profile once."""
     path = Path(path)
     if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
         raise ValueError("Settings must be a private regular file (chmod 600)")
@@ -188,7 +189,8 @@ def read_settings(path):
             any(character.isspace() or ord(character) < 32 for character in server) or
             not isinstance(device_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,32}", device_id)):
         raise ValueError("Settings require an HTTPS server and explicit valid device identity")
-    if type(settings.get("video", False)) is not bool:
+    settings.setdefault("video", True)
+    if type(settings["video"]) is not bool:
         raise ValueError("video must be a JSON boolean")
     interface = settings.get("wifi_interface", "")
     if not isinstance(interface, str) or (interface and not re.fullmatch(r"[A-Za-z0-9_.-]{1,15}", interface)):
@@ -198,7 +200,7 @@ def read_settings(path):
 
 def configuration(template, settings):
     values = {"RV1126B_SERVER": settings["server"], "RV1126B_DEVICE_ID": settings["device_id"],
-              "RV1126B_VIDEO": str(int(settings.get("video", False))),
+              "RV1126B_VIDEO": str(int(settings["video"])),
               "MYBOT_KV_STORE_DIR": DATA_ROOT,
               "MYBOT_SYSTEM_WPA_CONFIG": "/etc/wpa_supplicant.conf",
               "MYBOT_DHCPCD_LEASE_DIR": "/run/mybot-network/leases",
@@ -511,7 +513,7 @@ def rollback_release_check(name, settings):
     match = NAME.fullmatch(name)
     if not match:
         raise ValueError("Invalid installed release name")
-    video = int(settings.get("video", False))
+    video = int(settings["video"])
     return f"""
 configuration=/etc/mybot-rv1126b.conf
 [ -f "$configuration" ] && [ ! -L "$configuration" ] &&
@@ -695,9 +697,9 @@ def main(argv=None):
         if args.action == "deploy" and not package:
             raise ValueError("deploy requires --package and --sha256")
         if package and settings:
-            selected = "video" if settings.get("video", False) else "voice"
+            selected = "video" if settings["video"] else "voice"
             if selected not in package["profiles"]:
-                raise ValueError("Settings select an executable absent from the package")
+                raise ValueError(f"Package lacks the selected {selected} profile")
         if args.release and not NAME.fullmatch(args.release):
             raise ValueError("Invalid installed release name")
         tag = args.tag or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -706,6 +708,7 @@ def main(argv=None):
         if args.action in ("deploy", "rollback") and not args.execute:
             print(json.dumps({"action": args.action, "dry_run": True, "tag": tag,
                               "release": package["name"] if package else args.release or "previous",
+                              "profile": "video" if settings["video"] else "voice",
                               "backup": DEVICE_ROOT + "/backups/" + tag,
                               "data": "preserve existing private store; never import stock auth",
                               "identity": "compare server/id on device; token is never read",
@@ -736,7 +739,7 @@ def main(argv=None):
             if rollback:
                 staging_script += install_release(adb, rollback, tag)
             staging_script += install_release(adb, package, tag)
-            staging_script += release_load_check(package["name"], settings.get("video", False))
+            staging_script += release_load_check(package["name"], settings["video"])
             adb.shell(staging_script)
             config = configuration(package["files"]["assets/service/mybot-rv1126b.conf"], settings)
             deployment = f"base={DEVICE_ROOT}\ntag={shlex.quote(tag)}\nbackup=\"$base/backups/$tag\"\n"
@@ -770,7 +773,7 @@ install_file "$backup/service.conf.new" /etc/mybot-rv1126b.conf 600
             output += adb.shell(rollback_script)
         if args.start:
             selected = package["name"] if args.action == "deploy" else rollback_target
-            print(wait_for_application(adb, selected, settings.get("video", False)).strip())
+            print(wait_for_application(adb, selected, settings["video"]).strip())
         adb.shell("rmdir /run/mybot-deploy.lock\n")
         values = {"tag": tag, "backup": DEVICE_ROOT + "/backups/" + tag,
                   "package_sha256": package["sha256"] if package else None,

@@ -242,7 +242,7 @@ class DeploymentTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, "Supervisor"):
                 deployment.verify_package(path, checksum)
 
-    def test_video_only_supervisor_uses_selected_profile_markers(self):
+    def video_archive(self):
         files = dict(self.files)
         binary = files.pop("bin/mybot-rv1126b").replace(b"video=0", b"video=1")
         manifest = json.loads(files.pop("build-manifest-voice.json"))
@@ -259,7 +259,10 @@ class DeploymentTests(unittest.TestCase):
                       "abi-report-video.json": report_bytes, "abi-report-supervisor.json": report_bytes,
                       "build-manifest-video.json": json.dumps(manifest).encode(),
                       "supervisor-manifest.json": json.dumps({**manifest, "role": "supervisor"}).encode()})
-        path, checksum = self.archive(files, name=self.name + "-video")
+        return self.archive(files, name=self.name + "-video")
+
+    def test_video_only_supervisor_uses_selected_profile_markers(self):
+        path, checksum = self.video_archive()
         self.assertEqual(deployment.verify_package(path, checksum)["profiles"], ["video"])
 
     def test_only_accepted_legacy_format_bypasses_build_manifest(self):
@@ -289,6 +292,62 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("MYBOT_SYSTEM_WPA_CONFIG=/etc/wpa_supplicant.conf", value)
         self.assertNotIn("device_auth", value)
         self.assertNotIn("wifi.credentials", value)
+
+    def test_settings_normalize_default_video_and_preserve_explicit_voice(self):
+        for selected in (None, True, False):
+            with self.subTest(video=selected):
+                settings = {key: value for key, value in self.settings.items() if key != "video"}
+                if selected is not None:
+                    settings["video"] = selected
+                path = self.base / "settings.json"
+                path.write_text(json.dumps(settings))
+                path.chmod(0o600)
+                normalized = deployment.read_settings(path)
+                expected = selected is not False
+                self.assertIs(normalized["video"], expected)
+                template = (ROOT / "packaging/service/mybot-rv1126b.conf").read_bytes()
+                script = deployment.configuration(template, normalized) + "\nprintf '%s' \"$RV1126B_VIDEO\"\n"
+                result = subprocess.run(["sh", "-s"], input=script, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, str(int(expected)))
+
+    def test_default_video_rejects_voice_only_package_before_accessing_device(self):
+        path, checksum = self.archive()
+        settings = self.base / "settings.json"
+        settings.write_text(json.dumps({key: value for key, value in self.settings.items()
+                                        if key != "video"}))
+        settings.chmod(0o600)
+        with patch.object(deployment, "Adb") as adb, patch('sys.stderr', new_callable=io.StringIO) as error:
+            with self.assertRaises(SystemExit):
+                deployment.main(["deploy", "--package", str(path), "--sha256", checksum,
+                                 "--settings", str(settings), "--execute"])
+        adb.assert_not_called()
+        self.assertIn("Package lacks the selected video profile", error.getvalue())
+
+    def test_default_video_plan_and_execution_use_video_profile(self):
+        path, checksum = self.video_archive()
+        settings = self.base / "settings.json"
+        settings.write_text(json.dumps({key: value for key, value in self.settings.items()
+                                        if key != "video"}))
+        settings.chmod(0o600)
+        arguments = ["deploy", "--package", str(path), "--sha256", checksum,
+                     "--settings", str(settings), "--tag", "fixture"]
+        with patch.object(deployment, "Adb") as adb, redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(deployment.main(arguments), 0)
+        adb.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())["profile"], "video")
+        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt"), \
+                patch.object(deployment, "release_load_check", wraps=deployment.release_load_check) as load, \
+                patch.object(deployment, "wait_for_application", return_value="service=running\n") as wait, \
+                redirect_stdout(io.StringIO()):
+            adb = adb_class.return_value
+            adb.shell.return_value = ""
+            self.assertEqual(deployment.main([*arguments, "--execute", "--start"]), 0)
+        load.assert_called_once_with(self.name + "-video", True)
+        wait.assert_called_once_with(adb, self.name + "-video", True)
+        install = next(call.args[0] for call in adb.shell.call_args_list
+                       if "MYBOT_PRIVATE_CONFIGURATION" in call.args[0])
+        self.assertIn("export RV1126B_VIDEO=1\n", install)
 
     def test_usb_dns_policy_preserves_address_range_and_handles_late_address(self):
         program = re.search(r"awk '([^']+)' /etc/dnsmasq.conf", deployment.SYSTEM_POLICY)[1]
@@ -334,7 +393,9 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(deployment.main(["deploy", "--package", str(path), "--sha256", checksum,
                                               "--settings", str(settings)]), 0)
         adb.assert_not_called()
-        self.assertTrue(json.loads(output.getvalue())["dry_run"])
+        plan = json.loads(output.getvalue())
+        self.assertTrue(plan["dry_run"])
+        self.assertEqual(plan["profile"], "voice")
         self.assertNotIn(self.settings["device_id"], output.getvalue())
         self.assertNotIn(self.settings["server"], output.getvalue())
 

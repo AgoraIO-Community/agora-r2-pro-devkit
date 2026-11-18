@@ -45,12 +45,14 @@ assets/network/99-mybot-lease
 {
   "server": "https://botstation.shengwang.cn/api",
   "device_id": "RV1126B-0123456789ABCDEF01234567",
-  "video": false,
+  "video": true,
   "wifi_interface": "wlan0"
 }
 ```
 
-例如保存到 `local/deployment-settings.json` 后执行 `chmod 600 local/deployment-settings.json`。设置只允许这四个字段；`server` 与 `device_id` 必填，`video` 默认为 false、接口空值表示自动选择。
+例如保存到 `local/deployment-settings.json` 后执行 `chmod 600 local/deployment-settings.json`。设置只允许这四个字段；`server` 与 `device_id` 必填，省略 `video` 时默认为 true，接口空值表示自动选择。受监督部署默认选择视频程序；只部署语音时显式设置 `"video": false`。包中必须包含所选 profile，缺少视频程序时会在访问设备前报错，不会自动切换为语音。预览计划会显示所选 `profile`。
+
+该默认值仅用于受监督部署。直接运行包含两个 profile 的包时，`run.sh` 仍默认选择语音程序，视频通过 `RV1126B_VIDEO=1` 显式选择。
 
 部署前在设备内核对现有 `device_auth` 的版本、长度以及 server/ID。只读取相应的固定长度头部字段，完全不读取 token 区域，也不把身份打印或写回执。已存在记录但格式不符或 server/ID 不匹配时阻止部署；记录不存在时允许首次绑定。该核对避免新 SDK 因配置变化丢弃已有绑定。
 

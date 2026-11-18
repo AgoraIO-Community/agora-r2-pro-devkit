@@ -33,7 +33,7 @@
 | `MYBOT_KV_STORE_DIR` | 默认 `/userdata/mybot-rv1126b`，必须为当前用户拥有的私有绝对路径（0700） |
 | `MYBOT_ASSETS_DIR` | 默认包内 `assets/`；绝对路径 |
 | `MYBOT_LOCALE` | 提示音 locale，包括 AP 配网语音；默认与 UI 构建语言相同，包内提供 `zh-CN`、`en-US`；不会替换编译字库/UI文案或切换默认服务 |
-| `RV1126B_VIDEO` | 由 `run.sh` 读取，0 选语音程序，1 选视频程序 |
+| `RV1126B_VIDEO` | 由 `run.sh` 读取，0 选语音程序，1 选视频程序；双 profile 包直接运行默认 0，受监督部署默认写入 1 |
 | `RV1126B_VIDEO_DEVICE` | 视频程序指定相机节点，默认自动寻找唯一 `rkisp_mainpath` |
 | `RV1126B_NTP_SERVER` | 仅内置可选 BusyBox helper 读取，默认 `pool.ntp.org`；接受 DNS 主机名或 IPv4 地址，不自动启用 helper |
 
@@ -69,7 +69,7 @@ UI 逻辑画布 640×480，默认旋转 270°到物理 480×640；终端/签名/
 
 ## 设备服务与系统网络协作
 
-受监督部署使用 `/etc/mybot-rv1126b.conf`（0600），资源固定到本次启动选择的物理版本目录。`MYBOT_KV_STORE_DIR` 保持 `/userdata/mybot-rv1126b`，该目录必须是真实目录且权限为 0700。`MYBOT_STATUS_PATH` 指定私有运行目录内的匿名状态文件，只有版本、PID 和状态，不含身份或凭据。
+受监督部署使用 `/etc/mybot-rv1126b.conf`（0600），资源固定到本次启动选择的物理版本目录。部署 settings 省略 `video` 时选择视频程序，显式 `"video": false` 选择语音；所选程序缺失时拒绝部署。`MYBOT_KV_STORE_DIR` 保持 `/userdata/mybot-rv1126b`，该目录必须是真实目录且权限为 0700。`MYBOT_STATUS_PATH` 指定私有运行目录内的匿名状态文件，只有版本、PID 和状态，不含身份或凭据。
 
 设置 `MYBOT_SYSTEM_WPA_CONFIG=/etc/wpa_supplicant.conf` 启用系统协作模式。系统 Wi-Fi 文件为唯一持久主记录，应用读取并管理其网络列表，成功连接后原子提交并要求现有 supplicant 重配置；退出不删除已提交的网络。`MYBOT_DHCPCD_LEASE_DIR=/run/mybot-network/leases` 配合部署的 dhcpcd hook，以租约代次、BSSID 和实际接口地址确认新连接。保存后另有最多 30 秒等待目标网络的关联、租约与路由稳定，确认前手机保持“正在连接”；超时保留已提交的网络并允许重试。系统模式不另外写私有 `wifi.credentials`，也不启动竞争的 STA/DHCP 客户端。
 

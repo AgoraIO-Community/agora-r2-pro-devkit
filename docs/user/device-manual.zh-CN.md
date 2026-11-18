@@ -139,7 +139,7 @@ cmake --build --preset rv1126b-video-en
 | zh-CN | https://botstation.shengwang.cn/api |
 | en-US | https://botstation.agora.io/api |
 
-全配置包同时携带语音、视频两个程序，但设备一次只运行其中一个；本手册的部署设置选择语音模式，不自动启用摄像头。只需语音时，仅构建对应 voice 配置，并按下一页说明打包单变体。
+全配置包同时携带语音、视频两个程序，但设备一次只运行其中一个；受监督部署默认选择视频模式。只需语音时，仅构建对应 voice 配置、打包单变体，并在部署设置中显式使用 `"video": false`。
 
 <!-- page -->
 
@@ -202,7 +202,7 @@ cat > local/deployment/settings.json <<'JSON'
 {
   "server": "https://botstation.shengwang.cn/api",
   "device_id": "RV1126B-EXAMPLE-0001",
-  "video": false,
+  "video": true,
   "wifi_interface": "wlan0"
 }
 JSON
@@ -212,6 +212,8 @@ chmod 600 local/deployment/settings.json
 3. 核对身份、服务区和无线接口。ID 为 1–32 个 ASCII 字符，可用字母、数字及 `_.:-`。多台设备不能共用示例 ID。
 
 设置只允许上述四项，不包含 Wi-Fi 密码或认证 token。国际服务使用 `https://botstation.agora.io/api`。部署中的 `server` 是显式配置，优先于语言默认值；已有绑定的设备升级时保持原 server、ID 和数据目录。
+
+`video` 省略时默认为 `true`，全配置包选择视频程序；语音部署必须显式设置 `false`，语音单变体包也一样。
 
 <!-- page -->
 
@@ -226,7 +228,7 @@ python3 scripts/deploy-rv1126b.py preflight \
 
 预期：平台就绪；无绑定的新设备允许 `auth=absent`，已绑定设备应匹配。身份检查失败时核对设置，不删除绑定文件绕过。
 
-2. 生成部署计划，确认包、语言和语音模式。
+2. 生成部署计划，确认包、语言和视频模式。
 
 ```sh
 python3 scripts/deploy-rv1126b.py deploy \
@@ -467,6 +469,8 @@ cd /userdata/mybot/current
 ./run.sh
 ```
 
+此步骤使用原服务的视频选项；未设置 `RV1126B_VIDEO` 时，直接执行 `./run.sh` 仍默认选择语音程序。
+
 | 输入后按 Enter | 操作 |
 | --- | --- |
 | s / q | ready 时开始 / 会话中挂断 |
@@ -511,7 +515,7 @@ python3 scripts/deploy-rv1126b.py rollback \
   --execute --start
 ```
 
-预期：切回 previous，使用同一数据目录和监督服务，原绑定复用。回退不恢复旧 Wi-Fi/认证数据，也不自动启用原厂业务。首次安装无 previous 时，先向维护人员确认已安装的可用 release，不能凭空回退。
+预期：切回 previous，使用同一数据目录和监督服务，原绑定复用。视频服务要求回退包包含 video 程序，不自动改用语音。回退不恢复旧 Wi-Fi/认证数据，也不自动启用原厂业务。首次安装无 previous 时，先向维护人员确认已安装的可用 release，不能凭空回退。
 
 <!-- page -->
 
@@ -583,12 +587,12 @@ python3 scripts/deploy-rv1126b.py rollback \
 
 <!-- page -->
 
-# 22 可选视频与验收记录
+# 22 视频检查与验收记录
 
 摄像头程序已实现，但需独立验证，不能由语音通过推断视频通过。
 
 1. 确认部署包包含 video 程序，设备 ISP 服务、V4L2 与 MPP 环境正常。启用前先保留可用语音版本。
-2. 通过部署 settings 的 `video: true` 选择视频模式，预览计划后执行。它会写入服务配置，不是屏幕里的开关；按正常部署流程切换，避免多开实例。
+2. 部署 settings 默认以 `video: true` 选择视频模式；语音部署显式设置 `video: false`。预览计划后执行，选择会写入服务配置，不是屏幕里的开关；按正常部署流程切换，避免多开实例。
 3. 设备 ready 后短触屏幕开始会话，再验证云端首帧和接收。检查方向、颜色、最高 3 fps 的 640×480 JPEG；短触结束后检查停流，再次开始检查恢复及语音/UI 并发。仅进入 ready 不会出帧，程序不提供本地摄像头预览，也不自动保存快照。
 
 每次安装或升级后按顺序验收，并记录包 SHA256、版本、日期和结果：

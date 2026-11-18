@@ -139,7 +139,7 @@ cmake --build --preset rv1126b-video-zh
 | zh-CN | https://botstation.shengwang.cn/api |
 | en-US | https://botstation.agora.io/api |
 
-A full bundle includes both executables, but the device runs only one at a time. This manual's deployment settings select voice mode and leave the camera disabled. For voice only, build the matching voice configuration and package that variant as described next.
+A full bundle includes both executables, but the device runs only one at a time. Supervised deployment selects video by default. For voice only, build and package the matching voice variant and explicitly set `"video": false` in deployment settings.
 
 <!-- page -->
 
@@ -202,7 +202,7 @@ cat > local/deployment/settings.json <<'JSON'
 {
   "server": "https://botstation.agora.io/api",
   "device_id": "RV1126B-EXAMPLE-0001",
-  "video": false,
+  "video": true,
   "wifi_interface": "wlan0"
 }
 JSON
@@ -212,6 +212,8 @@ chmod 600 local/deployment/settings.json
 3. Check the identity, service region and Wi-Fi interface. IDs allow 1–32 ASCII letters, digits and `_.:-`. Never share the example ID between devices.
 
 Only these four fields are accepted; do not add Wi-Fi passwords or authentication tokens. The example selects the international service. For China, use `https://botstation.shengwang.cn/api`. The explicit deployment `server` overrides language defaults. Preserve the original server, ID and data directory when upgrading a bound device.
+
+Omitting `video` defaults to `true`, selecting the video executable in a full bundle. Set it explicitly to `false` for voice deployment, including a voice-only bundle.
 
 <!-- page -->
 
@@ -226,7 +228,7 @@ python3 scripts/deploy-rv1126b.py preflight \
 
 Expected: platform ready; `auth=absent` is allowed for a new unbound device, while an existing identity must match. Correct mismatched settings; do not delete binding files to bypass checks.
 
-2. Preview deployment and confirm the bundle, language and voice selection.
+2. Preview deployment and confirm the bundle, language and video selection.
 
 ```sh
 python3 scripts/deploy-rv1126b.py deploy \
@@ -467,6 +469,8 @@ cd /userdata/mybot/current
 ./run.sh
 ```
 
+This step inherits the service's video selection. With `RV1126B_VIDEO` unset, running `./run.sh` directly still selects voice by default.
+
 | Input, then Enter | Action |
 | --- | --- |
 | s / q | Start from ready / end a conversation |
@@ -511,7 +515,7 @@ python3 scripts/deploy-rv1126b.py rollback \
   --execute --start
 ```
 
-Expected: previous runs with the same data directory, supervisor and binding. Rollback does not restore old Wi-Fi/authentication data or enable the original application. After a first installation without previous, ask the maintainer which verified release is installed; rollback needs an actual target.
+Expected: previous runs with the same data directory, supervisor and binding. A video service requires a rollback bundle containing video; it does not switch to voice automatically. Rollback does not restore old Wi-Fi/authentication data or enable the original application. After a first installation without previous, ask the maintainer which verified release is installed; rollback needs an actual target.
 
 <!-- page -->
 
@@ -583,12 +587,12 @@ Reports should include bundle name, SHA256, version, language/video selection, r
 
 <!-- page -->
 
-# 22 Optional Video and Acceptance
+# 22 Video Checks and Acceptance
 
 The camera application is implemented but needs separate validation. Passing voice checks does not prove video works.
 
 1. Confirm the bundle contains video and that ISP services, V4L2 and MPP work. Keep a working voice release before enabling it.
-2. Set `video: true` in deployment settings, preview and deploy. This writes service configuration; it is not a screen toggle. Use normal deployment to avoid concurrent instances.
+2. Deployment settings default to `video: true`; set `video: false` explicitly for voice deployment. Preview and deploy to write the selection into service configuration. This is not a screen toggle. Use normal deployment to avoid concurrent instances.
 3. Once ready, tap to start a conversation and check the first cloud frame and reception. Verify orientation, colors and 640×480 JPEG at up to 3 fps. Tap to end and confirm streaming stops; restart to check recovery and voice/UI concurrency. Ready alone produces no frames. There is no local preview or automatic snapshot storage.
 
 After each installation or upgrade, check these in order and record bundle SHA256, version, date and result:

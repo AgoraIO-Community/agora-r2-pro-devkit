@@ -24,7 +24,7 @@
 | 服务地址、身份、持久化及音视频参数 | [配置参考](docs/user/configuration.zh-CN.md) |
 | 系统时间与故障定位 | [时间指南](docs/user/time-sync.zh-CN.md)、[故障排查](docs/user/troubleshooting.zh-CN.md) |
 
-直接运行 `run.sh` 不安装自启动或修改系统 ALSA 配置文件。显式受监督部署会安装启动脚本、禁用原厂业务自启动、更新板级网络策略；每次服务启动通过 `amixer` 应用采集 mixer 设置。部署工具先预检和备份，再安装切换；构建、打包和检查脚本不连接设备。
+直接运行 `run.sh` 不安装自启动或修改系统 ALSA 配置文件。显式受监督部署会安装启动脚本、禁用原厂业务自启动、更新板级网络策略；每次服务启动通过 `amixer` 应用采集 mixer 设置。部署默认选择视频 profile，只部署语音时在 settings 中显式设置 `"video": false`；包中必须包含所选 profile。部署工具先预检和备份，再安装切换；构建、打包和检查脚本不连接设备。
 
 ## 开发
 

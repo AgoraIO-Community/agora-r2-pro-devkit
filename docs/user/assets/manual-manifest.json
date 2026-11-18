@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "document_date": "2026-11-17",
+  "document_date": "2026-11-18",
   "application_version": "0.5.3",
   "ui_source_sha256": "4ce2bd79d3cb9ecbffc3c0d0159f9ff74366a94163cde0fb681ad59ff584758a",
   "inputs": {
@@ -8,14 +8,14 @@
     "CMakePresets.json": "cef80a4be8ebdf0d48c4240418d828a9bbe9a163f92a9ae0cdf6896e1d011c13",
     "cmake/dependencies/lvgl-sources.cmake": "a03c4f8b0a756ed7b474954500f993fdfb00c607d6b04c24705ebf240791e594",
     "cmake/dependencies/lvgl.cmake": "6a05db13538d7c1a38a966fb6db52ab335caec77bc9f5d3cb622197bd48acb1a",
-    "dependencies.lock.json": "37377c4668fc827fb072daad2b739fdb9bd51fc151add5dfc6e288958e996876",
+    "dependencies.lock.json": "4e36158a83cc91982fe96a684fcfc5effaad585af4d933df3b91ac28e1511bd3",
     "docs/user/assets/fonts/DejaVuSansMono-Bold.ttf": "baada9a5172fe20886251aff0433fc38461912d5daf07287e7bee56620a8da96",
     "docs/user/assets/fonts/DejaVuSansMono-LICENSE.txt": "22308e512b54800ba9fe6f9aecd6bea42b71f68f77dbc83196715aac50e631d6",
     "docs/user/assets/fonts/MyBotManualSans-OFL.txt": "f55c2d43dd905011515f5e46ba78d180027e314ef8ccaaf53a9e88fe316767cd",
     "docs/user/assets/fonts/MyBotManualSans.ttf": "9ee31724fc2b0880370134568f61d0330a6c45f82465c7e2239e74a7b0f7cb61",
     "docs/user/assets/fonts/sources.json": "563de8d463557dc771f5d0cb8ed99ea25c2fd8a8a5a778ea3d45f4a756198aeb",
-    "docs/user/device-manual.en.md": "55da37edfdb02d679ddd098c563b5c489cc2a47d90ae99b0dfba7ef7356a1221",
-    "docs/user/device-manual.zh-CN.md": "b2f5871bcef962489b124544b33ba77905cb12f7567eb2a0c5cf0597843c0f33",
+    "docs/user/device-manual.en.md": "630cc0ea85b2f1a97f55ca89c2722d6e134acd0084f372dd5184eef0ca24fe71",
+    "docs/user/device-manual.zh-CN.md": "ab8d774d9658e0110992d32ba07c6ee4e18f919e67e284a17195617249708732",
     "scripts/check-device-manual.py": "d3bf4bebb2855e90085163874e57cb85a653c09390f70ce4efc8aa41458517f7",
     "scripts/generate-device-manual.py": "6dc9685e4822fa76ed9f1b775896e5bbd719cb3bc9d13ec0907c1236c91755ee",
     "scripts/generate-manual-font.py": "3c051a1c10d41af287ef723614e640f6b2b73b875bd66726d52b4d43c62b146c",
@@ -51,8 +51,8 @@
     "tools/ui_preview/main.c": "81dc3feffd2c3e342d311f6653d1ae03fea1a2cf4e601fdc203fc2576e6fd8d3"
   },
   "outputs": {
-    "docs/device-operations.en.pdf": "74dcbb4535e261dad5037aa9424d1d115dafdbe0fda935e9131142d0ee5669d9",
-    "docs/device-operations.zh-CN.pdf": "7dfaf1082ade58c3ebe6181167e1f7e68e42854cfc1b2a76fc715285cb0eef13",
+    "docs/device-operations.en.pdf": "baf2901167c63997a2d2f557922743c64b375e85051c133d6bd6769408daea8b",
+    "docs/device-operations.zh-CN.pdf": "81a01fa4363d3fc84e14285cb86af88108ac6cdc5157312d5fa42797c08b6463",
     "docs/user/assets/device-manual-en/ap-hotspot.png": "3a9d00c525c0f020467cb3ce493d98d830aa53b4dc2c74531f4f419d36eddf96",
     "docs/user/assets/device-manual-en/clock-error.png": "3c32599d878c90480ffa818c582f1e196f403067e2be89f602f47576cd0b1164",
     "docs/user/assets/device-manual-en/connecting-services.png": "6fc4d359553a43f82af641843863ca46784b8f547c1759175ac343fe03dcbce7",
