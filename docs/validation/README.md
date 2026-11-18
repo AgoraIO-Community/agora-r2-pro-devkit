@@ -118,9 +118,13 @@ ctest --test-dir build/host-asan --output-on-failure \
 
 另用安全 host 夹具复现了独立的信号交接问题：旧 helper 的假 poweroff 即使返回成功，同时收到 TERM 也会恢复背光；它不是上述实际失败的根因。新版只在系统关机交接阶段忽略可处理的迟到信号，准备阶段中断和命令非零仍回滚，回滚自身不再被重复信号截断。
 
-源码检查：中文、英文、UBSan 的 `ui-runtime` / `drm-lifecycle` / `product-controller` / `supervisor` 各 **4/4**，包含失效旧 FB、真实 disable 失败、生命周期重置、请求拒绝、helper 私有诊断和日志复制失败。helper 安全模拟测试 **14/14**，不执行实际关机。0.5.5 双语手册刷新和重现通过，各 24 页、22 个书签，48 页文字边界检查通过，字体和 UI PNG 未改。新设备只读检查 `CONFIG_FB` 未开启，且无 framebuffer 设备节点，完整真机链仍需实际观察关闭后的 DSI 状态。
+源码检查：中文、英文、UBSan 的 `ui-runtime` / `drm-lifecycle` / `product-controller` / `supervisor` 各 **4/4**，包含失效旧 FB、真实 disable 失败、生命周期重置、请求拒绝、helper 私有诊断和日志复制失败。helper 安全模拟测试 **14/14**，不执行实际关机。0.5.5 双语手册刷新和重现通过，各 24 页、22 个书签，48 页文字边界检查通过，字体和 UI PNG 未改。新设备只读检查 `CONFIG_FB` 未开启，且无 framebuffer 设备节点，本轮真机测试另核对了关闭后的 DSI 状态。
 
-完整 UI 模拟关机、目标包和更新结果将在执行后补充；未将此前 helper 单测写作整条关机流程通过，也不以当前重启后的背光值推断关机末态。
+从干净提交 `8886780` 构建中文语音及视频程序，应用与监督器 ABI 检查均通过。部署包 `mybot-rv1126b-0.5.5-aarch64.tar.gz` 的 SHA256 为 `fe2510d9dbaa20ae570d9f654aaf2cf09830357e5e9901f29ef42df08d2f195e`。设备按 `20261118-display-poweroff-055` 安装视频版，并保留 0.5.4 供回退。
+
+设备上的隔离监督器启动实际视频程序。经触摸输入打开设置并确认关机，日志依次记录 `poweroff_pending`、`stopped`、`poweroff`，应用正常退出。仅将最终 `/sbin/poweroff` 换成测试程序。该程序读到 DSI 为 `disabled`，请求亮度与实际亮度均为 0，`bl_power=4`，随后退出码为 0。已恢复正常服务并清理测试文件，确认生产视频程序 `ready`、66 项包内校验通过，身份、绑定和 Wi-Fi 配置与备份一致。完整结果在 `build/poweroff-followup-20261118/device-ui-chain-results.json`。整机实际关机后有无可见余光仍需现场验收。
+
+Ubuntu 24.04 的 5 项 C 测试首轮 4/5，监督器用例等待超时。同一冻结源码、同一 CTest 命令复核 5/5。helper 模拟测试 14/14。原超时原因尚未确定，保留两次记录。
 
 ## 如何复核
 
