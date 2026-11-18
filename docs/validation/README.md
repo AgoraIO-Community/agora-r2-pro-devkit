@@ -1,6 +1,6 @@
 # 当前验证状态
 
-更新日期：2026-11-18。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前治理候选为 **0.5.3**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
+更新日期：2026-11-18。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前候选为 **0.5.4**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
 
 ## 治理专项
 
@@ -93,6 +93,18 @@ ctest --test-dir build/host-asan --output-on-failure \
 最终观察到 `service=running`、`application_verified=yes`、`application_health=ready`，有效 `video=1`，实际所选视频程序路径匹配，已完成新设备绑定。一个应用、一个监督器、原厂业务零实例，65 项文件校验通过；无 unclean 标记或部署锁，最新启动日志无崩溃、资源清理失败、监督器失败或 ALSA 打开错误。音频别名实际定义于 `/etc/alsa/conf.d/90-botstation.conf`，不能因 PCM 枚举未显示就认定缺失。
 
 本机没有 `previous` 发布，原始系统备份留在 `/userdata/mybot/backups/20261118-new-device-video-053/`。脱敏回执、启动、校时恢复和最终回归记录保存在 `local/deployment/20261118-new-device-video-053/`。本轮未执行整机重启、实际通话或视频出帧验收；RTC 写入不等同于断电保持验收。
+
+## 2026-11-18：计划关机关闭背光
+
+用户反馈 UI 关机后屏幕仍有亮度。只读检查确认唯一 PWM 背光为 `/sys/class/backlight/backlight`，实际设备路径 `/sys/devices/platform/backlight/backlight/backlight`，初始 `brightness=200`、`actual_brightness=200`、`max_brightness=255`、`bl_power=0`；普通 DRM 停止会恢复原 CRTC，现有应用没有显式关闭背光。设备的 Linux 输入配置没有 POWER 关机映射，RK805 的 `pwrkey` 节点 disabled，不能据此声称已确认实体长按的 PMIC/硬件触发链路。
+
+0.5.4 的计划关机在监督器确认应用正常清理退出后，调用固定板级 `poweroff.sh`：保存原值，设置亮度 0、背光电源 4，核对实际亮度 0 后再请求正常 `/sbin/poweroff`。属性异常、写入/读回失败、命令失败或中断时尝试恢复原亮度和背光电源。普通应用 stop/restart 仍恢复原显示输出，未引入 DRM 停止模式或更改实体按键电路。
+
+已在当前设备执行一次可逆背光测试。隔离副本仅把真实 poweroff 替换为固定失败探针，观察到 `brightness=0`、`actual_brightness=0`、`bl_power=4`；探针返回失败后，helper 自动恢复 200/200/0，外层恢复保护再次复核，临时文件已清理，应用继续 ready。原始 helper SHA256 为 `6cb4bbfd968ec1958ccd0b0193eeea9b86fe6971d549bca3ef7c8596a5a284da`，脱敏结果留在 `build/backlight-poweroff-054/device-backlight-results.json`。
+
+工具验证：macOS 新 helper **10/10**、部署 **58/58**、打包 **41/41**；Ubuntu 24.04 的独立临时快照对最终 helper 测试源执行 **10/10**，使用假 sysfs/假关机并清理快照。macOS 新隔离主机构建中 `ui-runtime`、`drm-lifecycle`、`supervisor`、`power-control`、`product-controller` **5/5**。最初 host fixture 因 macOS `/var` 与 `/private/var` 规范路径差异提前拒绝，修正 fixture 后通过；生产 helper 未为此修改。 0.5.4 双语手册刷新及字节重现通过，各 24 页、22 个书签，48 页文字边界检查通过；固定手册字体按原输入正规补充“背”“光”两个字形。
+
+这证明 PWM 背光控制和失败恢复在本机可执行；未执行真实关机，也未验证电池/USB 供电下的所有电源轨断电、关机后屏幕目视效果或再次按键开机。最终包构建与部署结果在完成后补充，不把可逆测试写成实际断电验收。
 
 ## 如何复核
 

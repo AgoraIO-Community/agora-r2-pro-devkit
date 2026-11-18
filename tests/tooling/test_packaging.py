@@ -150,6 +150,8 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(first_hash, second_hash)
         self.assertEqual(archive.read_bytes(), second.read_bytes())
         with tarfile.open(archive) as stream:
+            poweroff = stream.getmember(destination.name + "/assets/service/poweroff.sh")
+            self.assertEqual(poweroff.mode, 0o755)
             for item in stream.getmembers():
                 self.assertEqual((item.uid, item.gid, item.uname, item.gname), (0, 0, "", ""))
                 self.assertFalse(item.issym() or item.islnk())

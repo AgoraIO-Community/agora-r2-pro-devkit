@@ -24,6 +24,7 @@ EXECUTABLE_ASSETS = {
     "assets/service/S99mybot": "packaging/service/S99mybot",
     "assets/service/run-service.sh": "packaging/service/run-service.sh",
     "assets/service/audio-prepare.sh": "packaging/service/audio-prepare.sh",
+    "assets/service/poweroff.sh": "packaging/service/poweroff.sh",
 }
 DATA_ASSETS = {'assets/service/mybot-rv1126b.conf': 'packaging/service/mybot-rv1126b.conf'}
 

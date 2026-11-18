@@ -401,14 +401,16 @@ adb -s "$serial" shell /userdata/mybot/current/run.sh --version
 ![确认关机：可以取消或确认](assets/device-manual/settings-confirm.png)
 ![正在关机：等待业务和系统停止](assets/device-manual/settings-powering-off.png)
 
-3. 等待应用清理音频、网络和显示资源，系统完成正常关机。不要在此期间反复按屏幕。
+3. 等待应用清理音频、网络和显示资源，受监督关机脚本关闭背光后请求正常系统关机。不要在此期间反复按屏幕。
 4. 再次使用时长按机身唯一实体按键，看到开机画面后松开。当前设备已确认长按可开关机，不在手册中固定按住秒数。
 
 ![关机失败：左上角返回后排查](assets/device-manual/settings-error.png)
 
-屏幕关机需要通过 `S99mybot` 启动的受监督服务授权。临时前台运行 `run.sh` 时，这个操作会显示关机失败；可返回继续使用。若正常部署仍失败，维护人员检查服务状态及日志。
+屏幕关机需要通过 `S99mybot` 启动的受监督服务授权。前台运行 `run.sh` 时显示关机失败，可返回继续使用；受监督运行仍失败时检查服务日志。
 
-退出应用或停止 `S99mybot` 只停止业务，不等于设备关机。UI 确认关机最终由监督器调用 `/sbin/poweroff`；机身按键由系统电源服务处理。
+监督器在清理完成后调用 `poweroff.sh`，将 pwm-backlight 的 `brightness` 设为 0、`bl_power` 设为 4，读回确认后才调用 `/sbin/poweroff`。失败或信号中断时尝试恢复原背光值。
+
+普通停止恢复原显示输出，不主动关闭背光。软件关机不代表整机所有供电切断；实体长按已观察可开关机，实际硬件链路仍未确认。
 
 <!-- page -->
 

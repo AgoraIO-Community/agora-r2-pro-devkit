@@ -70,6 +70,7 @@ mkdir -p /userdata/mybot/logs
 chmod 0700 /userdata/mybot/logs
 [ "$1" != prepare ] || exit 0
 [ -x /sbin/poweroff ] || fail 'normal system poweroff command is missing'
+[ -x "$service_dir/poweroff.sh" ] || fail 'backlight poweroff helper is missing'
 exec "$service_dir/mybot-supervisor" supervise --runtime "$runtime" \
-    --log-dir /userdata/mybot/logs --poweroff-command /sbin/poweroff \
+    --log-dir /userdata/mybot/logs --poweroff-command "$service_dir/poweroff.sh" \
     -- "$service_dir/run-service.sh" exec "$release" </dev/null

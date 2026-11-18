@@ -225,11 +225,13 @@ class DeploymentTests(unittest.TestCase):
                     deployment.verify_package(path, checksum)
 
     def test_missing_deployment_assets_prevent_installation(self):
-        files = dict(self.files)
-        del files["assets/service/S99mybot"]
-        path, checksum = self.archive(files)
-        with self.assertRaisesRegex(ValueError, "deployment assets"):
-            deployment.verify_package(path, checksum)
+        for asset in ("assets/service/S99mybot", "assets/service/poweroff.sh"):
+            with self.subTest(asset=asset):
+                files = dict(self.files)
+                del files[asset]
+                path, checksum = self.archive(files)
+                with self.assertRaisesRegex(ValueError, "deployment assets"):
+                    deployment.verify_package(path, checksum)
 
     def test_supervisor_has_independent_role_hash_and_provenance_guards(self):
         for field, value in (("role", "voice"), ("binary_sha256", "0" * 64),
@@ -438,6 +440,7 @@ class DeploymentTests(unittest.TestCase):
             install = next(call[1][0] for call in calls
                            if call[0] == "shell" and "stock-disabled.conf" in call[1][0])
             self.assertLess(install.index("S99mybot stop"), install.index(".current-$tag"))
+            self.assertIn("/etc/mybot-rv1126b/poweroff.sh 755", install)
             self.assertNotIn("reboot", install)
             self.assertNotIn(self.settings["device_id"], json.dumps(receipt.call_args.args[2]))
             syntax = subprocess.run(["sh", "-n"], input=install, text=True, capture_output=True)
@@ -577,14 +580,14 @@ class DeploymentTests(unittest.TestCase):
         receipt.assert_not_called()
 
     def capability_fixture(self, failure=None):
-        target = self.base / "target"
+        target = (self.base / "target").resolve()
         binaries = target / "tools"
         binaries.mkdir(parents=True)
         for tool in ("amixer", "ip", "iw", "hostapd", "dnsmasq", "wpa_supplicant", "udhcpc"):
             executable = binaries / tool
             executable.write_text("#!/bin/sh\nexit 0\n")
             executable.chmod(0o755)
-        for tool in ("tr", "awk"):
+        for tool in ("tr", "awk", "cat"):
             (binaries / tool).symlink_to(shutil.which(tool))
         amixer = binaries / "amixer"
         amixer.write_text("#!/bin/sh\nprintf '%s\\n' '; type=INTEGER,access=rw------,values=1,min=0,max=255,step=0'\n")
@@ -598,6 +601,17 @@ class DeploymentTests(unittest.TestCase):
         model.write_bytes(b"Rockchip RV1126B TEST2 RK805B V10 Board\0")
         hooks = target / "lib/dhcpcd/dhcpcd-hooks"
         hooks.mkdir(parents=True)
+        backlight = target / "sys/devices/platform/backlight/backlight/backlight"
+        backlight.mkdir(parents=True)
+        backlight.chmod(0o755)
+        for name, value, mode in (("brightness", "200", 0o644), ("bl_power", "0", 0o644),
+                                  ("max_brightness", "255", 0o444), ("actual_brightness", "200", 0o444)):
+            attribute = backlight / name
+            attribute.write_text(value + "\n")
+            attribute.chmod(mode)
+        class_dir = target / "sys/class/backlight"
+        class_dir.mkdir(parents=True)
+        (class_dir / "backlight").symlink_to(backlight)
         runtime = target / "lib/libc.so.6"
         runtime.write_bytes(b"fixture pinned runtime")
         script = deployment.capability_preflight({"lib/libc.so.6": deployment.sha256(runtime.read_bytes())})
@@ -614,15 +628,26 @@ class DeploymentTests(unittest.TestCase):
         elif failure == "linked_runtime_directory":
             (target / "run").mkdir()
             (target / "run/mybot-network").symlink_to(hooks)
-        for prefix in ("/proc/", "/sbin/", "/lib/", "/run/"):
+        elif failure == "unsafe_backlight_mode":
+            (backlight / "brightness").chmod(0o666)
+        elif failure == "invalid_backlight_value":
+            (backlight / "bl_power").write_text("not-an-integer\n")
+        elif failure == "missing_backlight":
+            (class_dir / "backlight").unlink()
+        for prefix in ("/proc/", "/sbin/", "/lib/", "/run/", "/sys/"):
             script = script.replace(prefix, str(target) + prefix)
-        metadata = shlex.quote(sys.executable) + " -c " + shlex.quote("print(0)")
+        metadata = shlex.quote(sys.executable) + " -c " + shlex.quote(
+            "import os,sys; print('0:0:%o' % (os.stat(sys.argv[-1]).st_mode & 0o777) "
+            "if sys.argv[1]=='%u:%g:%a' else '0')")
+        canonical = shlex.quote(sys.executable) + " -c " + shlex.quote(
+            "import pathlib,sys; print(pathlib.Path(sys.argv[-1]).resolve())")
         checksum = shlex.quote(sys.executable) + " -c " + shlex.quote(
             "import hashlib,pathlib,sys; "
             "entries=[line.strip().split('  ',1) for line in sys.stdin if line.strip()]; "
             "sys.exit(not all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()==digest "
             "for digest,name in entries))")
-        prefix = ('set -eu\nPATH=' + shlex.quote(str(binaries)) + '\nstat() { ' + metadata + '; }\n'
+        prefix = ('set -eu\nPATH=' + shlex.quote(str(binaries)) + '\nstat() { ' + metadata + ' "$2" "$3"; }\n'
+                  'readlink() { ' + canonical + ' "$@"; }\n'
                   'sha256sum() { ' + checksum + '; }\n')
         before = {str(path.relative_to(target)): path.read_bytes()
                   for path in target.rglob("*") if path.is_file() and not path.is_symlink()}
@@ -640,7 +665,8 @@ class DeploymentTests(unittest.TestCase):
     def test_capability_preflight_rejects_each_missing_target_prerequisite(self):
         for failure, expected in (("missing_tool", 90), ("missing_hook", 93), ("wrong_model", 92),
                                   ("changed_runtime", 1), ("bad_audio_control", 95),
-                                  ("linked_runtime_directory", 94)):
+                                  ("linked_runtime_directory", 94), ("unsafe_backlight_mode", 96),
+                                  ("invalid_backlight_value", 96), ("missing_backlight", 96)):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory(dir=self.base) as temporary, \
                     patch.object(self, "base", Path(temporary)):
                 result = self.capability_fixture(failure)

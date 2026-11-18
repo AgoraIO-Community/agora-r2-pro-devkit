@@ -32,6 +32,7 @@ assets/service/S99mybot
 assets/service/run-service.sh
 assets/service/mybot-rv1126b.conf
 assets/service/audio-prepare.sh
+assets/service/poweroff.sh
 assets/network/99-mybot-lease
 ```
 
@@ -60,7 +61,7 @@ assets/network/99-mybot-lease
 
 主机需要 Python 3.10+ 和可用的 `adb`。设备需为 AArch64、以 root 连接、已挂载 `/userdata` 并提供 tar/sha256sum/stat/dd/od/awk 等工具。连接多台设备时必须明确指定 `--serial`；只连接一台已授权设备时可省略。以下 `SERIAL` 和 `ARCHIVE_SHA256` 应替换为实际值。
 
-只读预检还会核对准确板型、依赖锁中的 20 项运行库摘要、动态加载器、电源命令、Wi-Fi 工具、dhcpcd hook 目录，以及两项采集 mixer 控制的可写整数范围。预检不设置 mixer、不创建热点，也不要求旧应用释放端口。其他固件必须先按依赖流程登记匹配基线；不能仅凭 AArch64 架构认定兼容。
+只读预检还会核对准确板型、依赖锁中的 20 项运行库摘要、动态加载器、电源命令、Wi-Fi 工具、dhcpcd hook 目录，以及两项采集 mixer 控制的可写整数范围和板级 PWM 背光路径、权限与数值。预检不设置 mixer、不创建热点，也不要求旧应用释放端口。其他固件必须先按依赖流程登记匹配基线；不能仅凭 AArch64 架构认定兼容。
 
 ```sh
 version=$(python3 scripts/project-version.py)
@@ -81,6 +82,8 @@ python3 scripts/deploy-rv1126b.py deploy --serial SERIAL \
 显式兼容的 0.1.1 早于应用状态接口。仅对此版本，检查所选旧二进制的真实 PID、直接父进程监督器的执行路径，以及该监督器的服务 runtime 参数，报告 `application_health=legacy_running`、`application_state=unsupported`；这只确认受监督的本地进程，不能证明业务 ready。现代版本缺失应用状态文件时仍拒绝启动确认。
 
 写入顺序为：只读平台/能力/身份检查 → 设备内完整备份 → 上传及再次校验 → 解包为独立 release → 用选定 profile 执行无硬件访问的 `--version` 加载检查 → 再核对身份 → 停止旧服务 → 安装稳定服务配置 → 原子切换链接。停止命令失败、旧进程仍占用或校验失败时不继续。保留 ALSA 配置文件，不禁用 chronyd、ADB 或电源服务。每次服务启动前，`audio-prepare.sh` 通过 `amixer cset` 设置并读回核对 `ACodec_LP Digital Gain Volume=0`、`ACodec_LP PGA Gain Volume=23` 两项采集控制；这会修改声卡的运行时 mixer 状态，不修改播放控制或写入 ALSA 配置文件。
+
+部署同时安装固定的 `/etc/mybot-rv1126b/poweroff.sh`。只有已确认的受监督关机在清理完成后调用它，将板级背光 `brightness` 设为 0、`bl_power` 设为 4 并读回，再请求 `/sbin/poweroff`；失败或信号中断尝试恢复原值。普通服务停止、重启及版本切换继续恢复原显示，不主动关闭背光。软件关机不等于所有电源掉电，实体长按的实际硬件链路尚未确认。
 
 原 `botstation-device` 配置改为 `BOTSTATION_ENABLED=0`，其 `S99botstation-device` 移入 `/etc/mybot-rv1126b/disabled/`，避免开机重复占用。系统 dnsmasq 配置限制为 `interface=usb0`、`bind-dynamic`，保留现有 USB 监听地址与 DHCP 范围，USB 接口尚无 IPv4 时也不会抢占 AP 地址。dhcpcd 增加 `denyinterfaces mbap*`，防止其接管临时 AP；网络租约 hook 安装到 `/lib/dhcpcd/dhcpcd-hooks/99-mybot-lease`（0644），运行记录目录 `/run/mybot-network/leases` 为 0700。操作者在确认连接条件后分别受控重载：
 

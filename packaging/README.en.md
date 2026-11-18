@@ -42,3 +42,5 @@ The private default directory is `/userdata/mybot-rv1126b`: `device_auth` stores
 ## Direct runs and supervised services
 
 Running `run.sh` directly does not install startup services or write ALSA configuration files. The repository's explicit deployment tool installs `S99mybot`, disables stock business startup and applies board network policies. Each supervised launch sets capture controls through `amixer`. Service settings are in `/etc/mybot-rv1126b.conf`, releases in `/userdata/mybot/releases`, and application data remains separate. Follow the deployment guide for supervised upgrades, service control and rollback; do not directly restore the stock service.
+
+Confirmed supervised shutdown runs `poweroff.sh` after cleanup: it sets pwm-backlight `brightness=0` and `bl_power=4`, verifies both, then calls `/sbin/poweroff`. On failure or interruption, the helper attempts to restore the prior values. Ordinary application stops restore the prior display without explicitly disabling its backlight. Software poweroff does not guarantee that all board power is off; the physical long-press hardware path remains unconfirmed.

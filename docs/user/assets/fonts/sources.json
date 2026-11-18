@@ -8,7 +8,7 @@
       },
       "derivation": "scripts/generate-manual-font.py; fonttools 4.60.1; CFF to TrueType outlines, 1-unit tolerance; subset of maintained manual text; renamed; fixed timestamps",
       "license": "MyBotManualSans-OFL.txt",
-      "sha256": "9ee31724fc2b0880370134568f61d0330a6c45f82465c7e2239e74a7b0f7cb61"
+      "sha256": "7badf2f7cd1a84125054693a439ecfaede2dd859079492b3244ddfd93ff036ce"
     },
     "DejaVuSansMono-Bold.ttf": {
       "source": {

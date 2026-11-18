@@ -401,14 +401,16 @@ There are no battery, brightness, automatic sleep or OTA menus. Application play
 ![Shutdown confirmation: cancel or confirm](assets/device-manual-en/settings-confirm.png)
 ![Powering off: wait for application and system cleanup](assets/device-manual-en/settings-powering-off.png)
 
-3. Wait for audio, network and display cleanup and normal system shutdown. Do not keep touching the screen.
-4. To power on again, hold the single physical button until the startup screen appears, then release. A long press is confirmed to work; no fixed duration is prescribed.
+3. Wait for cleanup and normal shutdown; the helper turns off the backlight first. Do not keep touching the screen.
+4. To restart, hold the single physical button until the startup screen appears, then release. No fixed duration is prescribed.
 
 ![Shutdown failed: return at top left and investigate](assets/device-manual-en/settings-error.png)
 
-Screen shutdown requires authorization from the supervised service started by `S99mybot`. A temporary foreground `run.sh` reports shutdown failure; return to keep using it. For a deployed service failure, inspect status and logs.
+UI shutdown needs supervised `S99mybot`. A foreground `run.sh` reports failure; return to continue. Inspect service logs for supervised failures.
 
-Exiting the application or stopping `S99mybot` does not power off the device. UI confirmation makes the supervisor call `/sbin/poweroff`; the system power service handles the physical button.
+After cleanup, `poweroff.sh` sets and verifies pwm-backlight `brightness=0` and `bl_power=4`, then calls `/sbin/poweroff`. On failure or interruption, it attempts to restore prior values.
+
+Ordinary stops restore the prior display without disabling its backlight. Software poweroff does not guarantee all board power is off; the physical button's hardware path remains unconfirmed.
 
 <!-- page -->
 
