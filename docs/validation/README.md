@@ -1,6 +1,6 @@
 # 当前验证状态
 
-更新日期：2026-11-18。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前候选为 **0.6.0**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
+更新日期：2026-11-18。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前候选为 **0.6.1**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
 
 ## 治理专项
 
@@ -137,6 +137,12 @@ Ubuntu 24.04 的 5 项 C 测试首轮 4/5，监督器用例等待超时。同一
 ## 0.5.5 设备启动时短暂显示配网失败
 
 在运行 0.5.5 的设备上，系统与 supplicant 均有两个已保存网络。应用历史日志中五次带错误的 `Wi-Fi state=5` 均来自 `No nl80211 Wi-Fi interface; configure the Wi-Fi interface explicitly`。最近这次 0.5.5 启动从等待直接转到该错误，之后通过时钟检查并进入 SDK ready。配置已指定 wlan0，检查时 wlan0 已可见且提供默认路由。接口检查位于加载配置和尝试已保存网络之前。普通启动允许在 Wi-Fi 服务报告错误后随有效路由继续，因此能解释先显示失败再 ready。系统关联日志不足以逐次重建 supplicant 选择的 SSID。现场检查只读取日志和状态。
+
+## 0.6.1 开机配网回归
+
+从 `24fc81b` 构建中英文语音与视频程序，四套 AArch64 构建及应用、监督器、重置工具的 ABI 检查均通过。开机时无线接口或系统控制端延迟出现、系统自行取得路由、等待超时、取消及强制配网均有专项覆盖。macOS UBSan 三项和 Ubuntu 24.04.4 GCC 13.3 四项专项均通过。
+
+设备从 0.5.5 升级为 0.6.1 中文视频版后执行一次整机重启。确认内核启动标识已变更，本轮服务仅启动一次。应用从 `waiting_network` 经 `starting_services` 进入 `ready`，主机发起重启后约 21 秒观测到 ready。应用日志中的 Wi-Fi 状态为 `0 → 4`（等待 → 已联网），配网失败状态和热点指引均为 0 次。wlan0 已关联并获得默认路由，两个已保存网络、系统 Wi-Fi 配置、本机身份及绑定均通过部署前后核对。回退版本为 0.5.5。脱敏记录位于 `build/wifi-boot-061/reboot.json`。
 
 ## 如何复核
 
