@@ -58,7 +58,7 @@ static void check_level(void *context, int expected) {
 }
 
 static void test_lifecycle_and_pcm(void) {
-    CHECK(rv1126b_volume_level() == 100);
+    CHECK(rv1126b_volume_level() == 70);
     void *invalid = (void *)(uintptr_t)1;
     CHECK(operations->init(&invalid) < 0);
     CHECK(!invalid);
@@ -70,7 +70,7 @@ static void test_lifecycle_and_pcm(void) {
     CHECK(operations->init(NULL) < 0);
     CHECK(operations->init(&invalid) < 0);
     CHECK(!invalid);
-    check_level(context, 100);
+    check_level(context, 70);
     CHECK(access(record, F_OK) < 0);
     CHECK(operations->set_volume(context, -1) < 0);
     CHECK(operations->set_volume(context, 101) < 0);
@@ -83,7 +83,8 @@ static void test_lifecycle_and_pcm(void) {
     int16_t output[sizeof(source) / sizeof(source[0])];
     const size_t samples = sizeof(source) / sizeof(source[0]);
     rv1126b_volume_scale(output, source, samples);
-    CHECK(!memcmp(source, output, sizeof(source)));
+    const int16_t initial[] = {-22938, -22937, -71, -70, -1, 0, 1, 70, 71, 22937};
+    CHECK(!memcmp(initial, output, sizeof(initial)));
     CHECK(operations->set_volume(context, 50) == 0);
     const int16_t half[] = {-16384, -16384, -51, -50, -1, 0, 1, 50, 51, 16384};
     rv1126b_volume_scale(output, source, samples);
@@ -119,7 +120,7 @@ static void test_lifecycle_and_pcm(void) {
     CHECK(operations->set_volume(context, 37) == 0);
     operations->destroy(context);
     rv1126b_volume_shutdown();
-    CHECK(rv1126b_volume_level() == 100);
+    CHECK(rv1126b_volume_level() == 70);
 
     /* A fresh process and a fresh product lifecycle both recover the level. */
     pid_t child = fork();
@@ -149,7 +150,7 @@ static void test_corrupt_and_unsafe_storage(void) {
         write_record(bad[i]);
         CHECK(rv1126b_volume_prepare(storage) == 0);
         void *context = attach();
-        check_level(context, 100);
+        check_level(context, 70);
         check_record(bad[i]);
         CHECK(operations->set_volume(context, 100) == 0);
         check_record("100\n");
@@ -158,7 +159,7 @@ static void test_corrupt_and_unsafe_storage(void) {
     }
     CHECK(chmod(record, 0644) == 0);
     CHECK(rv1126b_volume_prepare(storage) < 0);
-    CHECK(rv1126b_volume_level() == 100);
+    CHECK(rv1126b_volume_level() == 70);
     CHECK(chmod(record, 0600) == 0);
     CHECK(chmod(storage, 0755) == 0);
     CHECK(rv1126b_volume_prepare(storage) < 0);

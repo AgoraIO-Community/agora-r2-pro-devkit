@@ -31,12 +31,19 @@ add_custom_target(mybot-build-inputs
         --build-dir "${PROJECT_BINARY_DIR}" --prepare
     BYPRODUCTS "${PROJECT_BINARY_DIR}/build_source_identity.c" VERBATIM)
 add_dependencies(mybot-rv1126b mybot-build-inputs)
-target_sources(mybot-supervisor PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/build_identity.c"
-    "${PROJECT_BINARY_DIR}/build_source_identity.c")
-add_dependencies(mybot-supervisor mybot-build-inputs)
-target_compile_definitions(mybot-supervisor PRIVATE RV1126B_BUILD_PROVENANCE=1)
-set_target_properties(mybot-supervisor PROPERTIES INSTALL_RPATH "$ORIGIN/../lib"
-    BUILD_WITH_INSTALL_RPATH TRUE)
+foreach(role supervisor factory-reset)
+    set(helper "mybot-${role}")
+    target_sources(${helper} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/build_identity.c"
+        "${PROJECT_BINARY_DIR}/build_source_identity.c")
+    add_dependencies(${helper} mybot-build-inputs)
+    target_compile_definitions(${helper} PRIVATE RV1126B_BUILD_PROVENANCE=1)
+    set_target_properties(${helper} PROPERTIES INSTALL_RPATH "$ORIGIN/../lib" BUILD_WITH_INSTALL_RPATH TRUE)
+    add_custom_target(${helper}-artifacts ALL
+        COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/check-target-elf.py"
+            "$<TARGET_FILE:${helper}>" --library-root "${RV1126B_STAGING}"
+            --output "${PROJECT_BINARY_DIR}/abi-report-${role}.json"
+        DEPENDS ${helper} VERBATIM)
+endforeach()
 get_filename_component(rtsa_library_directory "${AGORA_RTC_LIBRARY}" DIRECTORY)
 add_custom_target(mybot-artifacts ALL
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/check-target-elf.py"
@@ -45,10 +52,4 @@ add_custom_target(mybot-artifacts ALL
         --output "${PROJECT_BINARY_DIR}/abi-report.json"
     COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/build-manifest.py" --build-dir "${PROJECT_BINARY_DIR}"
     DEPENDS mybot-rv1126b VERBATIM)
-add_custom_target(mybot-supervisor-artifacts ALL
-    COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/check-target-elf.py"
-        "$<TARGET_FILE:mybot-supervisor>" --library-root "${RV1126B_STAGING}"
-        --output "${PROJECT_BINARY_DIR}/abi-report-supervisor.json"
-    DEPENDS mybot-supervisor VERBATIM)
-
 # scripts/package-rv1126b.py owns the complete runtime bundle layout.

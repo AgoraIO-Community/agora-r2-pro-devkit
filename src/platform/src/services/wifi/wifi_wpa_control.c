@@ -29,8 +29,10 @@ void wifi_control_close(wifi_control_t *control) {
 bool wifi_control_open(wifi_control_t *control, const char *remote, const char *local) {
     struct sockaddr_un address;
     wifi_control_close(control);
-    if (strlen(remote) >= sizeof(address.sun_path) || strlen(local) >= sizeof(address.sun_path))
+    if (strlen(remote) >= sizeof(address.sun_path) || strlen(local) >= sizeof(address.sun_path)) {
+        errno = ENAMETOOLONG;
         return false;
+    }
     control->descriptor = socket(AF_UNIX, SOCK_DGRAM, 0);
     if (control->descriptor < 0)
         return false;
@@ -40,14 +42,18 @@ bool wifi_control_open(wifi_control_t *control, const char *remote, const char *
     address.sun_family = AF_UNIX;
     memcpy(address.sun_path, local, strlen(local) + 1);
     if (bind(control->descriptor, (struct sockaddr *)&address, sizeof(address)) != 0) {
+        int code = errno;
         wifi_control_close(control);
+        errno = code;
         return false;
     }
     wifi_copy(control->local, sizeof(control->local), local);
     memset(address.sun_path, 0, sizeof(address.sun_path));
     memcpy(address.sun_path, remote, strlen(remote) + 1);
     if (connect(control->descriptor, (struct sockaddr *)&address, sizeof(address)) != 0) {
+        int code = errno;
         wifi_control_close(control);
+        errno = code;
         return false;
     }
     return true;

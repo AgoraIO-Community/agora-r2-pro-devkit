@@ -12,11 +12,12 @@ typedef struct {
     unsigned connections, ap_starts;
     wifi_credentials_t saved;
 } state_t;
-static bool initialize(void *context, char *error) {
+static wifi_backend_init_result_t initialize(void *context, char *error) {
     (void)context;
     wifi_error(error, "");
-    return true;
+    return WIFI_BACKEND_READY;
 }
+
 static const char *ap_ssid(void *context) {
     (void)context;
     return "startup-test";
@@ -103,7 +104,7 @@ static void no_destroy(void *context) {
 }
 static const wifi_backend_ops_t backend_ops = {
     initialize, ap_ssid, start_ap, stop_ap,        ap_running,      concurrent, online,
-    scan,       load,    save,     wait_committed, connect_network, no_destroy};
+    scan,       load,    save,     wait_committed, connect_network, no_destroy, NULL};
 static bool portal_start(void *context, const wifi_portal_handler_t *handler, char *error) {
     (void)context;
     (void)handler;
@@ -135,7 +136,9 @@ static void recovery_after_portal_closes(void) {
                                           .finish_grace_ms = 1,
                                           .success_hold_ms = 5000,
                                           .scan_interval_ms = 15000,
-                                          .offline_grace_ms = 10};
+                                          .offline_grace_ms = 10,
+                                          .init_budget_ms = 1000,
+                                          .init_retry_ms = 10};
     wifi_service_t *service =
         wifi_service_create(&config, &backend, &portal, online, &state, &timing);
     CHECK(service && !backend.ops && !portal.ops && wifi_service_start(service));

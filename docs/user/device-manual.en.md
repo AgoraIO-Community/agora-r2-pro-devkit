@@ -291,7 +291,7 @@ Deployment status separates supervision from the verified application version, P
 # 09 Power On and Read Startup Screens
 
 1. Hold the device's single physical button to power on; release when the startup screen appears. A long press is confirmed to switch this device on/off; follow its response rather than a fixed duration.
-2. Once installed, the supervised service starts automatically at boot. It reuses available Wi-Fi or waits for networking before showing setup instructions.
+2. The service starts automatically at boot. “Waiting for network” is normal while Wi-Fi starts. If the system connects to a saved network, the device continues to the service without opening a hotspot.
 
 ![Starting: initializing the application](assets/device-manual-en/starting.png)
 ![Waiting for network: connecting to saved Wi-Fi](assets/device-manual-en/waiting-network.png)
@@ -362,7 +362,7 @@ For server `https://botstation.shengwang.cn/api`, open `https://botstation.sheng
 1. Tap the top-right gear to open settings. Tap Back at top left to close it. Menu touches do not start or end conversations.
 
 ![Main screen: the top-right gear opens settings](assets/device-manual-en/ready.png)
-![Settings: Wi-Fi setup and Power off](assets/device-manual-en/settings-menu.png)
+![Settings menu with Wi-Fi setup, Power off and Factory reset](assets/device-manual-en/settings-menu.png)
 
 2. Choose “Wi-Fi setup” to change networks. The application first ends the conversation and stops the SDK, then enters phone AP setup.
 3. Complete section 10 and wait for ready. The binding is retained; tap again to start a new conversation.
@@ -377,7 +377,7 @@ An explicit `--no-wifi-provisioning` disables automatic and manual AP setup; set
 # 14 Volume and Language Settings
 
 1. Adjust playback volume using the service's supported device volume control. This device has only a physical power button; settings has no volume slider.
-2. Check mute, low and normal playback levels. The range is 0–100, with 0 muted; the initial default is 100.
+2. Check mute, low and normal playback levels. The range is 0–100, with 0 muted; the default is 70 on first use and after a factory reset.
 3. Restart the application or complete Wi-Fi setup and confirm the volume returns. Setup prompts and pairing speech also use saved volume and remain silent when muted.
 
 | Setting | Effect |
@@ -401,14 +401,16 @@ There are no battery, brightness, automatic sleep or OTA menus. Application play
 ![Shutdown confirmation: cancel or confirm](assets/device-manual-en/settings-confirm.png)
 ![Powering off: wait for application and system cleanup](assets/device-manual-en/settings-powering-off.png)
 
-3. Wait for audio, network and display cleanup and normal system shutdown. Do not keep touching the screen.
-4. To power on again, hold the single physical button until the startup screen appears, then release. A long press is confirmed to work; no fixed duration is prescribed.
+3. Wait for cleanup, display shutdown and normal poweroff. The helper turns off the backlight first.
+4. Hold the physical button until the startup screen appears, then release; timing depends on the hardware.
 
 ![Shutdown failed: return at top left and investigate](assets/device-manual-en/settings-error.png)
 
-Screen shutdown requires authorization from the supervised service started by `S99mybot`. A temporary foreground `run.sh` reports shutdown failure; return to keep using it. For a deployed service failure, inspect status and logs.
+UI shutdown requires supervised `S99mybot`. If the request is rejected, use Back to continue.
 
-Exiting the application or stopping `S99mybot` does not power off the device. UI confirmation makes the supervisor call `/sbin/poweroff`; the system power service handles the physical button.
+After cleanup, `poweroff.sh` turns off the backlight and calls `/sbin/poweroff`. Preparation interruption or command failure only triggers a backlight restore attempt. The UI does not return after app exit; inspect private logs and restart the service explicitly.
+
+Ordinary stops restore the prior display. Software poweroff may leave board power on; the physical button's hardware path is unconfirmed.
 
 <!-- page -->
 
@@ -609,3 +611,18 @@ After each installation or upgrade, check these in order and record bundle SHA25
 | 8. Optional checks | Record video, AEC, network recovery and endurance separately |
 
 Detailed references: build `docs/user/build.zh-CN.md`, deployment `docs/user/deployment.zh-CN.md`, Wi-Fi `docs/user/wifi-provisioning.zh-CN.md`, configuration `docs/user/configuration.zh-CN.md`. Recorded validation scope is in `docs/validation/README.md`.
+
+<!-- page -->
+
+# 23 Restore Factory Settings
+
+1. Open the top-right gear and choose “Factory reset”. Read the confirmation screen. It lists the local binding, saved Wi-Fi networks and volume that will be cleared. Tap Back at the top left to keep your settings.
+
+![Factory reset confirmation with Back and Reset device](assets/device-manual-en/settings-reset-confirm.png)
+
+2. Lift your finger and tap “Reset device” to confirm. The device ends the current conversation and restarts the agent-studio-device-firmware service. Wait for the screen to show the hotspot name and address.
+3. Connect your phone to that hotspot. Follow section 10 to set up Wi-Fi, then section 11 to pair using the new code. The volume returns to 70.
+
+The device keeps its ID, server, software version and video setting. You can reset it while offline. An interrupted reset resumes at the next startup. If the request is rejected, return to Settings and try again. If hotspot instructions never appear, ask the maintainer to check the service status and private logs.
+
+Maintenance backups and logs are retained and may contain old credentials. Before transferring the device, the administrator should remove its binding in the console for its service region and handle the remaining backups and logs.

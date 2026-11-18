@@ -507,9 +507,18 @@ int main(int argc, char **argv) {
     wifi_backend_t backend = {0};
     char error[WIFI_ERROR_CAPACITY] = "";
     CHECK(wifi_linux_backend_create(&config, &backend, error));
-    CHECK(!backend.ops->initialize(backend.context, error) && error[0]);
+    CHECK(backend.ops->initialize(backend.context, error) == WIFI_BACKEND_FAILED && error[0]);
     CHECK(!backend.ops->online(backend.context));
     wifi_backend_destroy(&backend);
+#ifdef __linux__
+    /* A valid interface name can precede registration of the kernel's Wi-Fi device. */
+    char missing[16];
+    snprintf(missing, sizeof(missing), "testw%08x", (unsigned)getpid());
+    const wifi_backend_config_t delayed = {.interface_name = missing};
+    CHECK(wifi_linux_backend_create(&delayed, &backend, error));
+    CHECK(backend.ops->initialize(backend.context, error) == WIFI_BACKEND_RETRY && error[0]);
+    wifi_backend_destroy(&backend);
+#endif
     puts("Wi-Fi credentials, AP radio, control reload and owned cleanup: PASS");
     return 0;
 }

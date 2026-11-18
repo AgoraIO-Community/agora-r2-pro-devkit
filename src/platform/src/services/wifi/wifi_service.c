@@ -41,6 +41,7 @@ struct wifi_service {
     wifi_credentials_t saved;
     action_t pending;
     bool busy, manual, recovery, initialized, portal_started, finish_requested, connected;
+    bool monitor_startup_route;
     uint64_t pending_at, finish_at, connected_at, next_scan, next_health, offline_since;
 };
 
@@ -95,7 +96,7 @@ static void set_state(wifi_service_t *s, rv1126b_wifi_state_t state, const char 
                       const char *error, wifi_portal_error_t error_code) {
     pthread_mutex_lock(&s->mutex);
     /* A pending SDK-stop acknowledgement owns the next transition. */
-    if (!(s->manual && state == RV1126B_WIFI_ONLINE)) {
+    if (!s->manual && !s->stop) {
         s->public_status.state = state;
         copy_text(s->public_status.error, sizeof(s->public_status.error), error);
         copy_text(s->portal_status.state, sizeof(s->portal_status.state), portal_state);
@@ -282,18 +283,16 @@ static bool handler_finish(void *s, char *error) {
 static const wifi_portal_handler_ops_t handler_ops = {handler_status, handler_networks,
                                                       handler_saved,  handler_submit,
                                                       handler_action, handler_finish};
-static bool initialize(wifi_service_t *s) {
+
+static wifi_backend_init_result_t initialize(wifi_service_t *s, char *error) {
     if (s->initialized)
-        return true;
-    char error[WIFI_ERROR_CAPACITY] = "";
-    if (!s->backend.ops->initialize(s->backend.context, error)) {
-        set_state(s, RV1126B_WIFI_ERROR, "error", failure(error, "Wi-Fi backend is unavailable"),
-                  WIFI_PORTAL_ERROR_AP);
-        return false;
-    }
-    s->initialized = true;
+        return WIFI_BACKEND_READY;
+    wifi_backend_init_result_t result = s->backend.ops->initialize(s->backend.context, error);
+    if (result != WIFI_BACKEND_READY)
+        return result;
     wifi_credentials_t profiles = {0};
-    s->backend.ops->load(s->backend.context, &profiles, error);
+    if (!s->backend.ops->load(s->backend.context, &profiles, error))
+        return WIFI_BACKEND_FAILED;
     if (profiles.count > WIFI_MAX_NETWORKS)
         profiles.count = WIFI_MAX_NETWORKS;
     const bool concurrent = s->backend.ops->concurrent_ap(s->backend.context);
@@ -301,7 +300,8 @@ static bool initialize(wifi_service_t *s) {
     s->saved = profiles;
     s->portal_status.concurrent = concurrent;
     pthread_mutex_unlock(&s->mutex);
-    return true;
+    s->initialized = true;
+    return WIFI_BACKEND_READY;
 }
 
 static void ap_failed(wifi_service_t *s, const char *error) {
@@ -520,6 +520,62 @@ static bool ready(wifi_service_t *s) {
     return s->ready && s->ready(s->ready_context);
 }
 
+/* Wait on the worker condition so stop and settings requests interrupt both startup windows. */
+static void wait_for_probe(wifi_service_t *s, uint64_t deadline) {
+    uint64_t next = wifi_now_ms() + s->timing.init_retry_ms;
+    if (next > deadline)
+        next = deadline;
+    pthread_mutex_lock(&s->mutex);
+    while (!s->stop && !s->cancel_attempt && wifi_now_ms() < next)
+        wait_until(s, next);
+    pthread_mutex_unlock(&s->mutex);
+}
+
+static bool use_existing_route(wifi_service_t *s) {
+    if (!ready(s))
+        return false;
+    set_state(s, RV1126B_WIFI_ONLINE, "connected", "", WIFI_PORTAL_ERROR_NONE);
+    return true;
+}
+
+typedef enum { NETWORK_STARTUP, NETWORK_OPEN_AP, NETWORK_RECOVER } network_mode_t;
+
+static void select_network(wifi_service_t *s, network_mode_t mode) {
+    const bool automatic = mode == NETWORK_STARTUP;
+    char error[WIFI_ERROR_CAPACITY] = "";
+    uint64_t deadline = wifi_now_ms() + s->timing.init_budget_ms;
+    while (!cancelled(s)) {
+        wifi_backend_init_result_t result = initialize(s, error);
+        if (cancelled(s) || (automatic && use_existing_route(s)))
+            return;
+        if (result == WIFI_BACKEND_READY)
+            break;
+        if (result == WIFI_BACKEND_RETRY && wifi_now_ms() < deadline) {
+            wait_for_probe(s, deadline);
+            if (cancelled(s) || (automatic && use_existing_route(s)))
+                return;
+            if (wifi_now_ms() < deadline)
+                continue;
+        }
+        s->monitor_startup_route = automatic;
+        set_state(s, RV1126B_WIFI_ERROR, "error", failure(error, "Wi-Fi backend is unavailable"),
+                  WIFI_PORTAL_ERROR_AP);
+        return;
+    }
+    /* Give the board's supplicant and DHCP manager first choice of their own saved networks. */
+    if (automatic && s->saved.count && s->backend.ops->system_station &&
+        s->backend.ops->system_station(s->backend.context)) {
+        deadline = wifi_now_ms() + s->timing.station_grace_ms;
+        while (!cancelled(s) && wifi_now_ms() < deadline) {
+            wait_for_probe(s, deadline);
+            if (use_existing_route(s))
+                return;
+        }
+    }
+    if (!cancelled(s) && (mode == NETWORK_OPEN_AP || !try_saved(s)))
+        enter_ap(s, "", WIFI_PORTAL_ERROR_NONE);
+}
+
 static void control(wifi_service_t *s) {
     if (!s->config.enabled) {
         while (!stopping(s)) {
@@ -532,13 +588,7 @@ static void control(wifi_service_t *s) {
         }
         return;
     }
-    if (!s->config.force_ap && ready(s)) {
-        /* Load profiles even when the externally managed route is already up. */
-        initialize(s);
-        set_state(s, RV1126B_WIFI_ONLINE, "connected", "", WIFI_PORTAL_ERROR_NONE);
-    } else if (initialize(s) && (s->config.force_ap || !try_saved(s))) {
-        enter_ap(s, "", WIFI_PORTAL_ERROR_NONE);
-    }
+    select_network(s, s->config.force_ap ? NETWORK_OPEN_AP : NETWORK_STARTUP);
     while (!stopping(s)) {
         action_t action = {0};
         bool manual = false, recovery = false, finish = false, scan = false, health = false;
@@ -546,6 +596,7 @@ static void control(wifi_service_t *s) {
         const uint64_t now = wifi_now_ms();
         if (s->manual) {
             s->manual = false;
+            s->monitor_startup_route = false;
             manual = true;
             recovery = s->recovery;
             s->recovery = false;
@@ -576,6 +627,12 @@ static void control(wifi_service_t *s) {
         } else if (s->portal_started && !s->connected && !s->busy && now >= s->next_scan) {
             scan = true;
         } else {
+            if (s->monitor_startup_route && ready(s)) {
+                s->monitor_startup_route = false;
+                pthread_mutex_unlock(&s->mutex);
+                set_state(s, RV1126B_WIFI_ONLINE, "connected", "", WIFI_PORTAL_ERROR_NONE);
+                continue;
+            }
             if (s->public_status.state == RV1126B_WIFI_ONLINE && !s->portal_started) {
                 if (ready(s))
                     s->offline_since = 0;
@@ -596,8 +653,7 @@ static void control(wifi_service_t *s) {
         pthread_mutex_unlock(&s->mutex);
         if (manual) {
             s->offline_since = 0;
-            if (initialize(s) && (!recovery || !try_saved(s)))
-                enter_ap(s, "", WIFI_PORTAL_ERROR_NONE);
+            select_network(s, recovery ? NETWORK_RECOVER : NETWORK_OPEN_AP);
         } else if (action.kind == ACTION_CONNECT)
             connect_candidate(s, &action.credential);
         else if (action.kind != ACTION_NONE)
@@ -655,8 +711,22 @@ wifi_service_t *wifi_service_create(const wifi_service_config_t *config, wifi_ba
     if (!s)
         return NULL;
     s->config = selected;
-    const wifi_service_timing_t default_timing = {30000, 15000, 30000, 200, 200, 5000, 15000, 3000};
+    const wifi_service_timing_t default_timing = {
+        .connect_budget_ms = 30000,
+        .attempt_ms = 15000,
+        .commit_budget_ms = 30000,
+        .submit_grace_ms = 200,
+        .finish_grace_ms = 200,
+        .success_hold_ms = 5000,
+        .scan_interval_ms = 15000,
+        .offline_grace_ms = 3000,
+        .init_budget_ms = 15000,
+        .init_retry_ms = 250,
+        .station_grace_ms = 5000,
+    };
     s->timing = timing ? *timing : default_timing;
+    if (!s->timing.init_retry_ms)
+        s->timing.init_retry_ms = default_timing.init_retry_ms;
     s->ready = is_ready;
     s->ready_context = ready_context;
     s->public_status.state = RV1126B_WIFI_WAITING;
@@ -761,7 +831,7 @@ int rv1126b_wifi_start(const rv1126b_wifi_config_t *config) {
         pthread_mutex_unlock(&service_mutex);
         return -1;
     }
-    char *interface = strdup(config->interface_name ? config->interface_name : "");
+    char *interface = strdup(config->route_interface ? config->route_interface : "");
     wifi_backend_t backend = {0};
     wifi_portal_t portal = {0};
     char error[WIFI_ERROR_CAPACITY] = "";

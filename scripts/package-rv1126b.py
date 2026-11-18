@@ -24,6 +24,7 @@ EXECUTABLE_ASSETS = {
     "assets/service/S99mybot": "packaging/service/S99mybot",
     "assets/service/run-service.sh": "packaging/service/run-service.sh",
     "assets/service/audio-prepare.sh": "packaging/service/audio-prepare.sh",
+    "assets/service/poweroff.sh": "packaging/service/poweroff.sh",
 }
 DATA_ASSETS = {'assets/service/mybot-rv1126b.conf': 'packaging/service/mybot-rv1126b.conf'}
 
@@ -134,9 +135,10 @@ def package(root, args):
         build = Path(getattr(args, profile + "_build")).resolve()
         manifest, report = verify_manifest(root, build, args.language, profile == "video")
         inputs = manifest['inputs']
-        verified_abi(build, inputs['config'], inputs['source']['sha256'], inputs_digest(inputs),
-                     binary_name='mybot-supervisor', report_name='abi-report-supervisor.json',
-                     require_rtsa=False)
+        for role in ("supervisor", "factory-reset"):
+            verified_abi(build, inputs['config'], inputs['source']['sha256'], inputs_digest(inputs),
+                         binary_name='mybot-' + role, report_name='abi-report-' + role + '.json',
+                         require_rtsa=False)
         validated.append((profile, build, manifest, report))
     baseline = validated[0][2]["inputs"]
     for _, _, manifest, _ in validated[1:]:
@@ -189,17 +191,17 @@ def package(root, args):
         for relative, source in DATA_ASSETS.items():
             (staging / relative).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(root / source, staging / relative)
-        supervisor_build = validated[0][1]
-        shutil.copyfile(supervisor_build / 'mybot-supervisor', staging / 'bin/mybot-supervisor')
-        (staging / 'bin/mybot-supervisor').chmod(0o755)
-        supervisor_report = public_abi(json.loads(
-            (supervisor_build / 'abi-report-supervisor.json').read_text()))
-        write_json(staging / 'abi-report-supervisor.json', supervisor_report)
-        supervisor_manifest = public_manifest(validated[0][2])
-        supervisor_manifest['role'] = 'supervisor'
-        supervisor_manifest['binary_sha256'] = digest(staging / 'bin/mybot-supervisor')
-        supervisor_manifest['abi_report_sha256'] = digest(staging / 'abi-report-supervisor.json')
-        write_json(staging / 'supervisor-manifest.json', supervisor_manifest)
+        helper_build = validated[0][1]
+        for role in ("supervisor", "factory-reset"):
+            binary = "mybot-" + role
+            report_name = "abi-report-" + role + ".json"
+            shutil.copyfile(helper_build / binary, staging / "bin" / binary)
+            (staging / "bin" / binary).chmod(0o755)
+            write_json(staging / report_name, public_abi(json.loads((helper_build / report_name).read_text())))
+            helper_manifest = public_manifest(validated[0][2])
+            helper_manifest.update(role=role, binary_sha256=digest(staging / "bin" / binary),
+                                   abi_report_sha256=digest(staging / report_name))
+            write_json(staging / (role + "-manifest.json"), helper_manifest)
         launcher = (root / "packaging/run.sh").read_text()
         if args.profile == "video":
             if "${RV1126B_VIDEO:-0}" not in launcher:

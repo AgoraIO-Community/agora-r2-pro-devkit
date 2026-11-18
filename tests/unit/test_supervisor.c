@@ -1,8 +1,25 @@
 /* SPDX-License-Identifier: Apache-2.0 */
+#define _GNU_SOURCE
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#endif
+#define _POSIX_C_SOURCE 200809L
+#include <fcntl.h>
+#include <stdarg.h>
+#include <unistd.h>
+
+static int test_log_failure;
+static int test_poweroff_log_ready;
+static int test_supervisor_fcntl(int fd, int command, ...);
+static int test_supervisor_dup2(int old_fd, int new_fd);
+#define fcntl test_supervisor_fcntl
+#define dup2 test_supervisor_dup2
 #define RV1126B_SUPERVISOR_NO_MAIN
 #define RV1126B_SUPERVISOR_FORCE_STATUS_SCAN
 #define RV1126B_SUPERVISOR_TEST_ALLOW_UNPRIVILEGED
 #include "../../src/platform/src/services/supervisor.c"
+#undef fcntl
+#undef dup2
 #include "../../src/platform/src/services/power.c"
 #include "check.h"
 #include <dirent.h>
@@ -10,6 +27,31 @@
 static char temporary[PATH_MAX], runtime_path[PATH_MAX], logs_path[PATH_MAX];
 static char marker_path[PATH_MAX], executable_path[PATH_MAX];
 static char power_command[PATH_MAX], power_marker[PATH_MAX];
+
+static int test_supervisor_fcntl(int fd, int command, ...) {
+    if (command == F_GETFL || command == F_GETFD)
+        return fcntl(fd, command);
+    va_list arguments;
+    va_start(arguments, command);
+    int value = va_arg(arguments, int);
+    va_end(arguments);
+    if (command == F_DUPFD_CLOEXEC && test_log_failure == 1) {
+        errno = EMFILE;
+        return -1;
+    }
+    int result = fcntl(fd, command, value);
+    if (command == F_DUPFD_CLOEXEC && result >= 0)
+        test_poweroff_log_ready = 1;
+    return result;
+}
+
+static int test_supervisor_dup2(int old_fd, int new_fd) {
+    if (test_log_failure == 2 && test_poweroff_log_ready) {
+        errno = EMFILE;
+        return -1;
+    }
+    return dup2(old_fd, new_fd);
+}
 
 static void pause_ms(unsigned int value) {
     struct timespec delay = {.tv_sec = value / 1000, .tv_nsec = (long)(value % 1000) * 1000000};
@@ -54,7 +96,7 @@ static void prepare(void) {
     CHECK(write(fd, script, (size_t)length) == length && close(fd) == 0);
 }
 
-static void power_request_delayed_commit(bool commit) {
+static void delayed_commit(const char *request, bool commit) {
     struct sockaddr_un address = {.sun_family = AF_UNIX};
     const char *runtime = getenv("MYBOT_SUPERVISOR_RUNTIME");
     CHECK(runtime);
@@ -62,7 +104,7 @@ static void power_request_delayed_commit(bool commit) {
           (int)sizeof(address.sun_path));
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     CHECK(fd >= 0 && connect(fd, (struct sockaddr *)&address, sizeof(address)) == 0);
-    CHECK(write(fd, "poweroff\n", 9) == 9);
+    CHECK(write(fd, request, strlen(request)) == (ssize_t)strlen(request));
     char response[16] = {0};
     CHECK(read(fd, response, sizeof(response) - 1) == 9);
     CHECK(!strcmp(response, "accepted\n"));
@@ -79,15 +121,47 @@ static void power_request_delayed_commit(bool commit) {
 static int child_payload(const char *mode, const char *marker) {
     int fd = open(marker, O_WRONLY | O_CREAT | O_APPEND, 0600);
     CHECK(fd >= 0);
+    if (!strncmp(mode, "reset-", 6)) {
+        struct stat status;
+        CHECK(fstat(fd, &status) == 0);
+        char pending[PATH_MAX];
+        /* The harness passes a fresh private directory in place of /userdata/mybot. */
+        CHECK(snprintf(pending, sizeof(pending), "%s/../factory-reset.pending",
+                       getenv("MYBOT_SUPERVISOR_RUNTIME")) < (int)sizeof(pending));
+        if (!strcmp(mode, "reset-clean") && status.st_size > 0) {
+            CHECK(lstat(pending, &status) == 0 && S_ISREG(status.st_mode));
+            CHECK(unlink(pending) == 0);
+            CHECK(write(fd, "relaunched\n", 11) == 11);
+            close(fd);
+            return 0;
+        }
+        if (!strcmp(mode, "reset-no-commit")) {
+            delayed_commit("factory_reset\n", false);
+            for (;;)
+                pause();
+        }
+        int result = rv1126b_factory_reset_request();
+        if (!strcmp(mode, "reset-disabled") || !strcmp(mode, "reset-unsafe")) {
+            close(fd);
+            return result < 0 ? 0 : 8;
+        }
+        CHECK(result == 0);
+        CHECK(lstat(pending, &status) == 0 && S_ISREG(status.st_mode) && status.st_nlink == 1 &&
+              status.st_uid == geteuid() && (status.st_mode & 07777) == 0600 &&
+              status.st_size == 0);
+        CHECK(write(fd, "committed\n", 10) == 10);
+        close(fd);
+        return !strcmp(mode, "reset-fail") ? 1 : 0;
+    }
     if (!strncmp(mode, "power-", 6)) {
         close(fd);
         if (!strcmp(mode, "power-no-commit")) {
-            power_request_delayed_commit(false);
+            delayed_commit("poweroff\n", false);
             for (;;)
                 pause();
         }
         if (!strcmp(mode, "power-delayed-commit")) {
-            power_request_delayed_commit(true);
+            delayed_commit("poweroff\n", true);
             return 0;
         }
         int accepted = rv1126b_poweroff_request();
@@ -173,6 +247,9 @@ static pid_t start_supervisor(const char *mode, size_t log_limit) {
     pid_t pid = fork();
     CHECK(pid >= 0);
     if (pid == 0) {
+        test_log_failure = !strcmp(mode, "power-log-dup-failure")    ? 1
+                           : !strcmp(mode, "power-log-dup2-failure") ? 2
+                                                                     : 0;
         CHECK(setenv("MYBOT_SUPERVISOR_RUNTIME", runtime_path, 1) == 0);
         char *arguments[] = {executable_path, "--child", (char *)mode, marker_path, NULL};
         rv1126b_supervisor_config_t config = {.runtime_directory = runtime_path,
@@ -185,6 +262,8 @@ static pid_t start_supervisor(const char *mode, size_t log_limit) {
                                               .log_limit_bytes = log_limit};
         if (!strncmp(mode, "power-", 6) && strcmp(mode, "power-disabled"))
             config.poweroff_command = power_command;
+        if (!strncmp(mode, "reset-", 6) && strcmp(mode, "reset-disabled"))
+            config.reset_directory = temporary;
         _exit(rv1126b_supervisor_run(&config));
     }
     return pid;
@@ -455,6 +534,97 @@ static void test_poweroff_peer_and_commit(void) {
     remove_tree(temporary);
 }
 
+static void test_factory_reset(void) {
+    char pending[PATH_MAX];
+    prepare();
+    CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
+          (int)sizeof(pending));
+    CHECK(await_exit(start_supervisor("reset-clean", 8192)) == 0);
+    FILE *file = fopen(marker_path, "r");
+    char text[32] = {0};
+    CHECK(file && fread(text, 1, sizeof(text) - 1, file) > 0 && fclose(file) == 0);
+    CHECK(!strcmp(text, "committed\nrelaunched\n"));
+    CHECK(access(pending, F_OK) < 0 && errno == ENOENT);
+    CHECK(access(power_marker, F_OK) < 0 && errno == ENOENT);
+    remove_tree(temporary);
+
+    prepare();
+    CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
+          (int)sizeof(pending));
+    CHECK(await_exit(start_supervisor("reset-disabled", 128)) == 0);
+    CHECK(access(pending, F_OK) < 0 && errno == ENOENT);
+    CHECK(symlink("unrelated", pending) == 0);
+    CHECK(await_exit(start_supervisor("reset-unsafe", 128)) == 0);
+    struct stat status;
+    CHECK(lstat(pending, &status) == 0 && S_ISLNK(status.st_mode));
+    remove_tree(temporary);
+
+    prepare();
+    CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
+          (int)sizeof(pending));
+    pid_t supervisor = start_supervisor("reset-no-commit", 128);
+    await_state("running\n");
+    CHECK(setenv("MYBOT_SUPERVISOR_RUNTIME", runtime_path, 1) == 0);
+    CHECK(rv1126b_factory_reset_request() < 0);
+    CHECK(unsetenv("MYBOT_SUPERVISOR_RUNTIME") == 0);
+    CHECK(access(pending, F_OK) < 0 && errno == ENOENT);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 0 && await_exit(supervisor) == 0);
+    remove_tree(temporary);
+
+    prepare();
+    CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
+          (int)sizeof(pending));
+    supervisor = start_supervisor("reset-fail", 128);
+    await_state("failed\n");
+    CHECK(lstat(pending, &status) == 0 && S_ISREG(status.st_mode));
+    CHECK(stat(marker_path, &status) == 0 && status.st_size == 10);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 1);
+    end_failed_fixture(supervisor);
+    remove_tree(temporary);
+}
+
+static void check_private_log(const char *message) {
+    char path[PATH_MAX], text[2048] = {0};
+    CHECK(snprintf(path, sizeof(path), "%s/mybot.log", logs_path) > 0);
+    struct stat status;
+    CHECK(stat(path, &status) == 0 && status.st_uid == geteuid() &&
+          (status.st_mode & 0777) == 0600);
+    FILE *file = fopen(path, "r");
+    CHECK(file && fread(text, 1, sizeof(text) - 1, file) > 0);
+    CHECK(fclose(file) == 0 && strstr(text, message));
+}
+
+static void test_poweroff_helper_diagnostics(void) {
+    prepare();
+    int fd = open(power_command, O_WRONLY | O_TRUNC);
+    CHECK(fd >= 0);
+    char script[PATH_MAX * 2 + 256];
+    int length = snprintf(script, sizeof(script),
+                          "#!/bin/sh\n[ ! -S '%s/control.sock' ] || exit 9\n"
+                          "printf 'helper-ran\\n' > '%s'\n"
+                          "printf 'fake-poweroff-failure\\n' >&2\nexit 7\n",
+                          runtime_path, power_marker);
+    CHECK(length > 0 && (size_t)length < sizeof(script));
+    CHECK(write(fd, script, (size_t)length) == length && close(fd) == 0);
+    CHECK(await_exit(start_supervisor("power-helper-failure", 512 * 1024)) == 7);
+    CHECK(access(power_marker, F_OK) == 0);
+    CHECK(rv1126b_supervisor_control(runtime_path, 0) == 3);
+    check_private_log("fake-poweroff-failure");
+    remove_tree(temporary);
+
+    const char *modes[] = {"power-log-dup-failure", "power-log-dup2-failure"};
+    const char *messages[] = {"cannot preserve poweroff diagnostics",
+                              "cannot attach poweroff diagnostics"};
+    for (size_t index = 0; index < sizeof(modes) / sizeof(modes[0]); ++index) {
+        prepare();
+        CHECK(await_exit(start_supervisor(modes[index], 512 * 1024)) == 1);
+        CHECK(access(power_marker, F_OK) < 0 && errno == ENOENT);
+        CHECK(rv1126b_supervisor_control(runtime_path, 0) == 3);
+        check_private_log(messages[index]);
+        remove_tree(temporary);
+    }
+}
+
 int main(int argc, char **argv) {
     (void)setvbuf(stdout, NULL, _IOLBF, 0);
     if (argc == 4 && !strcmp(argv[1], "--child"))
@@ -468,6 +638,8 @@ int main(int argc, char **argv) {
     test_unsafe_inputs();
     test_planned_poweroff();
     test_poweroff_peer_and_commit();
+    test_factory_reset();
+    test_poweroff_helper_diagnostics();
     puts("Supervisor identity, cleanup, retry budget and planned fake poweroff: PASS");
     return 0;
 }

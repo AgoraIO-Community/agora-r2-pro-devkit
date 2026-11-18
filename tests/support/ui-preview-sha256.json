@@ -1,5 +1,5 @@
 {
-  "baseline": "Settings entry and power controls; native 640x480 LVGL preview",
+  "baseline": "Settings, power and factory reset controls; native 640x480 LVGL preview",
   "languages": {
     "en-US": {
       "expression-ANNOYED.ppm": "dc77cb43aa2b849b9f99a57c2a006cfd974803bb8c412b2f728f831bda0b595c",
@@ -38,8 +38,11 @@
       "screen-09.ppm": "8b9fcd255428ee05b3cff4e1f9be28c530f1bf92cbfea0a677728ccbf59dff16",
       "settings-confirm.ppm": "a87cd488122e057e48ee047aa43c41371084b8b8cfde2ed26d67c62b9e34dd73",
       "settings-error.ppm": "9c9fe99910cee03590211968aaa02846594b9df02e37ce87b98432054fbc6557",
-      "settings-menu.ppm": "8c825f76559cee8fd97a22c55d6f7112296875aad95779c9ba6ecf0fd61ff7d9",
-      "settings-powering-off.ppm": "c05cc7baa9958465dd1f9e4c8508f6ea5dc97db83ee7d9df00f5556778d8e6f9"
+      "settings-menu.ppm": "8eee9f7202813a3c4bc182e0e4e8c4b2d97c6ef07c911d31b3beaa960b985ef6",
+      "settings-powering-off.ppm": "c05cc7baa9958465dd1f9e4c8508f6ea5dc97db83ee7d9df00f5556778d8e6f9",
+      "settings-reset-confirm.ppm": "2a82a76095d9498e352bfc191eec3597a0aa1b51fbbcad8ad5f1df19c3dadd4c",
+      "settings-reset-error.ppm": "239f9ad2b6b31098dfe9174311b46d37e537aac69e9078fc2190157f36954a76",
+      "settings-resetting.ppm": "689d493f3b83b53e361a3170dba8e867dce1b7569bbf1c95a4cb8cd368d1721e"
     },
     "zh-CN": {
       "expression-ANNOYED.ppm": "dc77cb43aa2b849b9f99a57c2a006cfd974803bb8c412b2f728f831bda0b595c",
@@ -78,8 +81,11 @@
       "screen-09.ppm": "dca03d623d8a0c5a194212d8c2164019e2cc1e913495c2f0bc56fa98912a1242",
       "settings-confirm.ppm": "f20018c2e6b366a47495a8fb58a641b7900b46341c9d21038d9e24a31bef433e",
       "settings-error.ppm": "1cdb8085c3ef3a263ec95aa2a4d39ae227b37d77b12737db7eb5ae11ee70c6a7",
-      "settings-menu.ppm": "d7c3de740bf1a25bb27d5fab8e4b4267beeacb8583933dfd8a4f618618161f93",
-      "settings-powering-off.ppm": "c4bd6c897180b7c9857fa9a8e86edb3d95e7e56cee718e51cc0abb5b3152c0b7"
+      "settings-menu.ppm": "1517d22b50f9e20e4f6eb23663c1654c6f94acaae6bcc2f2641a70cb6376893a",
+      "settings-powering-off.ppm": "c4bd6c897180b7c9857fa9a8e86edb3d95e7e56cee718e51cc0abb5b3152c0b7",
+      "settings-reset-confirm.ppm": "894ed936328881d891acf368265ae07c075ef8272d1825691f02b616e39f8434",
+      "settings-reset-error.ppm": "70be465a990245a2469d58375e234ad4ce65a6ec80c88097ffbb6a9999aa732a",
+      "settings-resetting.ppm": "cc7b9d27402f41cc1e6c1522cfc60eebf9feeb5c76a327632c0e71386fea56c8"
     }
   }
 }
