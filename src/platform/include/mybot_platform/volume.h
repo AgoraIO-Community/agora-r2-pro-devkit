@@ -12,14 +12,14 @@ extern "C" {
 
 /* Prepare product-owned volume before opening the SDK. The private directory
  * must belong to the current user and have mode 0700. Missing/corrupt state
- * defaults to 100 (unity gain); corrupt records produce a warning. */
+ * defaults to 70; corrupt records produce a warning. */
 int rv1126b_volume_prepare(const char *private_storage_directory);
 
 /* SDK attachment and destruction retain the product-owned level. */
 const mybot_audio_volume_ops_t *rv1126b_volume_ops(void);
 
 /* Returns one nonblocking 0..100 snapshot. Before prepare/after shutdown the
- * fallback is 100, preserving playback's original unity gain. */
+ * fallback is 70. */
 int rv1126b_volume_level(void);
 
 /* Apply the product level once at the final playback boundary. Supports in-place

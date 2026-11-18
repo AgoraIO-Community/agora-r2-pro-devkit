@@ -34,7 +34,7 @@ static void clean(void) {
     CHECK(unsetenv("MYBOT_SUPERVISOR_RUNTIME") == 0);
 }
 
-static pid_t start_mock(const char *response, int timeout) {
+static pid_t start_mock(const char *command, const char *response, int timeout) {
     int listener = mock_listener();
     pid_t child = fork();
     CHECK(child >= 0);
@@ -43,14 +43,16 @@ static pid_t start_mock(const char *response, int timeout) {
         int fd = accept(listener, NULL, NULL);
         CHECK(fd >= 0);
         close(listener);
-        char request[10] = {0};
+        char request[32] = {0};
+        size_t length = strlen(command);
+        CHECK(length < sizeof(request));
         size_t used = 0;
-        while (used < 9) {
-            ssize_t count = read(fd, request + used, 9 - used);
+        while (used < length) {
+            ssize_t count = read(fd, request + used, length - used);
             CHECK(count > 0);
             used += (size_t)count;
         }
-        CHECK(!strcmp(request, "poweroff\n"));
+        CHECK(!strcmp(request, command));
         if (timeout == 1) {
             struct timespec delay = {.tv_sec = 2};
             nanosleep(&delay, NULL);
@@ -91,34 +93,39 @@ static void finish_mock(pid_t child) {
 
 static void test_acknowledgement(void) {
     prepare();
-    pid_t child = start_mock("accepted\n", 0);
+    pid_t child = start_mock("poweroff\n", "accepted\n", 0);
     CHECK(rv1126b_poweroff_request() == 0);
     finish_mock(child);
 
     prepare();
-    child = start_mock("failed\n", 0);
+    child = start_mock("poweroff\n", "failed\n", 0);
     CHECK(rv1126b_poweroff_request() < 0 && errno == EACCES);
     finish_mock(child);
 
     prepare();
-    child = start_mock(NULL, 0);
+    child = start_mock("poweroff\n", NULL, 0);
     CHECK(rv1126b_poweroff_request() < 0 && errno == EPROTO);
     finish_mock(child);
 
     prepare();
-    child = start_mock("accepted\nextra", 0);
+    child = start_mock("poweroff\n", "accepted\nextra", 0);
     CHECK(rv1126b_poweroff_request() < 0 && errno == EACCES);
     finish_mock(child);
 
     prepare();
-    child = start_mock("accepted\n", 3);
+    child = start_mock("poweroff\n", "accepted\n", 3);
     CHECK(rv1126b_poweroff_request() < 0 && errno == EACCES);
+    finish_mock(child);
+
+    prepare();
+    child = start_mock("factory_reset\n", "accepted\n", 0);
+    CHECK(rv1126b_factory_reset_request() == 0);
     finish_mock(child);
 }
 
 static void test_timeout(void) {
     prepare();
-    pid_t child = start_mock(NULL, 1);
+    pid_t child = start_mock("poweroff\n", NULL, 1);
     int64_t started = power_now_ms();
     CHECK(rv1126b_poweroff_request() < 0 && errno == ETIMEDOUT);
     int64_t elapsed = power_now_ms() - started;
@@ -126,7 +133,7 @@ static void test_timeout(void) {
     finish_mock(child);
 
     prepare();
-    child = start_mock("accepted\n", 2);
+    child = start_mock("poweroff\n", "accepted\n", 2);
     started = power_now_ms();
     CHECK(rv1126b_poweroff_request() < 0 && errno == ETIMEDOUT);
     elapsed = power_now_ms() - started;
@@ -137,6 +144,7 @@ static void test_timeout(void) {
 static void test_unsafe_or_missing_endpoint(void) {
     CHECK(unsetenv("MYBOT_SUPERVISOR_RUNTIME") == 0);
     CHECK(rv1126b_poweroff_request() < 0 && errno == ENOTCONN);
+    CHECK(rv1126b_factory_reset_request() < 0 && errno == ENOTCONN);
     CHECK(setenv("MYBOT_SUPERVISOR_RUNTIME", "relative", 1) == 0);
     CHECK(rv1126b_poweroff_request() < 0 && errno == ENOTCONN);
     prepare();

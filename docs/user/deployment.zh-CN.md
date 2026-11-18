@@ -26,12 +26,14 @@
 
 ```text
 bin/mybot-supervisor
+bin/mybot-factory-reset
 supervisor-manifest.json
 abi-report-supervisor.json
 assets/service/S99mybot
 assets/service/run-service.sh
 assets/service/mybot-rv1126b.conf
 assets/service/audio-prepare.sh
+assets/service/poweroff.sh
 assets/network/99-mybot-lease
 ```
 
@@ -45,12 +47,14 @@ assets/network/99-mybot-lease
 {
   "server": "https://botstation.shengwang.cn/api",
   "device_id": "RV1126B-0123456789ABCDEF01234567",
-  "video": false,
+  "video": true,
   "wifi_interface": "wlan0"
 }
 ```
 
-例如保存到 `local/deployment-settings.json` 后执行 `chmod 600 local/deployment-settings.json`。设置只允许这四个字段；`server` 与 `device_id` 必填，`video` 默认为 false、接口空值表示自动选择。
+例如保存到 `local/deployment-settings.json` 后执行 `chmod 600 local/deployment-settings.json`。设置只允许这四个字段；`server` 与 `device_id` 必填，省略 `video` 时默认为 true，接口空值表示自动选择。受监督部署默认选择视频程序；只部署语音时显式设置 `"video": false`。包中必须包含所选 profile，缺少视频程序时会在访问设备前报错，不会自动切换为语音。预览计划会显示所选 `profile`。
+
+该默认值仅用于受监督部署。直接运行包含两个 profile 的包时，`run.sh` 仍默认选择语音程序，视频通过 `RV1126B_VIDEO=1` 显式选择。
 
 部署前在设备内核对现有 `device_auth` 的版本、长度以及 server/ID。只读取相应的固定长度头部字段，完全不读取 token 区域，也不把身份打印或写回执。已存在记录但格式不符或 server/ID 不匹配时阻止部署；记录不存在时允许首次绑定。该核对避免新 SDK 因配置变化丢弃已有绑定。
 
@@ -58,7 +62,7 @@ assets/network/99-mybot-lease
 
 主机需要 Python 3.10+ 和可用的 `adb`。设备需为 AArch64、以 root 连接、已挂载 `/userdata` 并提供 tar/sha256sum/stat/dd/od/awk 等工具。连接多台设备时必须明确指定 `--serial`；只连接一台已授权设备时可省略。以下 `SERIAL` 和 `ARCHIVE_SHA256` 应替换为实际值。
 
-只读预检还会核对准确板型、依赖锁中的 20 项运行库摘要、动态加载器、电源命令、Wi-Fi 工具、dhcpcd hook 目录，以及两项采集 mixer 控制的可写整数范围。预检不设置 mixer、不创建热点，也不要求旧应用释放端口。其他固件必须先按依赖流程登记匹配基线；不能仅凭 AArch64 架构认定兼容。
+只读预检还会核对准确板型、依赖锁中的 20 项运行库摘要、动态加载器、电源命令、Wi-Fi 工具、dhcpcd hook 目录，以及两项采集 mixer 控制的可写整数范围和板级 PWM 背光路径、权限与数值。预检不设置 mixer、不创建热点，也不要求旧应用释放端口。其他固件必须先按依赖流程登记匹配基线；不能仅凭 AArch64 架构认定兼容。
 
 ```sh
 version=$(python3 scripts/project-version.py)
@@ -79,6 +83,8 @@ python3 scripts/deploy-rv1126b.py deploy --serial SERIAL \
 显式兼容的 0.1.1 早于应用状态接口。仅对此版本，检查所选旧二进制的真实 PID、直接父进程监督器的执行路径，以及该监督器的服务 runtime 参数，报告 `application_health=legacy_running`、`application_state=unsupported`；这只确认受监督的本地进程，不能证明业务 ready。现代版本缺失应用状态文件时仍拒绝启动确认。
 
 写入顺序为：只读平台/能力/身份检查 → 设备内完整备份 → 上传及再次校验 → 解包为独立 release → 用选定 profile 执行无硬件访问的 `--version` 加载检查 → 再核对身份 → 停止旧服务 → 安装稳定服务配置 → 原子切换链接。停止命令失败、旧进程仍占用或校验失败时不继续。保留 ALSA 配置文件，不禁用 chronyd、ADB 或电源服务。每次服务启动前，`audio-prepare.sh` 通过 `amixer cset` 设置并读回核对 `ACodec_LP Digital Gain Volume=0`、`ACodec_LP PGA Gain Volume=23` 两项采集控制；这会修改声卡的运行时 mixer 状态，不修改播放控制或写入 ALSA 配置文件。
+
+部署同时安装固定的 `/etc/mybot-rv1126b/poweroff.sh`。只有已确认的受监督关机在清理完成后调用它，将板级背光 `brightness` 设为 0、`bl_power` 设为 4 并读回，再请求 `/sbin/poweroff`；准备中断或命令失败尝试恢复原值，进入系统关机调用后不因关闭信号复亮；helper 诊断进入私有日志。已接受的计划关机关闭应用显示输出，普通服务停止、重启及版本切换继续恢复原显示。软件关机不等于所有电源掉电，实体长按的实际硬件链路尚未确认。
 
 原 `botstation-device` 配置改为 `BOTSTATION_ENABLED=0`，其 `S99botstation-device` 移入 `/etc/mybot-rv1126b/disabled/`，避免开机重复占用。系统 dnsmasq 配置限制为 `interface=usb0`、`bind-dynamic`，保留现有 USB 监听地址与 DHCP 范围，USB 接口尚无 IPv4 时也不会抢占 AP 地址。dhcpcd 增加 `denyinterfaces mbap*`，防止其接管临时 AP；网络租约 hook 安装到 `/lib/dhcpcd/dhcpcd-hooks/99-mybot-lease`（0644），运行记录目录 `/run/mybot-network/leases` 为 0700。操作者在确认连接条件后分别受控重载：
 
@@ -115,3 +121,9 @@ python3 scripts/deploy-rv1126b.py rollback --serial SERIAL \
 部署期间持有 `/run/mybot-deploy.lock`。失败会保留锁、备份和已验证 release 供检查，不会未经检查恢复网络或覆盖应用数据。此时先保持业务停止，检查设备备份及失败步骤，修复后由设备维护者移除确认失效的部署锁，再用新的 tag 重试或选择已验证版本。不要直接解包备份覆盖整个系统或当前 KV；恢复系统配置须逐项检查，凭据继续留在设备。
 
 完成后分别检查版本/包摘要、服务 start/stop/restart、绑定复用、音量恢复、重启自启动、既有 Wi-Fi 复用、AP 配网及失败重试、系统时间、ADB/USB 网络、音频和可选视频。主机测试只验证工具的保护逻辑，不能替代这些设备结果；实际记录见[验证状态](../validation/README.md)。
+
+## 恢复出厂时的运维检查
+
+启用恢复出厂的服务只接受本机监督器验证的直接应用子进程请求。监督器在应用退出前持久保存已确认的请求。清理结束后，下一次受监督启动先处理 `/userdata/mybot/factory-reset.pending`，成功清除活动数据才重新启动应用。服务使用 `/userdata/mybot/factory-reset.setup` 保持首次配网流程直至新网络配置完成。遇到故障时先检查服务状态和私有日志，保留这些标记供服务重试，避免切换旧版本而跳过尚未完成的恢复。
+
+部署备份 `/userdata/mybot/backups/<tag>/original.tar.gz` 包含当时的私有数据和 Wi-Fi 配置。用户恢复只清除当前设置，维护备份和日志仍由管理员管理。设备转让时还应在相同服务区的控制台解除绑定，并按维护政策处理备份和日志。[用户操作](settings.zh-CN.md)

@@ -2,8 +2,33 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.6.1 — Unreleased
+
+- Keep the device on the waiting-for-network screen while the wireless interface and supplicant start. Recheck the system route before trying saved Wi-Fi so a normal boot can proceed directly to the service.
+
+## 0.6.0 — Unreleased
+
+- Add a confirmed local factory reset in Settings. The service forgets Wi-Fi and local binding credentials, then opens Wi-Fi setup again.
+- Start playback at 70 on first use and after reset. Existing saved volume levels take precedence.
+
+## 0.5.5 — Unreleased
+
+- Disable the owned display output for an accepted UI poweroff instead of restoring a framebuffer that may already be gone; retain normal display restoration for ordinary stops.
+- Preserve helper diagnostics after supervisor cleanup and prevent late shutdown signals from restoring the backlight after a successful system poweroff request.
+
+Actual poweroff and physical screen darkness remain separate hardware acceptance steps.
+
+## 0.5.4 — Unreleased
+
+- Switch off and verify the board backlight after planned application cleanup and before normal system poweroff; restore its previous state if the transition fails.
+- Keep normal application stop/restart display restoration, and validate the board backlight before deployment.
+- Require regenerated supervised bundles containing the checked board poweroff helper.
+
+Hardware poweroff and subsequent power-on remain separate acceptance steps.
+
 ## 0.5.3 — Unreleased
 
+- Select video by default for supervised deployment; require explicit `video: false` for voice and show the selected profile in deployment plans.
 - Derive compact hotspot names from the full permanent MAC and detect stopped AP services with a settings retry path.
 - Clean owned Wi-Fi process groups and recover or report failed video pipelines with bounded retries.
 - Validate rollback profiles, board prerequisites, startup modes and actual local application health before reporting deployment success.

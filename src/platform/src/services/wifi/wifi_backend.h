@@ -13,8 +13,14 @@ typedef struct {
     const char *system_wpa_config, *dhcpcd_lease_directory;
 } wifi_backend_config_t;
 
+typedef enum {
+    WIFI_BACKEND_FAILED,
+    WIFI_BACKEND_READY,
+    WIFI_BACKEND_RETRY /* The wireless interface or its system supplicant is starting. */
+} wifi_backend_init_result_t;
+
 typedef struct {
-    bool (*initialize)(void *context, char *error);
+    wifi_backend_init_result_t (*initialize)(void *context, char *error);
     const char *(*ap_ssid)(void *context);
     bool (*start_ap)(void *context, char *error);
     void (*stop_ap)(void *context);
@@ -29,6 +35,8 @@ typedef struct {
     bool (*connect)(void *context, const wifi_credential_t *credential, unsigned timeout_ms,
                     const wifi_cancel_t *cancel, char *error);
     void (*destroy)(void *context);
+    bool (*system_station)(
+        void *context); /* Optional. The system can auto-connect saved profiles. */
 } wifi_backend_ops_t;
 
 typedef struct {

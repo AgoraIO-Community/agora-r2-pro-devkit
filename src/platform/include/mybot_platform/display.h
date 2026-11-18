@@ -19,6 +19,10 @@ int rv1126b_ui_start(const char *drm_device, unsigned rotation);
 /* Joins the worker and restores saved outputs. Repeated stop is safe; 0/-1. */
 int rv1126b_ui_stop(void);
 
+/* Joins the worker and disables its CRTC for a confirmed poweroff or reset. Repeated
+ * stop is safe; returns 0/-1 and preserves genuine display cleanup failures. */
+int rv1126b_ui_stop_for_poweroff(void);
+
 void rv1126b_ui_set_state(mybot_state_t state);
 
 /* Copies bounded content during this call; caller keeps ownership. */

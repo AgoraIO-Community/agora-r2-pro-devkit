@@ -19,7 +19,7 @@ typedef struct {
     bool button_seen, button_down, down, dropped, await_release, release_seen;
     bool blocked, settings_owned, page_changed;
     bool single_x_valid, single_y_valid, mt_seen, mapped, invalid_contact;
-    bool wifi_pending, poweroff_pending;
+    bool wifi_pending, poweroff_pending, reset_pending;
     int single_x, single_y, slot, pressed_control, contact_slot;
     int min_x, max_x, min_y, max_y, pressed_x, pressed_y;
     unsigned rotation;

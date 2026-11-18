@@ -4,13 +4,17 @@
 
 An official Agora Linux application for RV1126B, built on agent-studio-device-firmware 1.3.0. It provides AP Wi-Fi setup with voice guidance, HTTPS pairing, bidirectional voice, persistent device identity and volume, a pixel-glasses UI, and optional V4L2/MPP JPEG uplink.
 
-The current source version is **<!-- project-version -->0.5.3<!-- /project-version -->**, targeting **RV1126B TEST2 RK805B V10**. [Validation status](docs/validation/README.md) distinguishes source checks, cross-builds and hardware evidence. New packages require their own hardware acceptance.
+The current source version is **<!-- project-version -->0.6.1<!-- /project-version -->**, targeting **RV1126B TEST2 RK805B V10**. [Validation status](docs/validation/README.md) distinguishes source checks, cross-builds and hardware evidence. New packages require their own hardware acceptance.
 
 ## Use
 
 Follow the [illustrated English operations manual (PDF)](docs/device-operations.en.pdf) for build, deployment and daily use. A [Chinese edition](docs/device-operations.zh-CN.pdf) is also available.
 
 The application keeps an existing usable network. If offline recovery fails, connect a phone to the displayed open `mybot-xxxx` hotspot and visit `http://192.168.4.1/`. For manual setup, choose Wi-Fi setup from the top-right settings menu. A short screen touch or Menu press starts/ends a conversation; holding either does not trigger conversation or setup. Settings also provides poweroff confirmation. Preserve the server, device identity and data directory to retain pairing across restarts, updates and Wi-Fi setup.
+
+Factory Reset in Settings clears saved Wi-Fi and local pairing credentials, restores volume to 70 and reopens Wi-Fi setup.
+
+Supervised shutdown explicitly turns off the PWM backlight before requesting system poweroff; ordinary application stops restore the prior display. Software poweroff does not guarantee that all board power is off, and the physical long-press hardware path remains unconfirmed.
 
 Chinese builds default to the domestic service; English builds default to the international service, with CLI and environment overrides. The default data directory, `/userdata/mybot-rv1126b`, contains sensitive credentials. The references below define the complete behavior and configuration.
 
@@ -24,7 +28,7 @@ Chinese builds default to the domestic service; English builds default to the in
 | Servers, identity, persistence and media options | [Configuration](docs/user/configuration.zh-CN.md) |
 | System time and fault diagnosis | [Time guide](docs/user/time-sync.zh-CN.md), [troubleshooting](docs/user/troubleshooting.zh-CN.md) |
 
-Direct execution of `run.sh` does not install startup services or modify system ALSA configuration files. Explicit supervised deployment installs startup scripts, disables the original application's startup and updates board network policies; each service launch applies capture mixer settings through `amixer`. Deployment checks and backs up the device before switching releases. Build, packaging and check scripts do not connect to devices.
+Direct execution of `run.sh` does not install startup services or modify system ALSA configuration files. Explicit supervised deployment installs startup scripts, disables the original application's startup and updates board network policies; each service launch applies capture mixer settings through `amixer`. Deployment defaults to the video profile; set `"video": false` in deployment settings for voice only. The package must contain the selected profile. Deployment checks and backs up the device before switching releases. Build, packaging and check scripts do not connect to devices.
 
 ## Develop
 

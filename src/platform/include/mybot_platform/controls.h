@@ -19,6 +19,9 @@ void rv1126b_input_settings_page(mybot_settings_page_t page);
 /* Consumes one confirmed request. Application lifecycle performs shutdown. */
 int rv1126b_key_poweroff_requested(void);
 
+/* Consumes one request after a separate Settings confirmation tap. */
+int rv1126b_key_factory_reset_requested(void);
+
 #ifdef __cplusplus
 }
 #endif

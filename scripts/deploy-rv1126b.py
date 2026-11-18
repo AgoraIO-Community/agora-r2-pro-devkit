@@ -23,11 +23,14 @@ DATA_ROOT = "/userdata/mybot-rv1126b"
 SERVICE = "/etc/init.d/S99mybot"
 SERVICE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
                   "assets/service/mybot-rv1126b.conf", "assets/service/audio-prepare.sh",
+                  "assets/service/poweroff.sh",
                   "assets/network/99-mybot-lease", "bin/mybot-supervisor",
-                  "supervisor-manifest.json", "abi-report-supervisor.json")
+                  "supervisor-manifest.json", "abi-report-supervisor.json", "bin/mybot-factory-reset",
+                  "factory-reset-manifest.json", "abi-report-factory-reset.json")
 EXECUTABLE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
                      "assets/service/audio-prepare.sh", "assets/network/99-mybot-lease",
-                     "assets/wifi/udhcpc.script", "assets/time/sync-busybox.sh", "bin/mybot-supervisor")
+                     "assets/service/poweroff.sh",
+                     "assets/wifi/udhcpc.script", "assets/time/sync-busybox.sh", "bin/mybot-supervisor", "bin/mybot-factory-reset")
 NAME = re.compile(r"mybot-rv1126b-(\d+\.\d+\.\d+)(?:-en-US)?-aarch64(?:-voice|-video)?\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 TAG = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,95}\Z")
@@ -146,35 +149,37 @@ def verify_package(path, expected, legacy=False):
         raise ValueError("Package startup files require owner read/execute permission")
     elf_aarch64(files["lib/libagora-rtc-sdk.so"])
     if not legacy:
-        binary = files["bin/mybot-supervisor"]
-        elf_aarch64(binary)
-        manifest = json.loads(files["supervisor-manifest.json"])
-        report_bytes = files["abi-report-supervisor.json"]
-        report = json.loads(report_bytes)
-        config = manifest["inputs"]["config"]
-        source = manifest["inputs"]["source"]["sha256"]
-        marker = (f"MYBOT_RV1126B_BUILD_CONFIG:{version};{config['language']};"
-                  f"video={int(config['video'])};ptime_ms=20;"
-                  "board=rv1126b-test2-rk805b-v10\0").encode()
-        source_marker = ("MYBOT_RV1126B_SOURCE:" + source + "\0").encode()
-        app_manifest = json.loads(files["build-manifest-" + profiles[0] + ".json"])
-        if (manifest.get("role") != "supervisor" or manifest.get("schema") != MANIFEST_SCHEMA or
-                config != app_manifest["inputs"]["config"] or
-                source != app_manifest["inputs"]["source"]["sha256"] or
-                manifest["binary_sha256"] != sha256(binary) or
-                manifest["abi_report_sha256"] != sha256(report_bytes) or
-                report.get("errors") != [] or report["binary"]["machine"] != 183 or
-                report["binary"]["sha256"] != sha256(binary) or
-                marker not in binary or source_marker not in binary or
-                inputs_digest(manifest["inputs"], public=True) !=
-                inputs_digest(app_manifest["inputs"], public=True) or
-                inputs_markers[profiles[0]] not in binary):
-            raise ValueError("Supervisor ABI/provenance does not match its independent manifest")
+        for role in ("supervisor", "factory-reset"):
+            binary = files["bin/mybot-" + role]
+            elf_aarch64(binary)
+            manifest = json.loads(files[role + "-manifest.json"])
+            report_bytes = files["abi-report-" + role + ".json"]
+            report = json.loads(report_bytes)
+            config = manifest["inputs"]["config"]
+            source = manifest["inputs"]["source"]["sha256"]
+            marker = (f"MYBOT_RV1126B_BUILD_CONFIG:{version};{config['language']};"
+                      f"video={int(config['video'])};ptime_ms=20;"
+                      "board=rv1126b-test2-rk805b-v10\0").encode()
+            source_marker = ("MYBOT_RV1126B_SOURCE:" + source + "\0").encode()
+            app_manifest = json.loads(files["build-manifest-" + profiles[0] + ".json"])
+            if (manifest.get("role") != role or manifest.get("schema") != MANIFEST_SCHEMA or
+                    config != app_manifest["inputs"]["config"] or
+                    source != app_manifest["inputs"]["source"]["sha256"] or
+                    manifest["binary_sha256"] != sha256(binary) or
+                    manifest["abi_report_sha256"] != sha256(report_bytes) or
+                    report.get("errors") != [] or report["binary"]["machine"] != 183 or
+                    report["binary"]["sha256"] != sha256(binary) or
+                    marker not in binary or source_marker not in binary or
+                    inputs_digest(manifest["inputs"], public=True) !=
+                    inputs_digest(app_manifest["inputs"], public=True) or
+                    inputs_markers[profiles[0]] not in binary):
+                raise ValueError(role.capitalize() + " ABI/provenance does not match its independent manifest")
     return {"path": path.resolve(), "name": root, "version": version,
             "sha256": expected, "profiles": profiles, "files": files}
 
 
 def read_settings(path):
+    """Validate private settings and normalize the deployment profile once."""
     path = Path(path)
     if path.is_symlink() or not path.is_file() or path.stat().st_mode & 0o077:
         raise ValueError("Settings must be a private regular file (chmod 600)")
@@ -188,7 +193,8 @@ def read_settings(path):
             any(character.isspace() or ord(character) < 32 for character in server) or
             not isinstance(device_id, str) or not re.fullmatch(r"[A-Za-z0-9_.:-]{1,32}", device_id)):
         raise ValueError("Settings require an HTTPS server and explicit valid device identity")
-    if type(settings.get("video", False)) is not bool:
+    settings.setdefault("video", True)
+    if type(settings["video"]) is not bool:
         raise ValueError("video must be a JSON boolean")
     interface = settings.get("wifi_interface", "")
     if not isinstance(interface, str) or (interface and not re.fullmatch(r"[A-Za-z0-9_.-]{1,15}", interface)):
@@ -198,7 +204,7 @@ def read_settings(path):
 
 def configuration(template, settings):
     values = {"RV1126B_SERVER": settings["server"], "RV1126B_DEVICE_ID": settings["device_id"],
-              "RV1126B_VIDEO": str(int(settings.get("video", False))),
+              "RV1126B_VIDEO": str(int(settings["video"])),
               "MYBOT_KV_STORE_DIR": DATA_ROOT,
               "MYBOT_SYSTEM_WPA_CONFIG": "/etc/wpa_supplicant.conf",
               "MYBOT_DHCPCD_LEASE_DIR": "/run/mybot-network/leases",
@@ -311,6 +317,28 @@ done
 [ -r /proc/device-tree/model ] || exit 92
 model=$(tr -d '\\000' < /proc/device-tree/model)
 [ "$model" = 'Rockchip RV1126B TEST2 RK805B V10 Board' ] || exit 92
+backlight=/sys/class/backlight/backlight
+physical=/sys/devices/platform/backlight/backlight/backlight
+[ "$(readlink -f "$backlight")" = "$physical" ] && [ -d "$physical" ] &&
+    [ "$(stat -c '%u:%g:%a' "$physical")" = '0:0:755' ] || exit 96
+for property in brightness bl_power max_brightness actual_brightness; do
+    path="$backlight/$property"
+    [ -f "$path" ] && [ ! -L "$path" ] || exit 96
+    case "$property" in brightness|bl_power) permission=644;; *) permission=444;; esac
+    [ "$(stat -c '%u:%g:%a' "$path")" = "0:0:$permission" ] || exit 96
+done
+backlight_integer() {
+    number=$(cat "$backlight/$1") || return 1
+    case "$number" in ''|*[!0-9]*|??????*) return 1;; esac
+    [ "$number" -le 65535 ] || return 1
+    printf '%s\\n' "$number"
+}
+maximum=$(backlight_integer max_brightness) || exit 96
+brightness=$(backlight_integer brightness) || exit 96
+actual=$(backlight_integer actual_brightness) || exit 96
+power=$(backlight_integer bl_power) || exit 96
+[ "$maximum" -gt 0 ] && [ "$brightness" -le "$maximum" ] &&
+    [ "$actual" -le "$maximum" ] && [ "$power" -le 4 ] || exit 96
 [ -d /lib/dhcpcd/dhcpcd-hooks ] && [ ! -L /lib/dhcpcd/dhcpcd-hooks ] &&
     [ "$(stat -c %u /lib/dhcpcd/dhcpcd-hooks)" = 0 ] || exit 93
 for path in /run/mybot-network /run/mybot-network/leases /run/mybot-rv1126b \\
@@ -511,7 +539,7 @@ def rollback_release_check(name, settings):
     match = NAME.fullmatch(name)
     if not match:
         raise ValueError("Invalid installed release name")
-    video = int(settings.get("video", False))
+    video = int(settings["video"])
     return f"""
 configuration=/etc/mybot-rv1126b.conf
 [ -f "$configuration" ] && [ ! -L "$configuration" ] &&
@@ -527,6 +555,11 @@ release={shlex.quote(DEVICE_ROOT + '/releases/' + name)}
 [ -d "$release" ] && [ ! -L "$release" ] || exit 82
 [ -d "$release/bin" ] && [ ! -L "$release/bin" ] || exit 87
 [ -f "$release/.archive-sha256" ] && [ ! -L "$release/.archive-sha256" ] || exit 83
+for marker in factory-reset.pending factory-reset.setup; do
+    if [ -e /userdata/mybot/"$marker" ] || [ -L /userdata/mybot/"$marker" ]; then
+        [ -x "$release/bin/mybot-factory-reset" ] || exit 89
+    fi
+done
 recorded=$(cat "$release/.archive-sha256")
 [ "${{#recorded}}" = 64 ] || exit 84
 case "$recorded" in *[!0-9a-f]*) exit 84;; esac
@@ -555,7 +588,7 @@ done
 service_state=not_installed
 if [ -x {SERVICE} ]; then
     service_state=$({SERVICE} status 2>/dev/null) || :
-    case "$service_state" in starting|running|backoff|stopping|stopped|failed|poweroff_pending|poweroff) ;;
+    case "$service_state" in starting|running|backoff|stopping|stopped|failed|poweroff_pending|poweroff|factory_reset_pending) ;;
         *) service_state=query_failed;; esac
 fi
 printf 'service=%s\\n' "$service_state"
@@ -695,9 +728,9 @@ def main(argv=None):
         if args.action == "deploy" and not package:
             raise ValueError("deploy requires --package and --sha256")
         if package and settings:
-            selected = "video" if settings.get("video", False) else "voice"
+            selected = "video" if settings["video"] else "voice"
             if selected not in package["profiles"]:
-                raise ValueError("Settings select an executable absent from the package")
+                raise ValueError(f"Package lacks the selected {selected} profile")
         if args.release and not NAME.fullmatch(args.release):
             raise ValueError("Invalid installed release name")
         tag = args.tag or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
@@ -706,6 +739,7 @@ def main(argv=None):
         if args.action in ("deploy", "rollback") and not args.execute:
             print(json.dumps({"action": args.action, "dry_run": True, "tag": tag,
                               "release": package["name"] if package else args.release or "previous",
+                              "profile": "video" if settings["video"] else "voice",
                               "backup": DEVICE_ROOT + "/backups/" + tag,
                               "data": "preserve existing private store; never import stock auth",
                               "identity": "compare server/id on device; token is never read",
@@ -736,7 +770,7 @@ def main(argv=None):
             if rollback:
                 staging_script += install_release(adb, rollback, tag)
             staging_script += install_release(adb, package, tag)
-            staging_script += release_load_check(package["name"], settings.get("video", False))
+            staging_script += release_load_check(package["name"], settings["video"])
             adb.shell(staging_script)
             config = configuration(package["files"]["assets/service/mybot-rv1126b.conf"], settings)
             deployment = f"base={DEVICE_ROOT}\ntag={shlex.quote(tag)}\nbackup=\"$base/backups/$tag\"\n"
@@ -746,6 +780,8 @@ def main(argv=None):
 install_file {shlex.quote(release + '/assets/service/S99mybot')} {SERVICE} 755
 install_file {shlex.quote(release + '/assets/service/run-service.sh')} /etc/mybot-rv1126b/run-service.sh 755
 install_file {shlex.quote(release + '/assets/service/audio-prepare.sh')} /etc/mybot-rv1126b/audio-prepare.sh 755
+install_file {shlex.quote(release + '/assets/service/poweroff.sh')} /etc/mybot-rv1126b/poweroff.sh 755
+install_file {shlex.quote(release + '/bin/mybot-factory-reset')} /etc/mybot-rv1126b/mybot-factory-reset 755
 install_file {shlex.quote(release + '/bin/mybot-supervisor')} /etc/mybot-rv1126b/mybot-supervisor 755
 [ -d /lib/dhcpcd/dhcpcd-hooks ] && [ ! -L /lib/dhcpcd/dhcpcd-hooks ] || exit 54
 install_file {shlex.quote(release + '/assets/network/99-mybot-lease')} /lib/dhcpcd/dhcpcd-hooks/99-mybot-lease 644
@@ -770,7 +806,7 @@ install_file "$backup/service.conf.new" /etc/mybot-rv1126b.conf 600
             output += adb.shell(rollback_script)
         if args.start:
             selected = package["name"] if args.action == "deploy" else rollback_target
-            print(wait_for_application(adb, selected, settings.get("video", False)).strip())
+            print(wait_for_application(adb, selected, settings["video"]).strip())
         adb.shell("rmdir /run/mybot-deploy.lock\n")
         values = {"tag": tag, "backup": DEVICE_ROOT + "/backups/" + tag,
                   "package_sha256": package["sha256"] if package else None,

@@ -66,6 +66,9 @@ class DeploymentTests(unittest.TestCase):
                       "build-manifest-voice.json": json.dumps(manifest).encode()}
         self.files["abi-report-supervisor.json"] = report_bytes
         self.files["supervisor-manifest.json"] = json.dumps({**manifest, "role": "supervisor"}).encode()
+        self.files["bin/mybot-factory-reset"] = binary
+        self.files["abi-report-factory-reset.json"] = report_bytes
+        self.files["factory-reset-manifest.json"] = json.dumps({**manifest, "role": "factory-reset"}).encode()
         for name in (*deployment.SERVICE_ASSETS, *deployment.EXECUTABLE_ASSETS):
             self.files.setdefault(name, b"#!/bin/sh\n")
         self.settings = {"server": "https://example.invalid/api", "device_id": "FIXTURE-ONLY",
@@ -225,11 +228,13 @@ class DeploymentTests(unittest.TestCase):
                     deployment.verify_package(path, checksum)
 
     def test_missing_deployment_assets_prevent_installation(self):
-        files = dict(self.files)
-        del files["assets/service/S99mybot"]
-        path, checksum = self.archive(files)
-        with self.assertRaisesRegex(ValueError, "deployment assets"):
-            deployment.verify_package(path, checksum)
+        for asset in ("assets/service/S99mybot", "assets/service/poweroff.sh", "bin/mybot-factory-reset"):
+            with self.subTest(asset=asset):
+                files = dict(self.files)
+                del files[asset]
+                path, checksum = self.archive(files)
+                with self.assertRaisesRegex(ValueError, "deployment assets"):
+                    deployment.verify_package(path, checksum)
 
     def test_supervisor_has_independent_role_hash_and_provenance_guards(self):
         for field, value in (("role", "voice"), ("binary_sha256", "0" * 64),
@@ -242,7 +247,7 @@ class DeploymentTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaisesRegex(ValueError, "Supervisor"):
                 deployment.verify_package(path, checksum)
 
-    def test_video_only_supervisor_uses_selected_profile_markers(self):
+    def video_archive(self):
         files = dict(self.files)
         binary = files.pop("bin/mybot-rv1126b").replace(b"video=0", b"video=1")
         manifest = json.loads(files.pop("build-manifest-voice.json"))
@@ -259,7 +264,12 @@ class DeploymentTests(unittest.TestCase):
                       "abi-report-video.json": report_bytes, "abi-report-supervisor.json": report_bytes,
                       "build-manifest-video.json": json.dumps(manifest).encode(),
                       "supervisor-manifest.json": json.dumps({**manifest, "role": "supervisor"}).encode()})
-        path, checksum = self.archive(files, name=self.name + "-video")
+        files.update({"bin/mybot-factory-reset": binary, "abi-report-factory-reset.json": report_bytes,
+                      "factory-reset-manifest.json": json.dumps({**manifest, "role": "factory-reset"}).encode()})
+        return self.archive(files, name=self.name + "-video")
+
+    def test_video_only_supervisor_uses_selected_profile_markers(self):
+        path, checksum = self.video_archive()
         self.assertEqual(deployment.verify_package(path, checksum)["profiles"], ["video"])
 
     def test_only_accepted_legacy_format_bypasses_build_manifest(self):
@@ -289,6 +299,62 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("MYBOT_SYSTEM_WPA_CONFIG=/etc/wpa_supplicant.conf", value)
         self.assertNotIn("device_auth", value)
         self.assertNotIn("wifi.credentials", value)
+
+    def test_settings_normalize_default_video_and_preserve_explicit_voice(self):
+        for selected in (None, True, False):
+            with self.subTest(video=selected):
+                settings = {key: value for key, value in self.settings.items() if key != "video"}
+                if selected is not None:
+                    settings["video"] = selected
+                path = self.base / "settings.json"
+                path.write_text(json.dumps(settings))
+                path.chmod(0o600)
+                normalized = deployment.read_settings(path)
+                expected = selected is not False
+                self.assertIs(normalized["video"], expected)
+                template = (ROOT / "packaging/service/mybot-rv1126b.conf").read_bytes()
+                script = deployment.configuration(template, normalized) + "\nprintf '%s' \"$RV1126B_VIDEO\"\n"
+                result = subprocess.run(["sh", "-s"], input=script, text=True, capture_output=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, str(int(expected)))
+
+    def test_default_video_rejects_voice_only_package_before_accessing_device(self):
+        path, checksum = self.archive()
+        settings = self.base / "settings.json"
+        settings.write_text(json.dumps({key: value for key, value in self.settings.items()
+                                        if key != "video"}))
+        settings.chmod(0o600)
+        with patch.object(deployment, "Adb") as adb, patch('sys.stderr', new_callable=io.StringIO) as error:
+            with self.assertRaises(SystemExit):
+                deployment.main(["deploy", "--package", str(path), "--sha256", checksum,
+                                 "--settings", str(settings), "--execute"])
+        adb.assert_not_called()
+        self.assertIn("Package lacks the selected video profile", error.getvalue())
+
+    def test_default_video_plan_and_execution_use_video_profile(self):
+        path, checksum = self.video_archive()
+        settings = self.base / "settings.json"
+        settings.write_text(json.dumps({key: value for key, value in self.settings.items()
+                                        if key != "video"}))
+        settings.chmod(0o600)
+        arguments = ["deploy", "--package", str(path), "--sha256", checksum,
+                     "--settings", str(settings), "--tag", "fixture"]
+        with patch.object(deployment, "Adb") as adb, redirect_stdout(io.StringIO()) as output:
+            self.assertEqual(deployment.main(arguments), 0)
+        adb.assert_not_called()
+        self.assertEqual(json.loads(output.getvalue())["profile"], "video")
+        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt"), \
+                patch.object(deployment, "release_load_check", wraps=deployment.release_load_check) as load, \
+                patch.object(deployment, "wait_for_application", return_value="service=running\n") as wait, \
+                redirect_stdout(io.StringIO()):
+            adb = adb_class.return_value
+            adb.shell.return_value = ""
+            self.assertEqual(deployment.main([*arguments, "--execute", "--start"]), 0)
+        load.assert_called_once_with(self.name + "-video", True)
+        wait.assert_called_once_with(adb, self.name + "-video", True)
+        install = next(call.args[0] for call in adb.shell.call_args_list
+                       if "MYBOT_PRIVATE_CONFIGURATION" in call.args[0])
+        self.assertIn("export RV1126B_VIDEO=1\n", install)
 
     def test_usb_dns_policy_preserves_address_range_and_handles_late_address(self):
         program = re.search(r"awk '([^']+)' /etc/dnsmasq.conf", deployment.SYSTEM_POLICY)[1]
@@ -334,7 +400,9 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(deployment.main(["deploy", "--package", str(path), "--sha256", checksum,
                                               "--settings", str(settings)]), 0)
         adb.assert_not_called()
-        self.assertTrue(json.loads(output.getvalue())["dry_run"])
+        plan = json.loads(output.getvalue())
+        self.assertTrue(plan["dry_run"])
+        self.assertEqual(plan["profile"], "voice")
         self.assertNotIn(self.settings["device_id"], output.getvalue())
         self.assertNotIn(self.settings["server"], output.getvalue())
 
@@ -377,6 +445,7 @@ class DeploymentTests(unittest.TestCase):
             install = next(call[1][0] for call in calls
                            if call[0] == "shell" and "stock-disabled.conf" in call[1][0])
             self.assertLess(install.index("S99mybot stop"), install.index(".current-$tag"))
+            self.assertIn("/etc/mybot-rv1126b/poweroff.sh 755", install)
             self.assertNotIn("reboot", install)
             self.assertNotIn(self.settings["device_id"], json.dumps(receipt.call_args.args[2]))
             syntax = subprocess.run(["sh", "-n"], input=install, text=True, capture_output=True)
@@ -516,14 +585,14 @@ class DeploymentTests(unittest.TestCase):
         receipt.assert_not_called()
 
     def capability_fixture(self, failure=None):
-        target = self.base / "target"
+        target = (self.base / "target").resolve()
         binaries = target / "tools"
         binaries.mkdir(parents=True)
         for tool in ("amixer", "ip", "iw", "hostapd", "dnsmasq", "wpa_supplicant", "udhcpc"):
             executable = binaries / tool
             executable.write_text("#!/bin/sh\nexit 0\n")
             executable.chmod(0o755)
-        for tool in ("tr", "awk"):
+        for tool in ("tr", "awk", "cat"):
             (binaries / tool).symlink_to(shutil.which(tool))
         amixer = binaries / "amixer"
         amixer.write_text("#!/bin/sh\nprintf '%s\\n' '; type=INTEGER,access=rw------,values=1,min=0,max=255,step=0'\n")
@@ -537,6 +606,17 @@ class DeploymentTests(unittest.TestCase):
         model.write_bytes(b"Rockchip RV1126B TEST2 RK805B V10 Board\0")
         hooks = target / "lib/dhcpcd/dhcpcd-hooks"
         hooks.mkdir(parents=True)
+        backlight = target / "sys/devices/platform/backlight/backlight/backlight"
+        backlight.mkdir(parents=True)
+        backlight.chmod(0o755)
+        for name, value, mode in (("brightness", "200", 0o644), ("bl_power", "0", 0o644),
+                                  ("max_brightness", "255", 0o444), ("actual_brightness", "200", 0o444)):
+            attribute = backlight / name
+            attribute.write_text(value + "\n")
+            attribute.chmod(mode)
+        class_dir = target / "sys/class/backlight"
+        class_dir.mkdir(parents=True)
+        (class_dir / "backlight").symlink_to(backlight)
         runtime = target / "lib/libc.so.6"
         runtime.write_bytes(b"fixture pinned runtime")
         script = deployment.capability_preflight({"lib/libc.so.6": deployment.sha256(runtime.read_bytes())})
@@ -553,15 +633,26 @@ class DeploymentTests(unittest.TestCase):
         elif failure == "linked_runtime_directory":
             (target / "run").mkdir()
             (target / "run/mybot-network").symlink_to(hooks)
-        for prefix in ("/proc/", "/sbin/", "/lib/", "/run/"):
+        elif failure == "unsafe_backlight_mode":
+            (backlight / "brightness").chmod(0o666)
+        elif failure == "invalid_backlight_value":
+            (backlight / "bl_power").write_text("not-an-integer\n")
+        elif failure == "missing_backlight":
+            (class_dir / "backlight").unlink()
+        for prefix in ("/proc/", "/sbin/", "/lib/", "/run/", "/sys/"):
             script = script.replace(prefix, str(target) + prefix)
-        metadata = shlex.quote(sys.executable) + " -c " + shlex.quote("print(0)")
+        metadata = shlex.quote(sys.executable) + " -c " + shlex.quote(
+            "import os,sys; print('0:0:%o' % (os.stat(sys.argv[-1]).st_mode & 0o777) "
+            "if sys.argv[1]=='%u:%g:%a' else '0')")
+        canonical = shlex.quote(sys.executable) + " -c " + shlex.quote(
+            "import pathlib,sys; print(pathlib.Path(sys.argv[-1]).resolve())")
         checksum = shlex.quote(sys.executable) + " -c " + shlex.quote(
             "import hashlib,pathlib,sys; "
             "entries=[line.strip().split('  ',1) for line in sys.stdin if line.strip()]; "
             "sys.exit(not all(hashlib.sha256(pathlib.Path(name).read_bytes()).hexdigest()==digest "
             "for digest,name in entries))")
-        prefix = ('set -eu\nPATH=' + shlex.quote(str(binaries)) + '\nstat() { ' + metadata + '; }\n'
+        prefix = ('set -eu\nPATH=' + shlex.quote(str(binaries)) + '\nstat() { ' + metadata + ' "$2" "$3"; }\n'
+                  'readlink() { ' + canonical + ' "$@"; }\n'
                   'sha256sum() { ' + checksum + '; }\n')
         before = {str(path.relative_to(target)): path.read_bytes()
                   for path in target.rglob("*") if path.is_file() and not path.is_symlink()}
@@ -579,7 +670,8 @@ class DeploymentTests(unittest.TestCase):
     def test_capability_preflight_rejects_each_missing_target_prerequisite(self):
         for failure, expected in (("missing_tool", 90), ("missing_hook", 93), ("wrong_model", 92),
                                   ("changed_runtime", 1), ("bad_audio_control", 95),
-                                  ("linked_runtime_directory", 94)):
+                                  ("linked_runtime_directory", 94), ("unsafe_backlight_mode", 96),
+                                  ("invalid_backlight_value", 96), ("missing_backlight", 96)):
             with self.subTest(failure=failure), tempfile.TemporaryDirectory(dir=self.base) as temporary, \
                     patch.object(self, "base", Path(temporary)):
                 result = self.capability_fixture(failure)

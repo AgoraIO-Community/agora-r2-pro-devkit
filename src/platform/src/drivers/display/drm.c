@@ -109,9 +109,14 @@ static int save_connectors(const drmModeRes *resources) {
     return 0;
 }
 
-int rv1126b_drm_stop(void) {
+static int stop(bool poweroff) {
     int result = 0;
-    if (s_drm.modeset && s_drm.saved_crtc) {
+    if (s_drm.modeset && poweroff) {
+        if (drmModeSetCrtc(s_drm.fd, s_drm.crtc, 0, 0, 0, NULL, 0, NULL) < 0) {
+            fprintf(stderr, "DRM: cannot disable CRTC for poweroff: %s\n", strerror(errno));
+            result = -1;
+        }
+    } else if (s_drm.modeset && s_drm.saved_crtc) {
         drmModeCrtc *old = s_drm.saved_crtc;
         bool enabled = old->mode_valid && s_drm.saved_count > 0;
         if (drmModeSetCrtc(s_drm.fd, old->crtc_id, enabled ? old->buffer_id : 0,
@@ -139,6 +144,14 @@ int rv1126b_drm_stop(void) {
     memset(&s_drm, 0, sizeof(s_drm));
     s_drm.fd = -1;
     return result;
+}
+
+int rv1126b_drm_stop(void) {
+    return stop(false);
+}
+
+int rv1126b_drm_stop_for_poweroff(void) {
+    return stop(true);
 }
 
 int rv1126b_drm_start(const char *device, unsigned rotation) {

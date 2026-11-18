@@ -26,6 +26,7 @@ typedef struct {
     const char *storage_directory;
     const char *runtime_directory;
     const char *dhcp_script;
+    const char *route_interface; /* Accepted uplink. Empty permits any routed interface. */
 } rv1126b_wifi_config_t;
 
 typedef struct {

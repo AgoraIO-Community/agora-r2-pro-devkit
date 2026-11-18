@@ -15,6 +15,9 @@ int rv1126b_drm_present(const uint32_t *canvas, const rv1126b_rect_t *area, void
 
 int rv1126b_drm_stop(void);
 
+/* Disable the owned CRTC before releasing it; never restore an old framebuffer. */
+int rv1126b_drm_stop_for_poweroff(void);
+
 #ifdef __cplusplus
 }
 #endif

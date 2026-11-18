@@ -13,7 +13,10 @@ typedef enum {
     MYBOT_SETTINGS_MENU,
     MYBOT_SETTINGS_CONFIRM_POWEROFF,
     MYBOT_SETTINGS_POWERING_OFF,
-    MYBOT_SETTINGS_POWEROFF_ERROR
+    MYBOT_SETTINGS_POWEROFF_ERROR,
+    MYBOT_SETTINGS_CONFIRM_RESET,
+    MYBOT_SETTINGS_RESETTING,
+    MYBOT_SETTINGS_RESET_ERROR
 } mybot_settings_page_t;
 
 typedef enum {
@@ -22,7 +25,10 @@ typedef enum {
     MYBOT_SETTINGS_POWEROFF,
     MYBOT_SETTINGS_BACK,
     MYBOT_SETTINGS_CANCEL,
-    MYBOT_SETTINGS_CONFIRM
+    MYBOT_SETTINGS_CONFIRM,
+    MYBOT_SETTINGS_FACTORY_RESET,
+    MYBOT_SETTINGS_RESET_CONFIRM,
+    MYBOT_SETTINGS_CONTROL_COUNT
 } mybot_settings_control_t;
 
 typedef struct {
@@ -31,9 +37,16 @@ typedef struct {
 
 /* One geometry contract for native 640x480 rendering and touch hit testing. */
 static inline mybot_settings_rect_t mybot_settings_bounds(mybot_settings_control_t control) {
-    static const mybot_settings_rect_t rectangles[] = {{568, 16, 56, 56},   {112, 152, 416, 72},
-                                                       {112, 240, 416, 72}, {16, 16, 128, 56},
-                                                       {96, 300, 208, 64},  {336, 300, 208, 64}};
+    static const mybot_settings_rect_t rectangles[MYBOT_SETTINGS_CONTROL_COUNT] = {
+        {568, 16, 56, 56},   /* gear */
+        {112, 152, 416, 72}, /* Wi-Fi */
+        {112, 240, 416, 72}, /* power off */
+        {16, 16, 128, 56},   /* back / cancel reset */
+        {96, 300, 208, 64},  /* cancel power off */
+        {336, 300, 208, 64}, /* confirm power off */
+        {112, 328, 416, 72}, /* factory reset */
+        {160, 408, 320, 64}  /* confirm reset, outside the menu entry's bounds */
+    };
     const mybot_settings_rect_t empty = {0, 0, 0, 0};
     return (unsigned)control < sizeof(rectangles) / sizeof(rectangles[0]) ? rectangles[control]
                                                                           : empty;

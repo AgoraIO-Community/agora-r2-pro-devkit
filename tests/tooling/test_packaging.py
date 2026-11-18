@@ -105,11 +105,12 @@ class PackagingTests(unittest.TestCase):
                 "machine": 183, "soname": "libagora-rtc-sdk.so", "runpaths": []}
         metadata.write_json(build / "abi-report.json", {"errors": [], "binary": binary,
                             "dependency_count": 1, "checked": [binary, rtsa]})
-        self.write(build / 'mybot-supervisor', (build / 'mybot-rv1126b').read_text())
-        supervisor = dict(binary, path=str(build / 'mybot-supervisor'))
-        metadata.write_json(build / 'abi-report-supervisor.json', {
-            'errors': [], 'binary': supervisor, 'dependency_count': 1,
-            'checked': [supervisor, rtsa]})
+        for role in ('supervisor', 'factory-reset'):
+            self.write(build / ('mybot-' + role), (build / 'mybot-rv1126b').read_text())
+            supervisor = dict(binary, path=str(build / ('mybot-' + role)))
+            metadata.write_json(build / ('abi-report-' + role + '.json'), {
+                'errors': [], 'binary': supervisor, 'dependency_count': 1,
+                'checked': [supervisor, rtsa]})
         self.seal(build)
         return build
 
@@ -133,13 +134,14 @@ class PackagingTests(unittest.TestCase):
             if entry["path"] == str(binary):
                 entry["sha256"] = metadata.digest(binary)
         metadata.write_json(build / "abi-report.json", report)
-        supervisor = build / 'mybot-supervisor'
-        supervisor.write_bytes(executable)
-        helper_report = metadata.read_json(build / 'abi-report-supervisor.json')
-        for entry in [helper_report['binary'], *helper_report['checked']]:
-            if entry['path'] == str(supervisor):
-                entry['sha256'] = metadata.digest(supervisor)
-        metadata.write_json(build / 'abi-report-supervisor.json', helper_report)
+        for role in ('supervisor', 'factory-reset'):
+            supervisor = build / ('mybot-' + role)
+            supervisor.write_bytes(executable)
+            helper_report = metadata.read_json(build / ('abi-report-' + role + '.json'))
+            for entry in [helper_report['binary'], *helper_report['checked']]:
+                if entry['path'] == str(supervisor):
+                    entry['sha256'] = metadata.digest(supervisor)
+            metadata.write_json(build / ('abi-report-' + role + '.json'), helper_report)
 
     def test_archive_is_reproducible_and_public_metadata_has_no_host_paths(self):
         destination, archive, first_hash = packager.package(self.root, self.args)
@@ -150,6 +152,8 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(first_hash, second_hash)
         self.assertEqual(archive.read_bytes(), second.read_bytes())
         with tarfile.open(archive) as stream:
+            poweroff = stream.getmember(destination.name + "/assets/service/poweroff.sh")
+            self.assertEqual(poweroff.mode, 0o755)
             for item in stream.getmembers():
                 self.assertEqual((item.uid, item.gid, item.uname, item.gname), (0, 0, "", ""))
                 self.assertFalse(item.issym() or item.islnk())

@@ -39,6 +39,14 @@ typedef enum {
     SDK_START_FAILURE,
     SDK_START_FAILURE_CLEAN,
     POWEROFF,
+    POWEROFF_REJECTED,
+    POWEROFF_DISPLAY_FAILURE,
+    POWEROFF_WAITING,
+    RESET_WAITING,
+    RESET_ACTIVE,
+    RESET_REJECTED,
+    FIRST_SETUP,
+    FIRST_SETUP_ERROR,
     DEMO,
     OFFLINE_DEADLINE
 } scenario_t;
@@ -61,13 +69,17 @@ enum {
     VOLUME_STOP,
     INPUT_STOP,
     UI_STOP,
-    POWER_REQUEST
+    UI_STOP_FOR_POWEROFF,
+    POWER_REQUEST,
+    RESET_REQUEST,
+    SETUP_FINISHED
 };
 
 typedef struct {
     scenario_t scenario;
     unsigned int events[128], count, starts, stops, wifi_requests, recoveries;
     unsigned int active_checks, ap_polls, clock_failed, wifi_failed, prompts, status_calls;
+    bool reset_rejected;
     bool sdk_active, prompt_active, manual_sent, retry_sent, error_seen, ap_seen, power_sent;
     rv1126b_app_state_t last_status;
     unsigned int statuses[RV1126B_APP_STATE_COUNT];
@@ -149,6 +161,11 @@ int rv1126b_ui_stop(void) {
     return 0;
 }
 
+int rv1126b_ui_stop_for_poweroff(void) {
+    record(UI_STOP_FOR_POWEROFF);
+    return fixture.scenario == POWEROFF_DISPLAY_FAILURE ? -1 : 0;
+}
+
 void rv1126b_ui_set_state(mybot_state_t state) {
     (void)state;
 }
@@ -202,7 +219,10 @@ int rv1126b_input_stop(void) {
 }
 
 void rv1126b_input_settings_page(mybot_settings_page_t page) {
-    CHECK(page == MYBOT_SETTINGS_POWEROFF_ERROR);
+    if (page == MYBOT_SETTINGS_RESET_ERROR)
+        fixture.reset_rejected = true;
+    else
+        CHECK(page == MYBOT_SETTINGS_POWEROFF_ERROR);
 }
 
 int rv1126b_key_exit_requested(void) {
@@ -228,15 +248,40 @@ int rv1126b_key_wifi_requested(void) {
     return 0;
 }
 
+int rv1126b_key_factory_reset_requested(void) {
+    return position(RESET_REQUEST) < 0 &&
+           (fixture.scenario == RESET_WAITING ||
+            (fixture.sdk_active &&
+             (fixture.scenario == RESET_ACTIVE || fixture.scenario == RESET_REJECTED)));
+}
+
+int rv1126b_factory_reset_request(void) {
+    record(RESET_REQUEST);
+    return fixture.scenario == RESET_REJECTED ? -1 : 0;
+}
+
+int rv1126b_factory_setup_pending(void) {
+    return fixture.scenario == FIRST_SETUP || fixture.scenario == FIRST_SETUP_ERROR;
+}
+
+int rv1126b_factory_setup_complete(void) {
+    CHECK(fixture.ap_seen && !fixture.sdk_active);
+    record(SETUP_FINISHED);
+    return 0;
+}
+
 int rv1126b_key_poweroff_requested(void) {
-    return fixture.scenario == POWEROFF && fixture.sdk_active && !fixture.power_sent;
+    bool active = fixture.scenario == POWEROFF || fixture.scenario == POWEROFF_REJECTED ||
+                  fixture.scenario == POWEROFF_DISPLAY_FAILURE;
+    return !fixture.power_sent &&
+           ((active && fixture.sdk_active) || fixture.scenario == POWEROFF_WAITING);
 }
 
 int rv1126b_poweroff_request(void) {
     CHECK(!fixture.power_sent);
     fixture.power_sent = true;
     record(POWER_REQUEST);
-    return 0;
+    return fixture.scenario == POWEROFF_REJECTED ? -1 : 0;
 }
 
 int rv1126b_network_ready(const char *interface_name) {
@@ -247,6 +292,8 @@ int rv1126b_network_ready(const char *interface_name) {
 int rv1126b_wifi_start(const rv1126b_wifi_config_t *config) {
     CHECK(config && config->enabled &&
           !strcmp(config->dhcp_script, "/fixture/assets/wifi/udhcpc.script"));
+    CHECK(config->force_ap ==
+          (fixture.scenario == FIRST_SETUP || fixture.scenario == FIRST_SETUP_ERROR));
     record(WIFI_START);
     return 0;
 }
@@ -271,7 +318,14 @@ void rv1126b_wifi_request_recovery(void) {
 
 void rv1126b_wifi_status(rv1126b_wifi_status_t *status) {
     *status = (rv1126b_wifi_status_t){.state = RV1126B_WIFI_ONLINE};
-    if (fixture.scenario == OFFLINE_DEADLINE)
+    if (fixture.scenario == FIRST_SETUP_ERROR)
+        status->state = RV1126B_WIFI_ERROR;
+    else if (fixture.scenario == FIRST_SETUP && !fixture.ap_seen) {
+        status->state = RV1126B_WIFI_AP_READY;
+        status->ap_active = true;
+        strcpy(status->ssid, "fixture-ap");
+        fixture.ap_seen = true;
+    } else if (fixture.scenario == OFFLINE_DEADLINE)
         status->state = RV1126B_WIFI_WAITING;
     else if (fixture.scenario == RECOVERY && fixture.sdk_active && fixture.starts == 1)
         status->state = RV1126B_WIFI_RECOVERY_REQUIRED;
@@ -386,9 +440,34 @@ static void run(scenario_t scenario, int expected) {
         CHECK(position(SDK_STOP) < position(TIME_STOP));
         CHECK(position(SDK_STOP) < position(INPUT_STOP));
         CHECK(position(SDK_STOP) < position(UI_STOP));
-    } else if (scenario == POWEROFF) {
+    } else if (scenario == POWEROFF || scenario == POWEROFF_DISPLAY_FAILURE ||
+               scenario == POWEROFF_WAITING) {
         CHECK(fixture.power_sent && fixture.statuses[RV1126B_APP_POWERING_OFF]);
-        CHECK(position(POWER_REQUEST) < position(SDK_STOP));
+        CHECK(position(UI_STOP_FOR_POWEROFF) >= 0 && position(UI_STOP) < 0);
+        CHECK(position(POWER_REQUEST) < position(UI_STOP_FOR_POWEROFF));
+        if (scenario == POWEROFF_WAITING)
+            CHECK(fixture.starts == 0 && fixture.stops == 0);
+        else
+            CHECK(position(POWER_REQUEST) < position(SDK_STOP));
+    } else if (scenario == POWEROFF_REJECTED) {
+        CHECK(fixture.power_sent && !fixture.statuses[RV1126B_APP_POWERING_OFF]);
+        CHECK(position(UI_STOP_FOR_POWEROFF) < 0 && position(UI_STOP) >= 0);
+    } else if (scenario == RESET_ACTIVE || scenario == RESET_WAITING) {
+        CHECK(position(RESET_REQUEST) >= 0 && !fixture.power_sent);
+        CHECK(fixture.statuses[RV1126B_APP_FACTORY_RESET]);
+        CHECK(position(UI_STOP_FOR_POWEROFF) > position(RESET_REQUEST) && position(UI_STOP) < 0);
+        if (scenario == RESET_ACTIVE)
+            CHECK(position(SDK_STOP) > position(RESET_REQUEST));
+        else
+            CHECK(!fixture.starts);
+    } else if (scenario == RESET_REJECTED) {
+        CHECK(fixture.reset_rejected && position(RESET_REQUEST) >= 0);
+        CHECK(position(UI_STOP_FOR_POWEROFF) < 0 && !fixture.statuses[RV1126B_APP_FACTORY_RESET]);
+    } else if (scenario == FIRST_SETUP) {
+        CHECK(fixture.ap_seen && position(SETUP_FINISHED) > position(WIFI_START));
+        CHECK(position(SDK_START) > position(SETUP_FINISHED));
+    } else if (scenario == FIRST_SETUP_ERROR) {
+        CHECK(!fixture.starts && position(SETUP_FINISHED) < 0 && fixture.wifi_failed);
     } else if (scenario == DEMO) {
         CHECK(fixture.status_calls == 0 && fixture.starts == 0 && position(UI_STOP) >= 0);
         CHECK(position(VOLUME_START) < 0 && position(INPUT_START) < 0);
@@ -402,10 +481,12 @@ int main(void) {
     CHECK(setenv("MYBOT_KV_STORE_DIR", "/fixture/storage", 1) == 0);
     CHECK(setenv("MYBOT_ASSETS_DIR", "/fixture/assets", 1) == 0);
     CHECK(setenv("MYBOT_LOCALE", "zh-CN", 1) == 0);
+    CHECK(setenv("MYBOT_SUPERVISOR_RUNTIME", "/fixture/supervisor", 1) == 0);
     for (scenario_t scenario = NORMAL; scenario <= OFFLINE_DEADLINE; ++scenario)
         run(scenario, scenario == CLOCK_FAILURE || scenario == VIDEO_FAILURE ||
                           scenario == INPUT_FAILURE || scenario == SDK_START_FAILURE ||
-                          scenario == SDK_START_FAILURE_CLEAN);
+                          scenario == SDK_START_FAILURE_CLEAN ||
+                          scenario == POWEROFF_DISPLAY_FAILURE);
     CHECK(sdk_status(MYBOT_STATE_PAIRING) == RV1126B_APP_PAIRING);
     CHECK(sdk_status(MYBOT_STATE_IN_CONVERSATION) == RV1126B_APP_CONVERSATION);
     CHECK(sdk_status(MYBOT_STATE_WIFI_DISCONNECTED) == RV1126B_APP_OFFLINE);

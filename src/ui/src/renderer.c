@@ -12,6 +12,13 @@ LV_FONT_DECLARE(mybot_lvgl_font_40);
 LV_FONT_DECLARE(mybot_terminal_font_18);
 
 #if CONFIG_MYBOT_LANGUAGE_ZH_CN
+#define RESET_TITLE "恢复出厂设置"
+#define RESET_QUESTION "恢复出厂设置？"
+#define RESET_CONFIRM "确认恢复"
+#define RESET_WARNING "清除已存 Wi-Fi 和本机绑定\n音量恢复为 70\n之后需重新配网和配对"
+#define RESET_PROGRESS "正在恢复设置"
+#define RESET_FAILURE "未能开始恢复"
+#define RESET_RETRY "请返回设置后重试"
 #define SETTINGS_TITLE "设置"
 #define SETTINGS_WIFI "设备配网"
 #define SETTINGS_POWEROFF "关机"
@@ -25,6 +32,14 @@ LV_FONT_DECLARE(mybot_terminal_font_18);
 #define SETTINGS_FAILURE "关机失败"
 #define SETTINGS_RETRY "设备仍在运行\n请重试或检查系统"
 #else
+#define RESET_TITLE "Factory reset"
+#define RESET_QUESTION "Factory reset?"
+#define RESET_CONFIRM "Reset device"
+#define RESET_WARNING                                                                              \
+    "Forget saved Wi-Fi and\nclear local pairing.\nSet volume to 70.\nThen set up and pair again."
+#define RESET_PROGRESS "Resetting device"
+#define RESET_FAILURE "Reset could not start"
+#define RESET_RETRY "Go back and try again."
 #define SETTINGS_TITLE "Settings"
 #define SETTINGS_WIFI "Wi-Fi setup"
 #define SETTINGS_POWEROFF "Power off"
@@ -53,7 +68,7 @@ static struct {
     lv_obj_t *settings_panel;
     lv_obj_t *settings_title;
     lv_obj_t *settings_detail;
-    lv_obj_t *settings_controls[MYBOT_SETTINGS_CONFIRM + 1];
+    lv_obj_t *settings_controls[MYBOT_SETTINGS_CONTROL_COUNT];
     mybot_settings_page_t settings_page;
 } s_renderer;
 static uint32_t s_tick;
@@ -144,14 +159,16 @@ static bool settings_create(void) {
         return false;
     s_renderer.settings_title = settings_label(s_renderer.settings_panel, 48, 76, 544, 56,
                                                SETTINGS_TITLE, &mybot_lvgl_font_40, 0xe8f4ee);
-    s_renderer.settings_detail = settings_label(s_renderer.settings_panel, 48, 160, 544, 112, "",
+    s_renderer.settings_detail = settings_label(s_renderer.settings_panel, 48, 160, 544, 228, "",
                                                 &mybot_lvgl_font_40, 0xabc1ba);
     if (!s_renderer.settings_title || !s_renderer.settings_detail ||
         !settings_button(MYBOT_SETTINGS_WIFI, SETTINGS_WIFI, 0x91e7d0) ||
         !settings_button(MYBOT_SETTINGS_POWEROFF, SETTINGS_POWEROFF, 0xee9b8c) ||
         !settings_button(MYBOT_SETTINGS_BACK, SETTINGS_BACK, 0xabc1ba) ||
         !settings_button(MYBOT_SETTINGS_CANCEL, SETTINGS_CANCEL, 0xabc1ba) ||
-        !settings_button(MYBOT_SETTINGS_CONFIRM, SETTINGS_CONFIRM, 0xee9b8c))
+        !settings_button(MYBOT_SETTINGS_CONFIRM, SETTINGS_CONFIRM, 0xee9b8c) ||
+        !settings_button(MYBOT_SETTINGS_FACTORY_RESET, RESET_TITLE, 0xee9b8c) ||
+        !settings_button(MYBOT_SETTINGS_RESET_CONFIRM, RESET_CONFIRM, 0xee9b8c))
         return false;
     lv_obj_add_flag(s_renderer.settings_panel, LV_OBJ_FLAG_HIDDEN);
     return true;
@@ -160,7 +177,7 @@ static bool settings_create(void) {
 void rv1126b_renderer_settings(mybot_settings_page_t page) {
     if (!s_renderer.initialized || !s_renderer.settings_panel)
         return;
-    if (page < MYBOT_SETTINGS_CLOSED || page > MYBOT_SETTINGS_POWEROFF_ERROR)
+    if (page < MYBOT_SETTINGS_CLOSED || page > MYBOT_SETTINGS_RESET_ERROR)
         page = MYBOT_SETTINGS_CLOSED;
     if (page == s_renderer.settings_page)
         return;
@@ -172,13 +189,15 @@ void rv1126b_renderer_settings(mybot_settings_page_t page) {
     }
     lv_obj_add_flag(s_renderer.settings_gear, LV_OBJ_FLAG_HIDDEN);
     lv_obj_remove_flag(s_renderer.settings_panel, LV_OBJ_FLAG_HIDDEN);
-    for (int control = MYBOT_SETTINGS_WIFI; control <= MYBOT_SETTINGS_CONFIRM; ++control)
+    for (int control = MYBOT_SETTINGS_WIFI; control < MYBOT_SETTINGS_CONTROL_COUNT; ++control)
         lv_obj_add_flag(s_renderer.settings_controls[control], LV_OBJ_FLAG_HIDDEN);
     const char *title = SETTINGS_TITLE;
     const char *detail = "";
     if (page == MYBOT_SETTINGS_MENU) {
         lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_WIFI], LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_POWEROFF],
+                           LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_FACTORY_RESET],
                            LV_OBJ_FLAG_HIDDEN);
         lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_BACK], LV_OBJ_FLAG_HIDDEN);
     } else if (page == MYBOT_SETTINGS_CONFIRM_POWEROFF) {
@@ -190,9 +209,18 @@ void rv1126b_renderer_settings(mybot_settings_page_t page) {
     } else if (page == MYBOT_SETTINGS_POWERING_OFF) {
         title = SETTINGS_PROGRESS;
         detail = SETTINGS_WAIT;
+    } else if (page == MYBOT_SETTINGS_CONFIRM_RESET) {
+        title = RESET_QUESTION;
+        detail = RESET_WARNING;
+        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_BACK], LV_OBJ_FLAG_HIDDEN);
+        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_RESET_CONFIRM],
+                           LV_OBJ_FLAG_HIDDEN);
+    } else if (page == MYBOT_SETTINGS_RESETTING) {
+        title = RESET_PROGRESS;
+        detail = SETTINGS_WAIT;
     } else {
-        title = SETTINGS_FAILURE;
-        detail = SETTINGS_RETRY;
+        title = page == MYBOT_SETTINGS_RESET_ERROR ? RESET_FAILURE : SETTINGS_FAILURE;
+        detail = page == MYBOT_SETTINGS_RESET_ERROR ? RESET_RETRY : SETTINGS_RETRY;
         lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_BACK], LV_OBJ_FLAG_HIDDEN);
     }
     lv_label_set_text_static(s_renderer.settings_title, title);

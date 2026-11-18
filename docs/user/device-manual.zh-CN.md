@@ -139,7 +139,7 @@ cmake --build --preset rv1126b-video-en
 | zh-CN | https://botstation.shengwang.cn/api |
 | en-US | https://botstation.agora.io/api |
 
-全配置包同时携带语音、视频两个程序，但设备一次只运行其中一个；本手册的部署设置选择语音模式，不自动启用摄像头。只需语音时，仅构建对应 voice 配置，并按下一页说明打包单变体。
+全配置包同时携带语音、视频两个程序，但设备一次只运行其中一个；受监督部署默认选择视频模式。只需语音时，仅构建对应 voice 配置、打包单变体，并在部署设置中显式使用 `"video": false`。
 
 <!-- page -->
 
@@ -202,7 +202,7 @@ cat > local/deployment/settings.json <<'JSON'
 {
   "server": "https://botstation.shengwang.cn/api",
   "device_id": "RV1126B-EXAMPLE-0001",
-  "video": false,
+  "video": true,
   "wifi_interface": "wlan0"
 }
 JSON
@@ -212,6 +212,8 @@ chmod 600 local/deployment/settings.json
 3. 核对身份、服务区和无线接口。ID 为 1–32 个 ASCII 字符，可用字母、数字及 `_.:-`。多台设备不能共用示例 ID。
 
 设置只允许上述四项，不包含 Wi-Fi 密码或认证 token。国际服务使用 `https://botstation.agora.io/api`。部署中的 `server` 是显式配置，优先于语言默认值；已有绑定的设备升级时保持原 server、ID 和数据目录。
+
+`video` 省略时默认为 `true`，全配置包选择视频程序；语音部署必须显式设置 `false`，语音单变体包也一样。
 
 <!-- page -->
 
@@ -226,7 +228,7 @@ python3 scripts/deploy-rv1126b.py preflight \
 
 预期：平台就绪；无绑定的新设备允许 `auth=absent`，已绑定设备应匹配。身份检查失败时核对设置，不删除绑定文件绕过。
 
-2. 生成部署计划，确认包、语言和语音模式。
+2. 生成部署计划，确认包、语言和视频模式。
 
 ```sh
 python3 scripts/deploy-rv1126b.py deploy \
@@ -289,7 +291,7 @@ adb -s "$serial" shell /userdata/mybot/current/run.sh --version
 # 09 开机并认识启动画面
 
 1. 长按机身唯一实体按键开机，看到启动画面后松开。当前设备已确认长按具备开关机作用，具体时长以硬件响应为准。
-2. 安装受监督服务后，开机自动启动应用。已有可用网络时直接复用；尚未联网时先等待连接，再进入配网引导。
+2. 安装受监督服务后，开机自动启动应用。无线网络启动期间显示“等待网络”是正常现象。系统连上已保存的网络后，设备直接连接服务，无需手机配网。
 
 ![启动中：正在初始化应用](assets/device-manual/starting.png)
 ![等待网络：正在连接已有网络](assets/device-manual/waiting-network.png)
@@ -360,7 +362,7 @@ adb -s "$serial" shell /userdata/mybot/current/run.sh --version
 1. 点击主界面右上角齿轮，打开设置。点击左上角“返回”关闭设置；菜单内触摸不会开始或挂断对话。
 
 ![主界面：右上角齿轮打开设置](assets/device-manual/ready.png)
-![设置菜单：配网与关机两个选项](assets/device-manual/settings-menu.png)
+![设置菜单：设备配网、关机与恢复出厂设置](assets/device-manual/settings-menu.png)
 
 2. 更换 Wi-Fi 时点击“设备配网”。应用先结束当前对话并停止 SDK，再进入手机 AP 配网流程。
 3. 按第 10 节完成连接，等待设备恢复 ready；绑定继续保留，需要再次短触才开始新的对话。
@@ -375,8 +377,8 @@ adb -s "$serial" shell /userdata/mybot/current/run.sh --version
 # 14 调整音量与理解语言设置
 
 1. 通过服务侧支持的设备音量控制调整播放音量。当前设备只有一个实体电源键，屏幕设置中也没有音量滑块。
-2. 检查静音、小音量和正常音量的实际播放效果。音量范围为 0–100，0 为静音；首次默认 100。
-3. 重启应用或完成重新配网后，确认音量恢复。配网提示和配对码语音也使用保存的音量，静音时不发声。
+2. 检查静音、小音量和正常音量的实际播放效果。音量范围为 0–100，0 为静音；首次使用和恢复出厂后均为 70。
+3. 重启应用或完成重新配网后，确认使用原来保存的音量。配网提示和配对码语音也使用保存的音量，静音时不发声。
 
 | 设置 | 生效范围 |
 | --- | --- |
@@ -399,14 +401,16 @@ adb -s "$serial" shell /userdata/mybot/current/run.sh --version
 ![确认关机：可以取消或确认](assets/device-manual/settings-confirm.png)
 ![正在关机：等待业务和系统停止](assets/device-manual/settings-powering-off.png)
 
-3. 等待应用清理音频、网络和显示资源，系统完成正常关机。不要在此期间反复按屏幕。
-4. 再次使用时长按机身唯一实体按键，看到开机画面后松开。当前设备已确认长按可开关机，不在手册中固定按住秒数。
+3. 等待应用清理资源并关闭显示输出，再由受监督关机脚本关闭背光、请求正常系统关机。不要反复按屏幕。
+4. 再次使用时长按机身唯一实体按键，看到开机画面后松开；按住时长以硬件响应为准。
 
 ![关机失败：左上角返回后排查](assets/device-manual/settings-error.png)
 
-屏幕关机需要通过 `S99mybot` 启动的受监督服务授权。临时前台运行 `run.sh` 时，这个操作会显示关机失败；可返回继续使用。若正常部署仍失败，维护人员检查服务状态及日志。
+UI 关机需受监督的 `S99mybot`；请求被拒绝时可点左上角返回继续使用。
 
-退出应用或停止 `S99mybot` 只停止业务，不等于设备关机。UI 确认关机最终由监督器调用 `/sbin/poweroff`；机身按键由系统电源服务处理。
+清理后由 `poweroff.sh` 关闭背光，再请求 `/sbin/poweroff`。准备中断或命令失败只尝试恢复背光值；应用退出后不恢复原 UI，请查私有日志并显式重启服务。
+
+普通停止仍恢复原画面。软件关机不代表整机所有供电切断；实体长按的硬件链路仍未确认。
 
 <!-- page -->
 
@@ -467,6 +471,8 @@ cd /userdata/mybot/current
 ./run.sh
 ```
 
+此步骤使用原服务的视频选项；未设置 `RV1126B_VIDEO` 时，直接执行 `./run.sh` 仍默认选择语音程序。
+
 | 输入后按 Enter | 操作 |
 | --- | --- |
 | s / q | ready 时开始 / 会话中挂断 |
@@ -511,7 +517,7 @@ python3 scripts/deploy-rv1126b.py rollback \
   --execute --start
 ```
 
-预期：切回 previous，使用同一数据目录和监督服务，原绑定复用。回退不恢复旧 Wi-Fi/认证数据，也不自动启用原厂业务。首次安装无 previous 时，先向维护人员确认已安装的可用 release，不能凭空回退。
+预期：切回 previous，使用同一数据目录和监督服务，原绑定复用。视频服务要求回退包包含 video 程序，不自动改用语音。回退不恢复旧 Wi-Fi/认证数据，也不自动启用原厂业务。首次安装无 previous 时，先向维护人员确认已安装的可用 release，不能凭空回退。
 
 <!-- page -->
 
@@ -583,12 +589,12 @@ python3 scripts/deploy-rv1126b.py rollback \
 
 <!-- page -->
 
-# 22 可选视频与验收记录
+# 22 视频检查与验收记录
 
 摄像头程序已实现，但需独立验证，不能由语音通过推断视频通过。
 
 1. 确认部署包包含 video 程序，设备 ISP 服务、V4L2 与 MPP 环境正常。启用前先保留可用语音版本。
-2. 通过部署 settings 的 `video: true` 选择视频模式，预览计划后执行。它会写入服务配置，不是屏幕里的开关；按正常部署流程切换，避免多开实例。
+2. 部署 settings 默认以 `video: true` 选择视频模式；语音部署显式设置 `video: false`。预览计划后执行，选择会写入服务配置，不是屏幕里的开关；按正常部署流程切换，避免多开实例。
 3. 设备 ready 后短触屏幕开始会话，再验证云端首帧和接收。检查方向、颜色、最高 3 fps 的 640×480 JPEG；短触结束后检查停流，再次开始检查恢复及语音/UI 并发。仅进入 ready 不会出帧，程序不提供本地摄像头预览，也不自动保存快照。
 
 每次安装或升级后按顺序验收，并记录包 SHA256、版本、日期和结果：
@@ -605,3 +611,18 @@ python3 scripts/deploy-rv1126b.py rollback \
 | 8. 可选专项 | 视频、AEC、断网恢复及长期稳定性单独记录 |
 
 工程内的详细参考：构建 `docs/user/build.zh-CN.md`，部署 `docs/user/deployment.zh-CN.md`，配网 `docs/user/wifi-provisioning.zh-CN.md`，配置 `docs/user/configuration.zh-CN.md`。当前已验证范围以 `docs/validation/README.md` 为准。
+
+<!-- page -->
+
+# 23 恢复出厂设置
+
+1. 点击右上角齿轮，选择“恢复出厂设置”。确认页列出将清除的本机绑定、已保存的 Wi-Fi 和音量设置。点左上角“返回”可取消恢复。
+
+![恢复出厂确认页：取消或确认恢复](assets/device-manual/settings-reset-confirm.png)
+
+2. 松手后再次点击“确认恢复”。设备结束当前对话并重新启动 agent-studio-device-firmware 服务。等待屏幕显示热点名称和网址。
+3. 用手机连接屏幕上的热点，按第 10 节完成配网。按第 11 节使用新的配对码绑定。恢复后的音量为 70。
+
+设备保留原 ID、服务地址、软件版本和视频设置。恢复可离线执行，断电后会在下次启动时继续处理。如果恢复未能开始，返回设置后重试。如果一直没有出现配网指引，请维护人员检查服务状态和日志。
+
+管理员备份和日志仍会保留，可能含旧凭据。移交设备前，请原管理员在对应服务区控制台解除绑定并处理保留的备份和日志。

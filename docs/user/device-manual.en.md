@@ -139,7 +139,7 @@ cmake --build --preset rv1126b-video-zh
 | zh-CN | https://botstation.shengwang.cn/api |
 | en-US | https://botstation.agora.io/api |
 
-A full bundle includes both executables, but the device runs only one at a time. This manual's deployment settings select voice mode and leave the camera disabled. For voice only, build the matching voice configuration and package that variant as described next.
+A full bundle includes both executables, but the device runs only one at a time. Supervised deployment selects video by default. For voice only, build and package the matching voice variant and explicitly set `"video": false` in deployment settings.
 
 <!-- page -->
 
@@ -202,7 +202,7 @@ cat > local/deployment/settings.json <<'JSON'
 {
   "server": "https://botstation.agora.io/api",
   "device_id": "RV1126B-EXAMPLE-0001",
-  "video": false,
+  "video": true,
   "wifi_interface": "wlan0"
 }
 JSON
@@ -212,6 +212,8 @@ chmod 600 local/deployment/settings.json
 3. Check the identity, service region and Wi-Fi interface. IDs allow 1–32 ASCII letters, digits and `_.:-`. Never share the example ID between devices.
 
 Only these four fields are accepted; do not add Wi-Fi passwords or authentication tokens. The example selects the international service. For China, use `https://botstation.shengwang.cn/api`. The explicit deployment `server` overrides language defaults. Preserve the original server, ID and data directory when upgrading a bound device.
+
+Omitting `video` defaults to `true`, selecting the video executable in a full bundle. Set it explicitly to `false` for voice deployment, including a voice-only bundle.
 
 <!-- page -->
 
@@ -226,7 +228,7 @@ python3 scripts/deploy-rv1126b.py preflight \
 
 Expected: platform ready; `auth=absent` is allowed for a new unbound device, while an existing identity must match. Correct mismatched settings; do not delete binding files to bypass checks.
 
-2. Preview deployment and confirm the bundle, language and voice selection.
+2. Preview deployment and confirm the bundle, language and video selection.
 
 ```sh
 python3 scripts/deploy-rv1126b.py deploy \
@@ -289,7 +291,7 @@ Deployment status separates supervision from the verified application version, P
 # 09 Power On and Read Startup Screens
 
 1. Hold the device's single physical button to power on; release when the startup screen appears. A long press is confirmed to switch this device on/off; follow its response rather than a fixed duration.
-2. Once installed, the supervised service starts automatically at boot. It reuses available Wi-Fi or waits for networking before showing setup instructions.
+2. The service starts automatically at boot. “Waiting for network” is normal while Wi-Fi starts. If the system connects to a saved network, the device continues to the service without opening a hotspot.
 
 ![Starting: initializing the application](assets/device-manual-en/starting.png)
 ![Waiting for network: connecting to saved Wi-Fi](assets/device-manual-en/waiting-network.png)
@@ -360,7 +362,7 @@ For server `https://botstation.shengwang.cn/api`, open `https://botstation.sheng
 1. Tap the top-right gear to open settings. Tap Back at top left to close it. Menu touches do not start or end conversations.
 
 ![Main screen: the top-right gear opens settings](assets/device-manual-en/ready.png)
-![Settings: Wi-Fi setup and Power off](assets/device-manual-en/settings-menu.png)
+![Settings menu with Wi-Fi setup, Power off and Factory reset](assets/device-manual-en/settings-menu.png)
 
 2. Choose “Wi-Fi setup” to change networks. The application first ends the conversation and stops the SDK, then enters phone AP setup.
 3. Complete section 10 and wait for ready. The binding is retained; tap again to start a new conversation.
@@ -375,7 +377,7 @@ An explicit `--no-wifi-provisioning` disables automatic and manual AP setup; set
 # 14 Volume and Language Settings
 
 1. Adjust playback volume using the service's supported device volume control. This device has only a physical power button; settings has no volume slider.
-2. Check mute, low and normal playback levels. The range is 0–100, with 0 muted; the initial default is 100.
+2. Check mute, low and normal playback levels. The range is 0–100, with 0 muted; the default is 70 on first use and after a factory reset.
 3. Restart the application or complete Wi-Fi setup and confirm the volume returns. Setup prompts and pairing speech also use saved volume and remain silent when muted.
 
 | Setting | Effect |
@@ -399,14 +401,16 @@ There are no battery, brightness, automatic sleep or OTA menus. Application play
 ![Shutdown confirmation: cancel or confirm](assets/device-manual-en/settings-confirm.png)
 ![Powering off: wait for application and system cleanup](assets/device-manual-en/settings-powering-off.png)
 
-3. Wait for audio, network and display cleanup and normal system shutdown. Do not keep touching the screen.
-4. To power on again, hold the single physical button until the startup screen appears, then release. A long press is confirmed to work; no fixed duration is prescribed.
+3. Wait for cleanup, display shutdown and normal poweroff. The helper turns off the backlight first.
+4. Hold the physical button until the startup screen appears, then release; timing depends on the hardware.
 
 ![Shutdown failed: return at top left and investigate](assets/device-manual-en/settings-error.png)
 
-Screen shutdown requires authorization from the supervised service started by `S99mybot`. A temporary foreground `run.sh` reports shutdown failure; return to keep using it. For a deployed service failure, inspect status and logs.
+UI shutdown requires supervised `S99mybot`. If the request is rejected, use Back to continue.
 
-Exiting the application or stopping `S99mybot` does not power off the device. UI confirmation makes the supervisor call `/sbin/poweroff`; the system power service handles the physical button.
+After cleanup, `poweroff.sh` turns off the backlight and calls `/sbin/poweroff`. Preparation interruption or command failure only triggers a backlight restore attempt. The UI does not return after app exit; inspect private logs and restart the service explicitly.
+
+Ordinary stops restore the prior display. Software poweroff may leave board power on; the physical button's hardware path is unconfirmed.
 
 <!-- page -->
 
@@ -467,6 +471,8 @@ cd /userdata/mybot/current
 ./run.sh
 ```
 
+This step inherits the service's video selection. With `RV1126B_VIDEO` unset, running `./run.sh` directly still selects voice by default.
+
 | Input, then Enter | Action |
 | --- | --- |
 | s / q | Start from ready / end a conversation |
@@ -511,7 +517,7 @@ python3 scripts/deploy-rv1126b.py rollback \
   --execute --start
 ```
 
-Expected: previous runs with the same data directory, supervisor and binding. Rollback does not restore old Wi-Fi/authentication data or enable the original application. After a first installation without previous, ask the maintainer which verified release is installed; rollback needs an actual target.
+Expected: previous runs with the same data directory, supervisor and binding. A video service requires a rollback bundle containing video; it does not switch to voice automatically. Rollback does not restore old Wi-Fi/authentication data or enable the original application. After a first installation without previous, ask the maintainer which verified release is installed; rollback needs an actual target.
 
 <!-- page -->
 
@@ -583,12 +589,12 @@ Reports should include bundle name, SHA256, version, language/video selection, r
 
 <!-- page -->
 
-# 22 Optional Video and Acceptance
+# 22 Video Checks and Acceptance
 
 The camera application is implemented but needs separate validation. Passing voice checks does not prove video works.
 
 1. Confirm the bundle contains video and that ISP services, V4L2 and MPP work. Keep a working voice release before enabling it.
-2. Set `video: true` in deployment settings, preview and deploy. This writes service configuration; it is not a screen toggle. Use normal deployment to avoid concurrent instances.
+2. Deployment settings default to `video: true`; set `video: false` explicitly for voice deployment. Preview and deploy to write the selection into service configuration. This is not a screen toggle. Use normal deployment to avoid concurrent instances.
 3. Once ready, tap to start a conversation and check the first cloud frame and reception. Verify orientation, colors and 640×480 JPEG at up to 3 fps. Tap to end and confirm streaming stops; restart to check recovery and voice/UI concurrency. Ready alone produces no frames. There is no local preview or automatic snapshot storage.
 
 After each installation or upgrade, check these in order and record bundle SHA256, version, date and result:
@@ -605,3 +611,18 @@ After each installation or upgrade, check these in order and record bundle SHA25
 | 8. Optional checks | Record video, AEC, network recovery and endurance separately |
 
 Detailed references: build `docs/user/build.zh-CN.md`, deployment `docs/user/deployment.zh-CN.md`, Wi-Fi `docs/user/wifi-provisioning.zh-CN.md`, configuration `docs/user/configuration.zh-CN.md`. Recorded validation scope is in `docs/validation/README.md`.
+
+<!-- page -->
+
+# 23 Restore Factory Settings
+
+1. Open the top-right gear and choose “Factory reset”. Read the confirmation screen. It lists the local binding, saved Wi-Fi networks and volume that will be cleared. Tap Back at the top left to keep your settings.
+
+![Factory reset confirmation with Back and Reset device](assets/device-manual-en/settings-reset-confirm.png)
+
+2. Lift your finger and tap “Reset device” to confirm. The device ends the current conversation and restarts the agent-studio-device-firmware service. Wait for the screen to show the hotspot name and address.
+3. Connect your phone to that hotspot. Follow section 10 to set up Wi-Fi, then section 11 to pair using the new code. The volume returns to 70.
+
+The device keeps its ID, server, software version and video setting. You can reset it while offline. An interrupted reset resumes at the next startup. If the request is rejected, return to Settings and try again. If hotspot instructions never appear, ask the maintainer to check the service status and private logs.
+
+Maintenance backups and logs are retained and may contain old credentials. Before transferring the device, the administrator should remove its binding in the console for its service region and handle the remaining backups and logs.

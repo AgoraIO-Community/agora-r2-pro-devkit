@@ -37,7 +37,7 @@ build/manual-tools/bin/python scripts/check-device-manual.py --reproduce \
 ```
 
 `--date` 改为本次文档日期；不指定时沿用 manifest 日期。刷新命令先构建两种语言的
-`mybot-ui-preview`，通过受维护的 `--manual` 场景导出 15 张 640×480 逻辑画面，
+`mybot-ui-preview`，通过受维护的 `--manual` 场景导出 16 张 640×480 逻辑画面，
 再生成 PNG 和 PDF，最后登记输入/输出摘要。场景使用虚构热点 `mybot-a1b2` 和配对码
 `000042`，图片是 renderer 输出，不是真机照片，不代表新的硬件验证。
 
