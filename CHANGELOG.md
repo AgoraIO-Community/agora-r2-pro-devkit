@@ -2,6 +2,11 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.6.0 — Unreleased
+
+- Add a confirmed local factory reset in Settings. The service forgets Wi-Fi and local binding credentials, then opens Wi-Fi setup again.
+- Start playback at 70 on first use and after reset. Existing saved volume levels take precedence.
+
 ## 0.5.5 — Unreleased
 
 - Disable the owned display output for an accepted UI poweroff instead of restoring a framebuffer that may already be gone; retain normal display restoration for ordinary stops.

@@ -26,6 +26,7 @@
 
 ```text
 bin/mybot-supervisor
+bin/mybot-factory-reset
 supervisor-manifest.json
 abi-report-supervisor.json
 assets/service/S99mybot
@@ -120,3 +121,9 @@ python3 scripts/deploy-rv1126b.py rollback --serial SERIAL \
 部署期间持有 `/run/mybot-deploy.lock`。失败会保留锁、备份和已验证 release 供检查，不会未经检查恢复网络或覆盖应用数据。此时先保持业务停止，检查设备备份及失败步骤，修复后由设备维护者移除确认失效的部署锁，再用新的 tag 重试或选择已验证版本。不要直接解包备份覆盖整个系统或当前 KV；恢复系统配置须逐项检查，凭据继续留在设备。
 
 完成后分别检查版本/包摘要、服务 start/stop/restart、绑定复用、音量恢复、重启自启动、既有 Wi-Fi 复用、AP 配网及失败重试、系统时间、ADB/USB 网络、音频和可选视频。主机测试只验证工具的保护逻辑，不能替代这些设备结果；实际记录见[验证状态](../validation/README.md)。
+
+## 恢复出厂时的运维检查
+
+启用恢复出厂的服务只接受本机监督器验证的直接应用子进程请求。监督器在应用退出前持久保存已确认的请求。清理结束后，下一次受监督启动先处理 `/userdata/mybot/factory-reset.pending`，成功清除活动数据才重新启动应用。服务使用 `/userdata/mybot/factory-reset.setup` 保持首次配网流程直至新网络配置完成。遇到故障时先检查服务状态和私有日志，保留这些标记供服务重试，避免切换旧版本而跳过尚未完成的恢复。
+
+部署备份 `/userdata/mybot/backups/<tag>/original.tar.gz` 包含当时的私有数据和 Wi-Fi 配置。用户恢复只清除当前设置，维护备份和日志仍由管理员管理。设备转让时还应在相同服务区的控制台解除绑定，并按维护政策处理备份和日志。[用户操作](settings.zh-CN.md)

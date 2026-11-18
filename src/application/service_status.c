@@ -30,6 +30,7 @@ const char *rv1126b_app_state_name(rv1126b_app_state_t state) {
         [RV1126B_APP_WIFI_ERROR] = "wifi_error",
         [RV1126B_APP_STOPPING] = "stopping",
         [RV1126B_APP_STOPPED] = "stopped",
+        [RV1126B_APP_FACTORY_RESET] = "factory_reset",
     };
     return (unsigned int)state < RV1126B_APP_STATE_COUNT ? names[state] : NULL;
 }

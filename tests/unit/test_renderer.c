@@ -139,12 +139,18 @@ static void check_settings(uint32_t *now) {
         "设置",
         "确认关机？",
         "正在关机",
-        "关机失败"
+        "关机失败",
+        "恢复出厂设置？",
+        "正在恢复设置",
+        "未能开始恢复"
 #else
         "Settings",
         "Power off?",
         "Powering off",
-        "Power off failed"
+        "Power off failed",
+        "Factory reset?",
+        "Resetting device",
+        "Reset could not start"
 #endif
     };
 #if CONFIG_MYBOT_LANGUAGE_ZH_CN
@@ -154,8 +160,8 @@ static void check_settings(uint32_t *now) {
     const char *back_text = "Back";
     const char *cancel_text = "Cancel";
 #endif
-    uint64_t pages[MYBOT_SETTINGS_POWEROFF_ERROR];
-    for (int page = MYBOT_SETTINGS_MENU; page <= MYBOT_SETTINGS_POWEROFF_ERROR; ++page) {
+    uint64_t pages[MYBOT_SETTINGS_RESET_ERROR];
+    for (int page = MYBOT_SETTINGS_MENU; page <= MYBOT_SETTINGS_RESET_ERROR; ++page) {
         rv1126b_renderer_settings((mybot_settings_page_t)page);
         rv1126b_renderer_step(*now += 1000);
         pages[page - 1] = hash(rv1126b_renderer_canvas());
@@ -165,7 +171,8 @@ static void check_settings(uint32_t *now) {
         for (int previous = MYBOT_SETTINGS_MENU; previous < page; ++previous)
             CHECK(pages[page - 1] != pages[previous - 1]);
         check_visible_labels(root);
-        if (page == MYBOT_SETTINGS_MENU || page == MYBOT_SETTINGS_POWEROFF_ERROR) {
+        if (page == MYBOT_SETTINGS_MENU || page == MYBOT_SETTINGS_POWEROFF_ERROR ||
+            page == MYBOT_SETTINGS_CONFIRM_RESET || page == MYBOT_SETTINGS_RESET_ERROR) {
             lv_obj_t *back = find_visible_label(root, back_text);
             mybot_settings_rect_t expected = mybot_settings_bounds(MYBOT_SETTINGS_BACK);
             CHECK(back && expected.x == 16 && expected.y == 16);
@@ -182,7 +189,7 @@ static void check_settings(uint32_t *now) {
             CHECK(box.x2 - box.x1 + 1 == expected.width);
             CHECK(box.y2 - box.y1 + 1 == expected.height);
         }
-        if (page == MYBOT_SETTINGS_POWERING_OFF) {
+        if (page == MYBOT_SETTINGS_POWERING_OFF || page == MYBOT_SETTINGS_RESETTING) {
             lv_obj_t *overlay = lv_obj_get_child(root, (int)lv_obj_get_child_count(root) - 1);
             for (unsigned index = 3; index < lv_obj_get_child_count(overlay); ++index)
                 CHECK(!lv_obj_is_visible(lv_obj_get_child(overlay, (int)index)));

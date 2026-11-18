@@ -107,6 +107,15 @@ foreach(part backend process portal service profiles)
     set_tests_properties(wifi-${part} PROPERTIES TIMEOUT 30)
 endforeach()
 
+add_executable(test-factory-reset integration/test_factory_reset.c
+    "${platform_root}/src/services/wifi/factory_reset.c")
+target_include_directories(test-factory-reset PRIVATE "${support_dir}"
+    "${platform_root}/src/services/wifi")
+target_link_libraries(test-factory-reset PRIVATE mybot_wifi)
+target_compile_options(test-factory-reset PRIVATE -Wall -Wextra -Werror -UNDEBUG)
+add_test(NAME factory-reset COMMAND test-factory-reset)
+set_tests_properties(factory-reset PROPERTIES TIMEOUT 30)
+
 add_executable(test-network-startup integration/test_network_startup.c ../src/application/network_gate.c)
 target_include_directories(test-network-startup PRIVATE "${support_dir}" ../src/application
     "${platform_root}/src/services/wifi")

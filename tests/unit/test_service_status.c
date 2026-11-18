@@ -29,7 +29,7 @@ int main(void) {
                               "conversation",      "offline",      "failed",
                               "starting_services", "powering_off", "waiting_network",
                               "waiting_clock",     "ap",           "wifi_error",
-                              "stopping",          "stopped"};
+                              "stopping",          "stopped",      "factory_reset"};
     CHECK(sizeof(expected) / sizeof(expected[0]) == RV1126B_APP_STATE_COUNT);
     for (int state = 0; state < RV1126B_APP_STATE_COUNT; ++state)
         CHECK(!strcmp(rv1126b_app_state_name((rv1126b_app_state_t)state), expected[state]));

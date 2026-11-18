@@ -33,6 +33,8 @@
 #define OWNED_CHILDREN_MAX 256
 #define LOG_FILES 4
 
+typedef enum { TRANSITION_NONE, TRANSITION_POWEROFF, TRANSITION_RESET } transition_t;
+
 typedef struct {
     rv1126b_supervisor_config_t policy;
     int runtime, logs, lock, listener, output, log, stop_client;
@@ -40,7 +42,8 @@ typedef struct {
     char socket_path[sizeof(((struct sockaddr_un *)0)->sun_path)];
     const char *state;
     pid_t child;
-    bool stopping, cleaning, failed, expected_exit, unclean, poweroff_requested;
+    bool stopping, cleaning, failed, unclean;
+    transition_t transition;
     int child_result;
     uint64_t terminate_at, cleanup_at, launch_at, restarts[3];
     unsigned int restart_count;
@@ -343,7 +346,8 @@ static int cleanup_children(supervisor_t *service) {
         return -1;
     for (size_t i = 0; i < count; ++i) {
         pid_t pid = children[i];
-        int number = service->poweroff_requested && !service->unclean ? SIGTERM : SIGKILL;
+        int number =
+            service->transition != TRANSITION_NONE && !service->unclean ? SIGTERM : SIGKILL;
         if (signal_owned(pid, number, true) < 0 && errno != ECHILD)
             return -1;
         int status;
@@ -410,7 +414,6 @@ static int launch(supervisor_t *service) {
     service->child = child;
     service->output = output[0];
     service->cleaning = false;
-    service->expected_exit = false;
     service->child_result = 1;
     publish(service, "running");
     return 0;
@@ -426,7 +429,11 @@ static void reply(int fd, const char *message) {
 static void begin_stop(supervisor_t *service, uint64_t now) {
     if (service->stopping)
         return;
-    service->stopping = service->expected_exit = true;
+    service->stopping = true;
+    /* A concurrent stop takes priority over relaunch. The accepted marker
+     * survives for the next boot, and the child is already releasing resources. */
+    if (service->transition == TRANSITION_RESET)
+        return;
     service->terminate_at = now + service->policy.terminate_timeout_ms;
     if (service->child > 1 && signal_owned(service->child, SIGTERM, false) < 0 && errno != ECHILD)
         service->failed = true;
@@ -463,7 +470,7 @@ static bool poweroff_command_safe(const char *path) {
     return true;
 }
 
-static bool poweroff_peer_is_application(supervisor_t *service, int fd) {
+static bool peer_is_application(supervisor_t *service, int fd) {
     pid_t peer = -1;
     uid_t owner = (uid_t)-1;
 #ifdef __linux__
@@ -496,10 +503,37 @@ static bool poweroff_peer_is_application(supervisor_t *service, int fd) {
            !information.si_pid;
 }
 
-static void accept_poweroff(supervisor_t *service, int fd, uint64_t now) {
-    if (!service->policy.poweroff_command || service->failed || service->unclean ||
-        service->stopping || service->cleaning || !poweroff_peer_is_application(service, fd) ||
-        !poweroff_command_safe(service->policy.poweroff_command)) {
+/* An empty, exclusively created file is a complete journal record. Its name
+ * and the empty contents become durable before the final acknowledgement. */
+static bool persist_reset(const char *path) {
+    int directory = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC | O_NOFOLLOW);
+    if (directory < 0)
+        return false;
+    struct stat status;
+    bool valid = fstat(directory, &status) == 0 && status.st_uid == geteuid() &&
+                 (status.st_mode & 07777) == 0700;
+    const char *name = "factory-reset.pending";
+    int fd =
+        valid ? openat(directory, name, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC | O_NOFOLLOW, 0600)
+              : -1;
+    bool saved = false;
+    if (fd >= 0) {
+        saved = fsync(fd) == 0;
+        if (close(fd) < 0 || fsync(directory) < 0)
+            saved = false;
+        if (!saved && unlinkat(directory, name, 0) == 0)
+            (void)fsync(directory);
+    }
+    close(directory);
+    return saved;
+}
+
+static void accept_transition(supervisor_t *service, int fd, transition_t transition) {
+    if (service->failed || service->unclean || service->stopping || service->cleaning ||
+        service->transition != TRANSITION_NONE || !peer_is_application(service, fd) ||
+        (transition == TRANSITION_RESET && !service->policy.reset_directory) ||
+        (transition == TRANSITION_POWEROFF &&
+         !poweroff_command_safe(service->policy.poweroff_command))) {
         reply(fd, "failed\n");
         return;
     }
@@ -526,17 +560,29 @@ static void accept_poweroff(supervisor_t *service, int fd, uint64_t now) {
         if (memchr(commit, '\n', used))
             break;
     }
-    now = milliseconds();
-    if (used != 7 || memcmp(commit, "commit\n", 7) || !now || write(fd, "committed\n", 10) != 10) {
+    uint64_t now = milliseconds();
+    if (used != 7 || memcmp(commit, "commit\n", 7) || !now) {
         close(fd);
         return;
     }
+    if (transition == TRANSITION_RESET && !persist_reset(service->policy.reset_directory)) {
+        reply(fd, "failed\n");
+        return;
+    }
+    bool acknowledged = write(fd, "committed\n", 10) == 10;
     close(fd);
-    service->poweroff_requested = service->stopping = service->expected_exit = true;
+    if (!acknowledged && transition == TRANSITION_POWEROFF)
+        return;
+    service->transition = transition;
+    service->stopping = transition == TRANSITION_POWEROFF;
     service->terminate_at = now + service->policy.terminate_timeout_ms;
+    /* A committed reset survives loss of its final acknowledgement. Ask the
+     * direct child to exit cleanly even when it cannot observe the response. */
+    if (!acknowledged && signal_owned(service->child, SIGTERM, false) < 0)
+        mark_unclean(service);
     /* The application owns orderly resource release; do not signal it while
      * its acknowledgement is still returning to the product thread. */
-    publish(service, "poweroff_pending");
+    publish(service, transition == TRANSITION_RESET ? "factory_reset_pending" : "poweroff_pending");
 }
 
 static void accept_control(supervisor_t *service, uint64_t now) {
@@ -564,7 +610,9 @@ static void accept_control(supervisor_t *service, uint64_t now) {
         snprintf(response, sizeof(response), "%s\n", service->state);
         reply(fd, response);
     } else if (count == 9 && !memcmp(request, "poweroff\n", 9)) {
-        accept_poweroff(service, fd, now);
+        accept_transition(service, fd, TRANSITION_POWEROFF);
+    } else if (count == 14 && !memcmp(request, "factory_reset\n", 14)) {
+        accept_transition(service, fd, TRANSITION_RESET);
     } else if (count == 5 && !memcmp(request, "stop\n", 5) && service->stop_client < 0) {
         service->stop_client = fd;
         begin_stop(service, now);
@@ -643,7 +691,8 @@ static void dispose(supervisor_t *service) {
 int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
     if (!config || !config->runtime_directory || !config->log_directory || !config->argv ||
         !config->argv[0] || config->argv[0][0] != '/' ||
-        (config->poweroff_command && !poweroff_command_safe(config->poweroff_command)))
+        (config->poweroff_command && !poweroff_command_safe(config->poweroff_command)) ||
+        (config->reset_directory && config->reset_directory[0] != '/'))
         return 1;
     supervisor_t service = {.policy = *config,
                             .runtime = -1,
@@ -717,12 +766,16 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
                 service.child_result =
                     information.si_code == CLD_EXITED ? information.si_status : 1;
                 if (information.si_code != CLD_EXITED &&
-                    (!service.stopping || service.poweroff_requested))
+                    (!service.stopping || service.transition != TRANSITION_NONE))
                     mark_unclean(&service);
-                if (service.poweroff_requested && service.child_result != 0)
+                if (service.transition != TRANSITION_NONE && service.child_result != 0) {
                     service.failed = true;
+                    if (service.transition == TRANSITION_RESET && !service.unclean)
+                        mark_unclean(&service);
+                }
                 service.cleaning = true;
-            } else if (service.stopping && now >= service.terminate_at) {
+            } else if ((service.stopping || service.transition != TRANSITION_NONE) &&
+                       now >= service.terminate_at) {
                 mark_unclean(&service);
                 service.cleaning = true;
             }
@@ -744,8 +797,15 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
                         reply(service.stop_client, "failed\n");
                         service.stop_client = -1;
                     }
-                } else if (service.stopping || service.child_result == 0) {
-                    if (service.stopping && !service.poweroff_requested)
+                } else if (service.transition == TRANSITION_RESET && !service.stopping &&
+                           !service.failed) {
+                    /* launch() execs the same wrapper as a cold boot. It
+                     * completes the journal before launching a fresh app. */
+                    service.transition = TRANSITION_NONE;
+                    service.launch_at = now;
+                } else if (service.stopping || service.transition != TRANSITION_NONE ||
+                           service.child_result == 0) {
+                    if (service.stopping && service.transition == TRANSITION_NONE)
                         service.failed = false; /* A verified clean stop permits replacement. */
                     publish(&service, service.failed ? "failed" : "stopped");
                     finished = true;
@@ -768,7 +828,7 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
                     publish(&service, "failed");
                 }
             } else if (clean < 0 || now >= service.cleanup_at) {
-                if (service.poweroff_requested)
+                if (service.transition != TRANSITION_NONE)
                     mark_unclean(&service);
                 service.failed = true;
                 publish(&service, "failed");
@@ -788,8 +848,8 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
             }
         }
     }
-    bool poweroff = service.poweroff_requested && !service.failed && !service.unclean &&
-                    service.child_result == 0;
+    bool poweroff = service.transition == TRANSITION_POWEROFF && !service.failed &&
+                    !service.unclean && service.child_result == 0;
     int poweroff_log = -1;
     if (poweroff) {
         if (!poweroff_command_safe(service.policy.poweroff_command)) {
@@ -903,15 +963,21 @@ int rv1126b_supervisor_main(int argc, char **argv) {
 #endif
     if (argc == 2 && !strcmp(argv[1], "--help")) {
         puts("mybot-supervisor supervise --runtime DIR --log-dir DIR "
-             "[--poweroff-command EXECUTABLE] -- EXECUTABLE [ARGS...]\n"
+             "[--poweroff-command EXECUTABLE] [--factory-reset] -- EXECUTABLE [ARGS...]\n"
              "mybot-supervisor stop|status --runtime DIR");
         return 0;
     }
     if (argc < 4)
         return 2;
     const char *runtime = NULL, *logs = NULL, *poweroff = NULL;
+    bool reset = false;
     int argument = 2;
     while (argument + 1 < argc && strcmp(argv[argument], "--")) {
+        if (!strcmp(argv[argument], "--factory-reset")) {
+            reset = true;
+            ++argument;
+            continue;
+        }
         if (!strcmp(argv[argument], "--runtime"))
             runtime = argv[argument + 1];
         else if (!strcmp(argv[argument], "--log-dir"))
@@ -923,7 +989,7 @@ int rv1126b_supervisor_main(int argc, char **argv) {
         argument += 2;
     }
     if (!strcmp(argv[1], "status") || !strcmp(argv[1], "stop")) {
-        if (!runtime || logs || poweroff || argument != argc)
+        if (!runtime || logs || poweroff || reset || argument != argc)
             return 2;
         return rv1126b_supervisor_control(runtime, !strcmp(argv[1], "stop"));
     }
@@ -933,7 +999,8 @@ int rv1126b_supervisor_main(int argc, char **argv) {
     rv1126b_supervisor_config_t config = {.runtime_directory = runtime,
                                           .log_directory = logs,
                                           .argv = argv + argument + 1,
-                                          .poweroff_command = poweroff};
+                                          .poweroff_command = poweroff,
+                                          .reset_directory = reset ? "/userdata/mybot" : NULL};
     return rv1126b_supervisor_run(&config);
 }
 

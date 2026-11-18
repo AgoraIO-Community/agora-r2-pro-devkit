@@ -213,7 +213,7 @@ void rv1126b_ui_time_status(mybot_display_clock_state_t status) {
 }
 
 void rv1126b_ui_settings(mybot_settings_page_t page) {
-    if (page < MYBOT_SETTINGS_CLOSED || page > MYBOT_SETTINGS_POWEROFF_ERROR)
+    if (page < MYBOT_SETTINGS_CLOSED || page > MYBOT_SETTINGS_RESET_ERROR)
         return;
     pthread_mutex_lock(&s_ui.lock);
     if (s_ui.settings != page) {

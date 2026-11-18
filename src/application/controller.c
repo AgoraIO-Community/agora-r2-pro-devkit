@@ -4,6 +4,7 @@
 #include "network_gate.h"
 #include "service_status.h"
 #include "mybot_platform/display.h"
+#include "mybot_platform/factory_reset.h"
 #include "mybot_platform/controls.h"
 #include "mybot_platform/power.h"
 #include "mybot_platform/wifi.h"
@@ -68,7 +69,17 @@ static void stop_sdk(void) {
 }
 
 /* The supervisor owns the system transition; this process owns orderly cleanup. */
-static bool accept_poweroff(bool *accepted) {
+static bool accept_system_action(bool *release_display) {
+    if (rv1126b_key_factory_reset_requested()) {
+        if (rv1126b_factory_reset_request() < 0) {
+            fprintf(stderr, "Factory reset request rejected: %s\n", strerror(errno));
+            rv1126b_input_settings_page(MYBOT_SETTINGS_RESET_ERROR);
+            return false;
+        }
+        *release_display = true;
+        publish_status(RV1126B_APP_FACTORY_RESET);
+        return true;
+    }
     if (!rv1126b_key_poweroff_requested())
         return false;
     if (rv1126b_poweroff_request() < 0) {
@@ -76,7 +87,7 @@ static bool accept_poweroff(bool *accepted) {
         rv1126b_input_settings_page(MYBOT_SETTINGS_POWEROFF_ERROR);
         return false;
     }
-    *accepted = true;
+    *release_display = true;
     publish_status(RV1126B_APP_POWERING_OFF);
     /* Allow the UI worker to present the final state before resource teardown. */
     const struct timespec present = {.tv_sec = 0, .tv_nsec = 150000000};
@@ -95,7 +106,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
     const unsigned int rotation = options.rotation, seconds = options.seconds;
     int failed = 0;
     bool sdk_needs_stop = false, ui_started = false, wifi_started = false, volume_started = false;
-    bool input_started = false, poweroff_requested = false;
+    bool input_started = false, release_display = false;
     rv1126b_time_sync_t *time_sync = NULL;
     char dhcp_script[PATH_MAX];
     if (!demo) {
@@ -166,7 +177,14 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
         goto cleanup;
     }
     const char *wifi_runtime = getenv("MYBOT_WIFI_RUNTIME_DIR");
+    int setup_pending = getenv("MYBOT_SUPERVISOR_RUNTIME") ? rv1126b_factory_setup_pending() : 0;
+    if (setup_pending < 0 || (setup_pending && !options.wifi_provisioning)) {
+        fprintf(stderr, "Factory setup requires a valid marker and enabled Wi-Fi provisioning\n");
+        failed = 1;
+        goto cleanup;
+    }
     const rv1126b_wifi_config_t wifi = {
+        .force_ap = setup_pending != 0,
         .enabled = options.wifi_provisioning,
         .interface_name = options.wifi_interface,
         .storage_directory = getenv("MYBOT_KV_STORE_DIR"),
@@ -179,7 +197,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
         goto cleanup;
     }
     wifi_started = true;
-    bool require_provisioning = false;
+    bool require_provisioning = setup_pending != 0;
     for (;;) {
         const mybot_lcd_content_t waiting = {MYBOT_LCD_SCREEN_WIFI_PROVISIONING, {0}, 0};
         rv1126b_ui_set_state(MYBOT_STATE_WIFI_PROVISIONING);
@@ -194,7 +212,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
         rv1126b_network_gate_t network_gate = {0};
         fprintf(stdout, "Waiting for usable IPv4 routing and system time\n");
         while (!*exit_requested && monotonic_ms() < deadline) {
-            if (rv1126b_key_exit_requested() || accept_poweroff(&poweroff_requested))
+            if (rv1126b_key_exit_requested() || accept_system_action(&release_display))
                 goto cleanup;
             if (rv1126b_key_wifi_requested()) {
                 if (options.wifi_provisioning) {
@@ -249,6 +267,14 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
                 rv1126b_wifi_request_recovery();
             }
             bool network_ready = network_action == RV1126B_NETWORK_GATE_READY;
+            if (setup_pending && network_ready && status.state == RV1126B_WIFI_ONLINE) {
+                if (rv1126b_factory_setup_complete() < 0) {
+                    fprintf(stderr, "Cannot record completed factory network setup\n");
+                    failed = 1;
+                    goto cleanup;
+                }
+                setup_pending = 0;
+            }
             rv1126b_time_sync_state_t time_state = rv1126b_time_sync_poll(time_sync, network_ready);
             if ((int)time_state != last_time_state) {
                 fprintf(stdout, "Time readiness state=%d%s%s\n", time_state,
@@ -279,7 +305,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
                 for (unsigned int hold = 0; hold < 20 && platform.enable_ui && !*exit_requested &&
                                             monotonic_ms() < deadline && !rv1126b_ui_failed();
                      ++hold) {
-                    if (rv1126b_key_exit_requested() || accept_poweroff(&poweroff_requested))
+                    if (rv1126b_key_exit_requested() || accept_system_action(&release_display))
                         goto cleanup;
                     nanosleep(&interval, NULL);
                 }
@@ -308,7 +334,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
         bool recover_network = false;
         mybot_state_t previous = MYBOT_STATE_STOPPED;
         while (!*exit_requested && monotonic_ms() < deadline && mybot_is_running()) {
-            if (rv1126b_key_exit_requested() || accept_poweroff(&poweroff_requested))
+            if (rv1126b_key_exit_requested() || accept_system_action(&release_display))
                 goto cleanup;
             if (rv1126b_key_wifi_requested()) {
                 if (options.wifi_provisioning) {
@@ -378,7 +404,7 @@ cleanup:
     if (input_started && rv1126b_input_stop() < 0)
         failed = 1;
     if (ui_started) {
-        int result = poweroff_requested ? rv1126b_ui_stop_for_poweroff() : rv1126b_ui_stop();
+        int result = release_display ? rv1126b_ui_stop_for_poweroff() : rv1126b_ui_stop();
         if (result < 0)
             failed = 1;
     }
