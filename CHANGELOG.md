@@ -2,6 +2,13 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.5.5 — Unreleased
+
+- Disable the owned display output for an accepted UI poweroff instead of restoring a framebuffer that may already be gone; retain normal display restoration for ordinary stops.
+- Preserve helper diagnostics after supervisor cleanup and prevent late shutdown signals from restoring the backlight after a successful system poweroff request.
+
+Actual poweroff and physical screen darkness remain separate hardware acceptance steps.
+
 ## 0.5.4 — Unreleased
 
 - Switch off and verify the board backlight after planned application cleanup and before normal system poweroff; restore its previous state if the transition fails.

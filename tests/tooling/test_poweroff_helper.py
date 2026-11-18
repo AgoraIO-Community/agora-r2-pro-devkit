@@ -59,7 +59,7 @@ elif operation=='poweroff':
     (base/'poweroff-called').write_text('yes')
     if options.get('signal'):
         os.kill(os.getppid(),signal.SIGTERM)
-        sys.exit(1)
+        sys.exit(0 if options.get('signal_success') else 1)
     sys.exit(7 if options.get('poweroff_failure') else 0)
 else:
     raise RuntimeError('Unknown fixture command')
@@ -113,6 +113,47 @@ else:
         self.options["signal"] = True
         result = self.execute()
         self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((self.base / "poweroff-called").exists())
+        self.assert_state()
+
+    def test_successful_poweroff_does_not_restore_on_shutdown_signal(self):
+        self.options.update(signal=True, signal_success=True)
+        result = self.execute()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.base / "poweroff-called").exists())
+        self.assert_state("0", "4")
+
+    def test_signal_after_success_before_restore_flag_clear_does_not_restore(self):
+        source = self.helper.read_text()
+        boundary = "    restore=0\n    exit 0"
+        self.assertEqual(source.count(boundary), 1)
+        self.helper.write_text(source.replace(
+            boundary, '    kill -TERM "$$"\n' + boundary, 1))
+        result = self.execute()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.base / "poweroff-called").exists())
+        self.assert_state("0", "4")
+
+    def test_preparation_signal_rolls_back_without_requesting_poweroff(self):
+        source = self.helper.read_text()
+        boundary = "printf '0\\n' > \"$backlight/brightness\"\n"
+        self.assertEqual(source.count(boundary), 1)
+        self.helper.write_text(source.replace(
+            boundary, boundary + 'kill -TERM "$$"\n', 1))
+        result = self.execute()
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse((self.base / "poweroff-called").exists())
+        self.assert_state()
+
+    def test_repeated_signal_cannot_interrupt_backlight_rollback(self):
+        self.options["poweroff_failure"] = True
+        source = self.helper.read_text()
+        boundary = "printf '%s\\n' \"$brightness\" > \"$backlight/brightness\" &&\n"
+        self.assertEqual(source.count(boundary), 1)
+        self.helper.write_text(source.replace(
+            boundary, boundary + '               kill -TERM "$$" &&\n', 1))
+        result = self.execute()
+        self.assertEqual(result.returncode, 1, result.stderr)
         self.assertTrue((self.base / "poweroff-called").exists())
         self.assert_state()
 

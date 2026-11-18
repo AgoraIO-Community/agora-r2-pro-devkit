@@ -13,7 +13,7 @@ static struct {
     pthread_mutex_t lock;
     pthread_cond_t ready;
     pthread_t thread;
-    bool started, stopping, accepting, pending, startup_done, failed;
+    bool started, stopping, accepting, pending, startup_done, failed, poweroff_requested;
     const char *device;
     unsigned rotation;
     int expression;
@@ -68,7 +68,10 @@ static void *ui_worker(void *unused) {
         nanosleep(&interval, NULL);
     }
     rv1126b_renderer_destroy();
-    if (rv1126b_drm_stop() < 0)
+    pthread_mutex_lock(&s_ui.lock);
+    bool poweroff = s_ui.poweroff_requested;
+    pthread_mutex_unlock(&s_ui.lock);
+    if ((poweroff ? rv1126b_drm_stop_for_poweroff() : rv1126b_drm_stop()) < 0)
         result = -1;
     pthread_mutex_lock(&s_ui.lock);
     s_ui.accepting = false;
@@ -85,7 +88,7 @@ int rv1126b_ui_start(const char *device, unsigned rotation) {
     }
     s_ui.device = device;
     s_ui.rotation = rotation;
-    s_ui.stopping = s_ui.startup_done = s_ui.failed = false;
+    s_ui.stopping = s_ui.startup_done = s_ui.failed = s_ui.poweroff_requested = false;
     s_ui.expression = -1;
     s_ui.settings = MYBOT_SETTINGS_CLOSED;
     s_ui.latest = (mybot_lcd_content_t){MYBOT_LCD_SCREEN_STARTING, {0}, 0};
@@ -105,9 +108,11 @@ int rv1126b_ui_start(const char *device, unsigned rotation) {
     return failed ? -1 : 0;
 }
 
-int rv1126b_ui_stop(void) {
+static int stop(bool poweroff) {
     pthread_mutex_lock(&s_ui.lock);
     bool started = s_ui.started;
+    if (started && poweroff)
+        s_ui.poweroff_requested = true;
     s_ui.stopping = true;
     s_ui.accepting = false;
     pthread_mutex_unlock(&s_ui.lock);
@@ -120,6 +125,14 @@ int rv1126b_ui_stop(void) {
     bool failed = s_ui.failed;
     pthread_mutex_unlock(&s_ui.lock);
     return failed ? -1 : 0;
+}
+
+int rv1126b_ui_stop(void) {
+    return stop(false);
+}
+
+int rv1126b_ui_stop_for_poweroff(void) {
+    return stop(true);
 }
 
 void rv1126b_ui_show(const mybot_lcd_content_t *content) {

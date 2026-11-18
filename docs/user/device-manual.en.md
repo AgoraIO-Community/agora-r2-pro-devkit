@@ -401,16 +401,16 @@ There are no battery, brightness, automatic sleep or OTA menus. Application play
 ![Shutdown confirmation: cancel or confirm](assets/device-manual-en/settings-confirm.png)
 ![Powering off: wait for application and system cleanup](assets/device-manual-en/settings-powering-off.png)
 
-3. Wait for cleanup and normal shutdown; the helper turns off the backlight first. Do not keep touching the screen.
-4. To restart, hold the single physical button until the startup screen appears, then release. No fixed duration is prescribed.
+3. Wait for cleanup, display shutdown and normal poweroff. The helper turns off the backlight first.
+4. Hold the physical button until the startup screen appears, then release; timing depends on the hardware.
 
 ![Shutdown failed: return at top left and investigate](assets/device-manual-en/settings-error.png)
 
-UI shutdown needs supervised `S99mybot`. A foreground `run.sh` reports failure; return to continue. Inspect service logs for supervised failures.
+UI shutdown requires supervised `S99mybot`. If the request is rejected, use Back to continue.
 
-After cleanup, `poweroff.sh` sets and verifies pwm-backlight `brightness=0` and `bl_power=4`, then calls `/sbin/poweroff`. On failure or interruption, it attempts to restore prior values.
+After cleanup, `poweroff.sh` turns off the backlight and calls `/sbin/poweroff`. Preparation interruption or command failure only triggers a backlight restore attempt. The UI does not return after app exit; inspect private logs and restart the service explicitly.
 
-Ordinary stops restore the prior display without disabling its backlight. Software poweroff does not guarantee all board power is off; the physical button's hardware path remains unconfirmed.
+Ordinary stops restore the prior display. Software poweroff may leave board power on; the physical button's hardware path is unconfirmed.
 
 <!-- page -->
 

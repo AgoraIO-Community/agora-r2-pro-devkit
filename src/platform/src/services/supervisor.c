@@ -790,20 +790,46 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
     }
     bool poweroff = service.poweroff_requested && !service.failed && !service.unclean &&
                     service.child_result == 0;
+    int poweroff_log = -1;
     if (poweroff) {
-        publish(&service, "poweroff");
-        if (service.log >= 0)
-            (void)fsync(service.log);
+        if (!poweroff_command_safe(service.policy.poweroff_command)) {
+            service.failed = true;
+            poweroff = false;
+            const char message[] = "Supervisor: unsafe poweroff command\n";
+            (void)append_log(&service, message, sizeof(message) - 1);
+            publish(&service, "failed");
+        } else {
+            publish(&service, "poweroff");
+            poweroff_log = fcntl(service.log, F_DUPFD_CLOEXEC, STDERR_FILENO + 1);
+            if (poweroff_log < 0) {
+                const char message[] = "Supervisor: cannot preserve poweroff diagnostics\n";
+                (void)append_log(&service, message, sizeof(message) - 1);
+                service.failed = true;
+                poweroff = false;
+                publish(&service, "failed");
+            }
+            if (service.log >= 0)
+                (void)fsync(service.log);
+        }
     }
     dispose(&service);
     if (poweroff) {
         /* Close the control socket before PID1 can execute rcK/S99mybot stop:
          * shutdown must never wait for a supervisor waiting for shutdown. */
-        if (!poweroff_command_safe(service.policy.poweroff_command))
+        if (dup2(poweroff_log, STDERR_FILENO) < 0) {
+            (void)dprintf(poweroff_log, "Supervisor: cannot attach poweroff diagnostics\n");
+            close(poweroff_log);
             return 1;
+        }
+        close(poweroff_log);
+        if (!poweroff_command_safe(service.policy.poweroff_command)) {
+            fprintf(stderr, "Supervisor: unsafe poweroff command\n");
+            return 1;
+        }
         sync();
         char *const arguments[] = {(char *)service.policy.poweroff_command, NULL};
         execv(service.policy.poweroff_command, arguments);
+        fprintf(stderr, "Supervisor: cannot execute poweroff helper: %s\n", strerror(errno));
         return 1;
     }
     return service.failed ? 1 : 0;

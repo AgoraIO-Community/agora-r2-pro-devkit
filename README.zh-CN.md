@@ -4,7 +4,7 @@
 
 声网官方的 RV1126B Linux 应用，基于 MyBot 1.3.0，提供 AP 配网及语音引导、HTTPS 绑定、双向语音、稳定设备身份和音量持久化、像素眼镜 UI，以及可选的 V4L2/MPP JPEG 上行。
 
-当前源码版本为 **<!-- project-version -->0.5.4<!-- /project-version -->**，面向 **RV1126B TEST2 RK805B V10**。源码检查、交叉构建与真机验证分别记录在[验证状态](docs/validation/README.md)；新包不继承旧包的硬件验收结论。
+当前源码版本为 **<!-- project-version -->0.5.5<!-- /project-version -->**，面向 **RV1126B TEST2 RK805B V10**。源码检查、交叉构建与真机验证分别记录在[验证状态](docs/validation/README.md)；新包不继承旧包的硬件验收结论。
 
 ## 使用
 

@@ -1934,7 +1934,7 @@
     "packaging/service/run-service.sh": "18766617fe15360a1c852d8d9629afac06619a4c666cd1f9d3215832b6d39505",
     "packaging/service/audio-prepare.sh": "b17f5f91773709ffeba80582c61b458ab8ba13911451f0a69c10289dd4d2a6db",
     "packaging/service/mybot-rv1126b.conf": "77aef6516ba0d5d962d3f0e1a40d821b5b977c9914af77343118ae567aa9ab87",
-    "packaging/service/poweroff.sh": "6cb4bbfd968ec1958ccd0b0193eeea9b86fe6971d549bca3ef7c8596a5a284da"
+    "packaging/service/poweroff.sh": "a545bb921d463720b829d4046a362dc4ef037f040dba69e90a2fe7254c1556f7"
   },
   "vendor_root": "vendor"
 }

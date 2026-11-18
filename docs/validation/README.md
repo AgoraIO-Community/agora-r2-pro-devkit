@@ -1,6 +1,6 @@
 # 当前验证状态
 
-更新日期：2026-11-18。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前候选为 **0.5.4**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
+更新日期：2026-11-18。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前候选为 **0.5.5**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
 
 ## 治理专项
 
@@ -109,6 +109,18 @@ ctest --test-dir build/host-asan --output-on-failure \
 以 tag `20261118-backlight-054` 部署至当前设备，保留 0.5.3 为 previous，默认视频开启。实际运行路径、版本及 PID 核对通过，服务 running、应用 ready；安装后的 helper 与上面已测试字节一致，监督器实际 `--poweroff-command` 指向该 helper。66 项内部摘要、身份/绑定、两个私有 KV 与 Wi-Fi 配置均核对通过，最新启动日志无错误、清理或监督失败；普通升级后的背光仍为 200/200/0。脱敏回执和结果位于 `local/deployment/20261118-backlight-054/`。
 
 这证明 PWM 背光控制、失败恢复及新关机入口安装在本机可执行；未执行真实关机，也未验证电池/USB 供电下的所有电源轨断电、关机后屏幕目视效果或再次按键开机，不把可逆测试写成实际断电验收。
+
+## 2026-11-18：实际关机清理路径修复
+
+用户实测 0.5.4 UI 关机仍有亮度。重新读取既有固定格式日志得到完整顺序：`Settings page=3` → `supervisor: poweroff_pending` → `DRM: cannot restore CRTC: No such file or directory` → `supervisor: failed`，没有 `supervisor: poweroff`。这次 UI 请求因显示清理返回非零而被保护逻辑拦截，尚未执行背光脚本；此前独立的可逆背光测试没有覆盖这一清理失败。
+
+0.5.5 仅在监督器已接受关机请求时使用专门的显示停止接口：显示 worker 持有 DRM 所有权时关闭当前 CRTC，释放资源，不恢复可能已经失效的旧 framebuffer。普通停止仍尝试恢复旧输出；真实关闭失败仍返回错误并阻止关机。监督器在释放控制 socket 后让 helper 的 stderr 继承现有私有日志，避免最后阶段失败不可见。
+
+另用安全 host 夹具复现了独立的信号交接问题：旧 helper 的假 poweroff 即使返回成功，同时收到 TERM 也会恢复背光；它不是上述实际失败的根因。新版只在系统关机交接阶段忽略可处理的迟到信号，准备阶段中断和命令非零仍回滚，回滚自身不再被重复信号截断。
+
+源码检查：中文、英文、UBSan 的 `ui-runtime` / `drm-lifecycle` / `product-controller` / `supervisor` 各 **4/4**，包含失效旧 FB、真实 disable 失败、生命周期重置、请求拒绝、helper 私有诊断和日志复制失败。helper 安全模拟测试 **14/14**，不执行实际关机。0.5.5 双语手册刷新和重现通过，各 24 页、22 个书签，48 页文字边界检查通过，字体和 UI PNG 未改。新设备只读检查 `CONFIG_FB` 未开启，且无 framebuffer 设备节点，完整真机链仍需实际观察关闭后的 DSI 状态。
+
+完整 UI 模拟关机、目标包和更新结果将在执行后补充；未将此前 helper 单测写作整条关机流程通过，也不以当前重启后的背光值推断关机末态。
 
 ## 如何复核
 

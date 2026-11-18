@@ -83,7 +83,7 @@ python3 scripts/deploy-rv1126b.py deploy --serial SERIAL \
 
 写入顺序为：只读平台/能力/身份检查 → 设备内完整备份 → 上传及再次校验 → 解包为独立 release → 用选定 profile 执行无硬件访问的 `--version` 加载检查 → 再核对身份 → 停止旧服务 → 安装稳定服务配置 → 原子切换链接。停止命令失败、旧进程仍占用或校验失败时不继续。保留 ALSA 配置文件，不禁用 chronyd、ADB 或电源服务。每次服务启动前，`audio-prepare.sh` 通过 `amixer cset` 设置并读回核对 `ACodec_LP Digital Gain Volume=0`、`ACodec_LP PGA Gain Volume=23` 两项采集控制；这会修改声卡的运行时 mixer 状态，不修改播放控制或写入 ALSA 配置文件。
 
-部署同时安装固定的 `/etc/mybot-rv1126b/poweroff.sh`。只有已确认的受监督关机在清理完成后调用它，将板级背光 `brightness` 设为 0、`bl_power` 设为 4 并读回，再请求 `/sbin/poweroff`；失败或信号中断尝试恢复原值。普通服务停止、重启及版本切换继续恢复原显示，不主动关闭背光。软件关机不等于所有电源掉电，实体长按的实际硬件链路尚未确认。
+部署同时安装固定的 `/etc/mybot-rv1126b/poweroff.sh`。只有已确认的受监督关机在清理完成后调用它，将板级背光 `brightness` 设为 0、`bl_power` 设为 4 并读回，再请求 `/sbin/poweroff`；准备中断或命令失败尝试恢复原值，进入系统关机调用后不因关闭信号复亮；helper 诊断进入私有日志。已接受的计划关机关闭应用显示输出，普通服务停止、重启及版本切换继续恢复原显示。软件关机不等于所有电源掉电，实体长按的实际硬件链路尚未确认。
 
 原 `botstation-device` 配置改为 `BOTSTATION_ENABLED=0`，其 `S99botstation-device` 移入 `/etc/mybot-rv1126b/disabled/`，避免开机重复占用。系统 dnsmasq 配置限制为 `interface=usb0`、`bind-dynamic`，保留现有 USB 监听地址与 DHCP 范围，USB 接口尚无 IPv4 时也不会抢占 AP 地址。dhcpcd 增加 `denyinterfaces mbap*`，防止其接管临时 AP；网络租约 hook 安装到 `/lib/dhcpcd/dhcpcd-hooks/99-mybot-lease`（0644），运行记录目录 `/run/mybot-network/leases` 为 0700。操作者在确认连接条件后分别受控重载：
 

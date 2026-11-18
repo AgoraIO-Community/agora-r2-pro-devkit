@@ -68,7 +68,7 @@ static void stop_sdk(void) {
 }
 
 /* The supervisor owns the system transition; this process owns orderly cleanup. */
-static bool accept_poweroff(void) {
+static bool accept_poweroff(bool *accepted) {
     if (!rv1126b_key_poweroff_requested())
         return false;
     if (rv1126b_poweroff_request() < 0) {
@@ -76,6 +76,7 @@ static bool accept_poweroff(void) {
         rv1126b_input_settings_page(MYBOT_SETTINGS_POWEROFF_ERROR);
         return false;
     }
+    *accepted = true;
     publish_status(RV1126B_APP_POWERING_OFF);
     /* Allow the UI worker to present the final state before resource teardown. */
     const struct timespec present = {.tv_sec = 0, .tv_nsec = 150000000};
@@ -94,7 +95,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
     const unsigned int rotation = options.rotation, seconds = options.seconds;
     int failed = 0;
     bool sdk_needs_stop = false, ui_started = false, wifi_started = false, volume_started = false;
-    bool input_started = false;
+    bool input_started = false, poweroff_requested = false;
     rv1126b_time_sync_t *time_sync = NULL;
     char dhcp_script[PATH_MAX];
     if (!demo) {
@@ -193,7 +194,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
         rv1126b_network_gate_t network_gate = {0};
         fprintf(stdout, "Waiting for usable IPv4 routing and system time\n");
         while (!*exit_requested && monotonic_ms() < deadline) {
-            if (rv1126b_key_exit_requested() || accept_poweroff())
+            if (rv1126b_key_exit_requested() || accept_poweroff(&poweroff_requested))
                 goto cleanup;
             if (rv1126b_key_wifi_requested()) {
                 if (options.wifi_provisioning) {
@@ -278,7 +279,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
                 for (unsigned int hold = 0; hold < 20 && platform.enable_ui && !*exit_requested &&
                                             monotonic_ms() < deadline && !rv1126b_ui_failed();
                      ++hold) {
-                    if (rv1126b_key_exit_requested() || accept_poweroff())
+                    if (rv1126b_key_exit_requested() || accept_poweroff(&poweroff_requested))
                         goto cleanup;
                     nanosleep(&interval, NULL);
                 }
@@ -307,7 +308,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
         bool recover_network = false;
         mybot_state_t previous = MYBOT_STATE_STOPPED;
         while (!*exit_requested && monotonic_ms() < deadline && mybot_is_running()) {
-            if (rv1126b_key_exit_requested() || accept_poweroff())
+            if (rv1126b_key_exit_requested() || accept_poweroff(&poweroff_requested))
                 goto cleanup;
             if (rv1126b_key_wifi_requested()) {
                 if (options.wifi_provisioning) {
@@ -376,8 +377,11 @@ cleanup:
         rv1126b_volume_shutdown();
     if (input_started && rv1126b_input_stop() < 0)
         failed = 1;
-    if (ui_started && rv1126b_ui_stop() < 0)
-        failed = 1;
+    if (ui_started) {
+        int result = poweroff_requested ? rv1126b_ui_stop_for_poweroff() : rv1126b_ui_stop();
+        if (result < 0)
+            failed = 1;
+    }
     if (!demo)
         publish_status(failed ? RV1126B_APP_FAILED : RV1126B_APP_STOPPED);
     return failed ? 1 : 0;

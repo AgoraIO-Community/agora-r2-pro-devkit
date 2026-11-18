@@ -8,7 +8,7 @@
 #include <time.h>
 
 static pthread_mutex_t test_lock = PTHREAD_MUTEX_INITIALIZER;
-static int failure, started, stopped, renders, last_clock_state;
+static int failure, started, stopped, poweroff_stops, renders, last_clock_state;
 static bool last_wifi_failed;
 static mybot_settings_page_t last_settings;
 static int settings_updates;
@@ -22,6 +22,12 @@ int rv1126b_drm_start(const char *path, unsigned rotation) {
 int rv1126b_drm_stop(void) {
     ++stopped;
     return 0;
+}
+
+int rv1126b_drm_stop_for_poweroff(void) {
+    ++stopped;
+    ++poweroff_stops;
+    return failure == 3 ? -1 : 0;
 }
 int rv1126b_drm_present(const uint32_t *canvas, const rv1126b_rect_t *area, void *user) {
     (void)canvas;
@@ -185,6 +191,24 @@ int main(void) {
         CHECK(rv1126b_ui_stop() == 0);
         CHECK(rv1126b_ui_stop() == 0);
     }
+    CHECK(poweroff_stops == 0);
+    CHECK(rv1126b_ui_start("mock", 270) == 0);
+    CHECK(rv1126b_ui_stop_for_poweroff() == 0);
+    CHECK(poweroff_stops == 1);
+    CHECK(rv1126b_ui_stop_for_poweroff() == 0);
+    CHECK(poweroff_stops == 1);
+    /* An ordinary lifecycle after planned shutdown must restore outputs again. */
+    CHECK(rv1126b_ui_start("mock", 270) == 0);
+    CHECK(rv1126b_ui_stop() == 0);
+    CHECK(poweroff_stops == 1);
+    failure = 3;
+    CHECK(rv1126b_ui_start("mock", 270) == 0);
+    CHECK(rv1126b_ui_stop_for_poweroff() < 0);
+    CHECK(rv1126b_ui_failed() && poweroff_stops == 2);
+    failure = 0;
+    CHECK(rv1126b_ui_start("mock", 270) == 0);
+    CHECK(!rv1126b_ui_failed());
+    CHECK(rv1126b_ui_stop() == 0 && poweroff_stops == 2);
     CHECK(started == stopped && renders > 0);
     puts("UI copied snapshots, product clock gate and repeated worker shutdown: PASS");
     return 0;

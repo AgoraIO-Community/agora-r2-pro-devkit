@@ -22,8 +22,9 @@ integer() {
 
 restore=0
 finish() {
+    trap '' HUP INT TERM
+    trap - 0
     result=$1
-    trap - 0 HUP INT TERM
     if [ "$restore" = 1 ]; then
         if ! { printf '%s\n' "$brightness" > "$backlight/brightness" &&
                printf '%s\n' "$power" > "$backlight/bl_power" &&
@@ -65,7 +66,9 @@ printf '4\n' > "$backlight/bl_power"
 [ "$(integer brightness)" = 0 ] && [ "$(integer actual_brightness)" = 0 ] &&
     [ "$(integer bl_power)" = 4 ] || fail 'backlight did not turn off'
 
-# BusyBox can return after notifying PID 1, before the machine is fully off.
+# PID 1 may signal us before BusyBox returns. Keep the handoff and success
+# bookkeeping uninterrupted; an accepted shutdown must not relight the panel.
+trap '' HUP INT TERM
 if /sbin/poweroff; then
     restore=0
     exit 0
