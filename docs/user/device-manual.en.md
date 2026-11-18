@@ -291,7 +291,7 @@ Deployment status separates supervision from the verified application version, P
 # 09 Power On and Read Startup Screens
 
 1. Hold the device's single physical button to power on; release when the startup screen appears. A long press is confirmed to switch this device on/off; follow its response rather than a fixed duration.
-2. Once installed, the supervised service starts automatically at boot. It reuses available Wi-Fi or waits for networking before showing setup instructions.
+2. The service starts automatically at boot. “Waiting for network” is normal while Wi-Fi starts. If the system connects to a saved network, the device continues to the service without opening a hotspot.
 
 ![Starting: initializing the application](assets/device-manual-en/starting.png)
 ![Waiting for network: connecting to saved Wi-Fi](assets/device-manual-en/waiting-network.png)

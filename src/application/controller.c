@@ -190,6 +190,7 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
         .storage_directory = getenv("MYBOT_KV_STORE_DIR"),
         .runtime_directory = wifi_runtime ? wifi_runtime : "/run/mybot-rv1126b-wifi",
         .dhcp_script = dhcp_script,
+        .route_interface = platform.network_interface,
     };
     if (rv1126b_wifi_start(&wifi) < 0) {
         fprintf(stderr, "Cannot start Wi-Fi control service\n");

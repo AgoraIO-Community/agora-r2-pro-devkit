@@ -2,6 +2,10 @@
 
 Changes to project-maintained code follow Semantic Versioning. Validation evidence is maintained in [one matrix](docs/validation/README.md); a release entry does not imply hardware acceptance.
 
+## 0.6.1 — Unreleased
+
+- Keep the device on the waiting-for-network screen while the wireless interface and supplicant start. Recheck the system route before trying saved Wi-Fi so a normal boot can proceed directly to the service.
+
 ## 0.6.0 — Unreleased
 
 - Add a confirmed local factory reset in Settings. The service forgets Wi-Fi and local binding credentials, then opens Wi-Fi setup again.

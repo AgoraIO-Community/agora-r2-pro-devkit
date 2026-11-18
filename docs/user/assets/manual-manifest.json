@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "document_date": "2026-11-18",
-  "application_version": "0.6.0",
+  "application_version": "0.6.1",
   "ui_source_sha256": "e61c4f99ec7af828c23d0971873882452462659ff33a89a8fff86a330f6fbef3",
   "inputs": {
-    "CMakeLists.txt": "36e877a8b0f92cf48e816c975e399067c6f27cfa2aa33bef7f5c9765026ac8e3",
+    "CMakeLists.txt": "7760f03293a4c820e429a08b75618df8eb1e7922057e7c822c635de2a256cff5",
     "CMakePresets.json": "cef80a4be8ebdf0d48c4240418d828a9bbe9a163f92a9ae0cdf6896e1d011c13",
     "cmake/dependencies/lvgl-sources.cmake": "a03c4f8b0a756ed7b474954500f993fdfb00c607d6b04c24705ebf240791e594",
     "cmake/dependencies/lvgl.cmake": "6a05db13538d7c1a38a966fb6db52ab335caec77bc9f5d3cb622197bd48acb1a",
@@ -14,8 +14,8 @@
     "docs/user/assets/fonts/MyBotManualSans-OFL.txt": "f55c2d43dd905011515f5e46ba78d180027e314ef8ccaaf53a9e88fe316767cd",
     "docs/user/assets/fonts/MyBotManualSans.ttf": "7badf2f7cd1a84125054693a439ecfaede2dd859079492b3244ddfd93ff036ce",
     "docs/user/assets/fonts/sources.json": "c77ca7d516428e16fbe8d404eb36205cd74f0729e16d821f75361ed398e4e710",
-    "docs/user/device-manual.en.md": "db355bec22c24ceac856122e8f2df8db77b3563bf2f3aecdb1e816dddd160461",
-    "docs/user/device-manual.zh-CN.md": "a9737a0a4e2e3d5eca2176352a3fb454ce8898a27edeb875076fe5a1a2a71cdd",
+    "docs/user/device-manual.en.md": "07fcedab1624276d13d6c7c0c261e7f35055b315f717c375aff9b19415297f4e",
+    "docs/user/device-manual.zh-CN.md": "38578848cd9eebc937b89cec65f06a6b3e7d348e17397cde772451cce82417df",
     "scripts/check-device-manual.py": "d3bf4bebb2855e90085163874e57cb85a653c09390f70ce4efc8aa41458517f7",
     "scripts/generate-device-manual.py": "5ba10fa1727d47e9a991d03476c4249409486931a42c72789f7e963519f691ec",
     "scripts/generate-manual-font.py": "3c051a1c10d41af287ef723614e640f6b2b73b875bd66726d52b4d43c62b146c",
@@ -51,8 +51,8 @@
     "tools/ui_preview/main.c": "e995679cd02c8a2b0068c167d96c138ed19f6ef04ea17145a6f1c3adefa58c82"
   },
   "outputs": {
-    "docs/device-operations.en.pdf": "29aa96040cf4e43f3192b6a97f5c5bce42cf76cd4e2294282fee571c501f813e",
-    "docs/device-operations.zh-CN.pdf": "ddf97022ea66b994a41b3457b413ccf699441b4cc6c598580de74d233781fc95",
+    "docs/device-operations.en.pdf": "5115971ce11deec5716889b70252a5750974a1153707fb1fbca04a6f3cee131e",
+    "docs/device-operations.zh-CN.pdf": "e2bbd24e5184006d4b96d7a365a6a827703c74523d470cf5ebbe8015aaddfb3b",
     "docs/user/assets/device-manual-en/ap-hotspot.png": "3a9d00c525c0f020467cb3ce493d98d830aa53b4dc2c74531f4f419d36eddf96",
     "docs/user/assets/device-manual-en/clock-error.png": "3c32599d878c90480ffa818c582f1e196f403067e2be89f602f47576cd0b1164",
     "docs/user/assets/device-manual-en/connecting-services.png": "6fc4d359553a43f82af641843863ca46784b8f547c1759175ac343fe03dcbce7",
