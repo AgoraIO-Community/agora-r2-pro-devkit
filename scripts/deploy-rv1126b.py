@@ -23,10 +23,12 @@ DATA_ROOT = "/userdata/mybot-rv1126b"
 SERVICE = "/etc/init.d/S99mybot"
 SERVICE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
                   "assets/service/mybot-rv1126b.conf", "assets/service/audio-prepare.sh",
+                  "assets/service/poweroff.sh",
                   "assets/network/99-mybot-lease", "bin/mybot-supervisor",
                   "supervisor-manifest.json", "abi-report-supervisor.json")
 EXECUTABLE_ASSETS = ("assets/service/S99mybot", "assets/service/run-service.sh",
                      "assets/service/audio-prepare.sh", "assets/network/99-mybot-lease",
+                     "assets/service/poweroff.sh",
                      "assets/wifi/udhcpc.script", "assets/time/sync-busybox.sh", "bin/mybot-supervisor")
 NAME = re.compile(r"mybot-rv1126b-(\d+\.\d+\.\d+)(?:-en-US)?-aarch64(?:-voice|-video)?\Z")
 SHA256 = re.compile(r"[0-9a-f]{64}\Z")
@@ -313,6 +315,28 @@ done
 [ -r /proc/device-tree/model ] || exit 92
 model=$(tr -d '\\000' < /proc/device-tree/model)
 [ "$model" = 'Rockchip RV1126B TEST2 RK805B V10 Board' ] || exit 92
+backlight=/sys/class/backlight/backlight
+physical=/sys/devices/platform/backlight/backlight/backlight
+[ "$(readlink -f "$backlight")" = "$physical" ] && [ -d "$physical" ] &&
+    [ "$(stat -c '%u:%g:%a' "$physical")" = '0:0:755' ] || exit 96
+for property in brightness bl_power max_brightness actual_brightness; do
+    path="$backlight/$property"
+    [ -f "$path" ] && [ ! -L "$path" ] || exit 96
+    case "$property" in brightness|bl_power) permission=644;; *) permission=444;; esac
+    [ "$(stat -c '%u:%g:%a' "$path")" = "0:0:$permission" ] || exit 96
+done
+backlight_integer() {
+    number=$(cat "$backlight/$1") || return 1
+    case "$number" in ''|*[!0-9]*|??????*) return 1;; esac
+    [ "$number" -le 65535 ] || return 1
+    printf '%s\\n' "$number"
+}
+maximum=$(backlight_integer max_brightness) || exit 96
+brightness=$(backlight_integer brightness) || exit 96
+actual=$(backlight_integer actual_brightness) || exit 96
+power=$(backlight_integer bl_power) || exit 96
+[ "$maximum" -gt 0 ] && [ "$brightness" -le "$maximum" ] &&
+    [ "$actual" -le "$maximum" ] && [ "$power" -le 4 ] || exit 96
 [ -d /lib/dhcpcd/dhcpcd-hooks ] && [ ! -L /lib/dhcpcd/dhcpcd-hooks ] &&
     [ "$(stat -c %u /lib/dhcpcd/dhcpcd-hooks)" = 0 ] || exit 93
 for path in /run/mybot-network /run/mybot-network/leases /run/mybot-rv1126b \\
@@ -749,6 +773,7 @@ def main(argv=None):
 install_file {shlex.quote(release + '/assets/service/S99mybot')} {SERVICE} 755
 install_file {shlex.quote(release + '/assets/service/run-service.sh')} /etc/mybot-rv1126b/run-service.sh 755
 install_file {shlex.quote(release + '/assets/service/audio-prepare.sh')} /etc/mybot-rv1126b/audio-prepare.sh 755
+install_file {shlex.quote(release + '/assets/service/poweroff.sh')} /etc/mybot-rv1126b/poweroff.sh 755
 install_file {shlex.quote(release + '/bin/mybot-supervisor')} /etc/mybot-rv1126b/mybot-supervisor 755
 [ -d /lib/dhcpcd/dhcpcd-hooks ] && [ ! -L /lib/dhcpcd/dhcpcd-hooks ] || exit 54
 install_file {shlex.quote(release + '/assets/network/99-mybot-lease')} /lib/dhcpcd/dhcpcd-hooks/99-mybot-lease 644

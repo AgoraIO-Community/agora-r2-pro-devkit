@@ -1,6 +1,6 @@
 # 当前验证状态
 
-更新日期：2026-11-18。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前治理候选为 **0.5.3**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
+更新日期：2026-11-18。源码版本由根 `CMakeLists.txt` 管理，执行 `python3 scripts/project-version.py` 查看。当前候选为 **0.5.5**，本页区分主机、交叉构建和硬件证据；历史轮次见[完整归档](../history/validation-before-0.5.3.zh-CN.md)。
 
 ## 治理专项
 
@@ -81,6 +81,50 @@ ctest --test-dir build/host-asan --output-on-failure \
 相机环境只读检查发现唯一 `rkisp_mainpath` 为 `/dev/video12`，MPP 设备和 `rkaiq_3A_server` 存在。本轮未开始云端会话，因此未初始化采集、未提交 JPEG，**这次通过的是视频程序启用与待机恢复，不是视频出帧或云端接收验收**。短触开始会话后仍需检查首帧、方向、音视频并发及结束停流。
 
 设备内备份为 `/userdata/mybot/backups/20261118-video-default-053/`；回退链接继续保留 0.5.2。主机回执曾因本轮设置备份预占同名目录而写入失败，确认设备切换完成后，将设置备份移到独立的忽略目录并补齐回执，未重复部署。脱敏结果在 `local/deployment/20261118-video-default-053/regression.json`。本轮未重启设备，未导出私有内容或摘要。
+
+## 2026-11-18：新设备首次部署
+
+本轮目标是另一台同板型的新设备，部署前没有 MyBot 发布、配置、私有数据或绑定。为本机 CPU Serial 按现有算法派生独立身份，并确认与前一台设备不同；未导入旧设备身份、绑定或 Wi-Fi 凭据。私有设置与目标选择留在忽略目录，硬件身份原值不公开。
+
+从干净提交 `24758f9` 重建中文 voice/video，应用和监督器 ABI 均 `errors=[]`，打包语义及 **65** 项内部摘要通过。新包 `mybot-rv1126b-0.5.3-aarch64.tar.gz` 位于 `dist/new-device-20261118/`，SHA256 为 `03cf89177dc44d0588590cc4dead933c45fa2a343a52e7d5b81eb46ccba62796`，源码摘要为 `d2f3b5fe44a54bc760b28d1a594972ac3dba39d8c48e43a4407258e0b2291f13`；该候选与先前提交的同版本包有各自的 manifest 和归档身份。
+
+以 tag `20261118-new-device-video-053` 完成设备内备份、安装、原厂业务停用和自启动服务安装；逐项重载 dnsmasq / dhcpcd 策略后启动。设备最初无联网路由，正常进入 AP；现场配网后 Wi-Fi 配置从 1 项变为 2 项，该新配置保留，未按部署前字节覆盖。首轮联网时系统仍为 2021 年，时钟守卫超时并在有限重试后停止服务；未将这一轮计为业务通过。之后确认系统 NTP 已自行同步至正确 UTC，写入 RTC，再受控重启服务恢复启动，未手动替换网络凭据。
+
+最终观察到 `service=running`、`application_verified=yes`、`application_health=ready`，有效 `video=1`，实际所选视频程序路径匹配，已完成新设备绑定。一个应用、一个监督器、原厂业务零实例，65 项文件校验通过；无 unclean 标记或部署锁，最新启动日志无崩溃、资源清理失败、监督器失败或 ALSA 打开错误。音频别名实际定义于 `/etc/alsa/conf.d/90-botstation.conf`，不能因 PCM 枚举未显示就认定缺失。
+
+本机没有 `previous` 发布，原始系统备份留在 `/userdata/mybot/backups/20261118-new-device-video-053/`。脱敏回执、启动、校时恢复和最终回归记录保存在 `local/deployment/20261118-new-device-video-053/`。本轮未执行整机重启、实际通话或视频出帧验收；RTC 写入不等同于断电保持验收。
+
+## 2026-11-18：计划关机关闭背光
+
+用户反馈 UI 关机后屏幕仍有亮度。只读检查确认唯一 PWM 背光为 `/sys/class/backlight/backlight`，实际设备路径 `/sys/devices/platform/backlight/backlight/backlight`，初始 `brightness=200`、`actual_brightness=200`、`max_brightness=255`、`bl_power=0`；普通 DRM 停止会恢复原 CRTC，现有应用没有显式关闭背光。设备的 Linux 输入配置没有 POWER 关机映射，RK805 的 `pwrkey` 节点 disabled，不能据此声称已确认实体长按的 PMIC/硬件触发链路。
+
+0.5.4 的计划关机在监督器确认应用正常清理退出后，调用固定板级 `poweroff.sh`：保存原值，设置亮度 0、背光电源 4，核对实际亮度 0 后再请求正常 `/sbin/poweroff`。属性异常、写入/读回失败、命令失败或中断时尝试恢复原亮度和背光电源。普通应用 stop/restart 仍恢复原显示输出，未引入 DRM 停止模式或更改实体按键电路。
+
+已在当前设备执行一次可逆背光测试。隔离副本仅把真实 poweroff 替换为固定失败探针，观察到 `brightness=0`、`actual_brightness=0`、`bl_power=4`；探针返回失败后，helper 自动恢复 200/200/0，外层恢复保护再次复核，临时文件已清理，应用继续 ready。原始 helper SHA256 为 `6cb4bbfd968ec1958ccd0b0193eeea9b86fe6971d549bca3ef7c8596a5a284da`，脱敏结果留在 `build/backlight-poweroff-054/device-backlight-results.json`。
+
+工具验证：macOS 新 helper **10/10**、部署 **58/58**、打包 **41/41**；Ubuntu 24.04 的独立临时快照对最终 helper 测试源执行 **10/10**，使用假 sysfs/假关机并清理快照。macOS 新隔离主机构建中 `ui-runtime`、`drm-lifecycle`、`supervisor`、`power-control`、`product-controller` **5/5**。最初 host fixture 因 macOS `/var` 与 `/private/var` 规范路径差异提前拒绝，修正 fixture 后通过；生产 helper 未为此修改。 0.5.4 双语手册刷新及字节重现通过，各 24 页、22 个书签，48 页文字边界检查通过；固定手册字体按原输入正规补充“背”“光”两个字形。
+
+最终交付从干净提交 `fc715ac` 构建中文 voice/video，应用与监督器 ABI 均 `errors=[]`；新包包含 **66** 项内部摘要并通过归档语义验证。`mybot-rv1126b-0.5.4-aarch64.tar.gz` 位于 `dist/backlight-poweroff-0.5.4/`，SHA256 为 `e2fc1f3d97a96340155a4a9fb1e6e0c97eb024624f4d3eb32d3a6246a3067cb8`，源码 SHA256 为 `f503baf1aa6ad3713ac95d60bf7ec62bd1e865efb4e499312301e8d7e5e56809`。本页后续文档结果提交不改变该制品归属。
+
+以 tag `20261118-backlight-054` 部署至当前设备，保留 0.5.3 为 previous，默认视频开启。实际运行路径、版本及 PID 核对通过，服务 running、应用 ready；安装后的 helper 与上面已测试字节一致，监督器实际 `--poweroff-command` 指向该 helper。66 项内部摘要、身份/绑定、两个私有 KV 与 Wi-Fi 配置均核对通过，最新启动日志无错误、清理或监督失败；普通升级后的背光仍为 200/200/0。脱敏回执和结果位于 `local/deployment/20261118-backlight-054/`。
+
+这证明 PWM 背光控制、失败恢复及新关机入口安装在本机可执行；未执行真实关机，也未验证电池/USB 供电下的所有电源轨断电、关机后屏幕目视效果或再次按键开机，不把可逆测试写成实际断电验收。
+
+## 2026-11-18：实际关机清理路径修复
+
+用户实测 0.5.4 UI 关机仍有亮度。重新读取既有固定格式日志得到完整顺序：`Settings page=3` → `supervisor: poweroff_pending` → `DRM: cannot restore CRTC: No such file or directory` → `supervisor: failed`，没有 `supervisor: poweroff`。这次 UI 请求因显示清理返回非零而被保护逻辑拦截，尚未执行背光脚本；此前独立的可逆背光测试没有覆盖这一清理失败。
+
+0.5.5 仅在监督器已接受关机请求时使用专门的显示停止接口：显示 worker 持有 DRM 所有权时关闭当前 CRTC，释放资源，不恢复可能已经失效的旧 framebuffer。普通停止仍尝试恢复旧输出；真实关闭失败仍返回错误并阻止关机。监督器在释放控制 socket 后让 helper 的 stderr 继承现有私有日志，避免最后阶段失败不可见。
+
+另用安全 host 夹具复现了独立的信号交接问题：旧 helper 的假 poweroff 即使返回成功，同时收到 TERM 也会恢复背光；它不是上述实际失败的根因。新版只在系统关机交接阶段忽略可处理的迟到信号，准备阶段中断和命令非零仍回滚，回滚自身不再被重复信号截断。
+
+源码检查：中文、英文、UBSan 的 `ui-runtime` / `drm-lifecycle` / `product-controller` / `supervisor` 各 **4/4**，包含失效旧 FB、真实 disable 失败、生命周期重置、请求拒绝、helper 私有诊断和日志复制失败。helper 安全模拟测试 **14/14**，不执行实际关机。0.5.5 双语手册刷新和重现通过，各 24 页、22 个书签，48 页文字边界检查通过，字体和 UI PNG 未改。新设备只读检查 `CONFIG_FB` 未开启，且无 framebuffer 设备节点，本轮真机测试另核对了关闭后的 DSI 状态。
+
+从干净提交 `8886780` 构建中文语音及视频程序，应用与监督器 ABI 检查均通过。部署包 `mybot-rv1126b-0.5.5-aarch64.tar.gz` 的 SHA256 为 `fe2510d9dbaa20ae570d9f654aaf2cf09830357e5e9901f29ef42df08d2f195e`。设备按 `20261118-display-poweroff-055` 安装视频版，并保留 0.5.4 供回退。
+
+设备上的隔离监督器启动实际视频程序。经触摸输入打开设置并确认关机，日志依次记录 `poweroff_pending`、`stopped`、`poweroff`，应用正常退出。仅将最终 `/sbin/poweroff` 换成测试程序。该程序读到 DSI 为 `disabled`，请求亮度与实际亮度均为 0，`bl_power=4`，随后退出码为 0。已恢复正常服务并清理测试文件，确认生产视频程序 `ready`、66 项包内校验通过，身份、绑定和 Wi-Fi 配置与备份一致。完整结果在 `build/poweroff-followup-20261118/device-ui-chain-results.json`。整机实际关机后有无可见余光仍需现场验收。
+
+Ubuntu 24.04 的 5 项 C 测试首轮 4/5，监督器用例等待超时。同一冻结源码、同一 CTest 命令复核 5/5。helper 模拟测试 14/14。原超时原因尚未确定，保留两次记录。
 
 ## 如何复核
 

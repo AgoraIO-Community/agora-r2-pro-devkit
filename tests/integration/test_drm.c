@@ -41,10 +41,12 @@ enum fault {
     ADD_FB,
     MAP,
     MMAP,
-    MODESET
+    MODESET,
+    RESTORE,
+    DISABLE
 };
 static enum fault fault;
-static int fds, objects, handles, buffers, maps, restores, outputs;
+static int fds, objects, handles, buffers, maps, restores, disables, outputs;
 static uint32_t connectors[] = {10, 11}, crtcs[] = {20};
 static drmModeModeInfo mode = {.hdisplay = 480, .vdisplay = 640, .type = DRM_MODE_TYPE_PREFERRED};
 #define PITCH (480U * 4U + 16U)
@@ -195,12 +197,17 @@ int test_set_crtc(int fd, uint32_t crtc, uint32_t fb, uint32_t x, uint32_t y, ui
                   int count, drmModeModeInfoPtr selected) {
     (void)x;
     (void)y;
-    CHECK(fd == 42 && crtc == 20);
+    CHECK(fd == 42 && crtc == 20 && fds == 1 && buffers == 1);
     if (fb == 123) {
         CHECK(count == 1 && ids[0] == 10 && selected);
         return fault == MODESET ? -1 : 0;
     }
-    CHECK(fb == (outputs ? 55U : 0U) && count == outputs);
+    if (!fb) {
+        CHECK(!x && !y && !count && !ids && !selected);
+        ++disables;
+        return fault == DISABLE ? -1 : 0;
+    }
+    CHECK(fb == 55 && count == outputs);
     if (count) {
         CHECK(ids[0] == 10 && selected);
         if (count == 2)
@@ -208,6 +215,10 @@ int test_set_crtc(int fd, uint32_t crtc, uint32_t fb, uint32_t x, uint32_t y, ui
     } else
         CHECK(!ids && !selected);
     ++restores;
+    if (fault == RESTORE) {
+        errno = ENOENT;
+        return -1;
+    }
     return 0;
 }
 static void released(void) {
@@ -216,16 +227,16 @@ static void released(void) {
 int main(void) {
     for (fault = OPEN; fault <= MODESET; ++fault) {
         outputs = 2;
-        restores = 0;
+        restores = disables = 0;
         CHECK(rv1126b_drm_start("mock", 270) < 0);
         released();
-        CHECK(restores == 0);
+        CHECK(restores == 0 && disables == 0);
         CHECK(rv1126b_drm_stop() == 0);
         released();
     }
     fault = NONE;
     for (outputs = 0; outputs <= 2; ++outputs) {
-        restores = 0;
+        restores = disables = 0;
         CHECK(rv1126b_drm_start("mock", 270) == 0);
         CHECK(rv1126b_drm_start("mock", 270) < 0);
         uint32_t *canvas = calloc(RV1126B_UI_WIDTH * RV1126B_UI_HEIGHT, sizeof(uint32_t));
@@ -236,10 +247,30 @@ int main(void) {
         uint32_t *row = (uint32_t *)((unsigned char *)s_drm.mapping + 639 * PITCH);
         CHECK(row[0] == 0xabcdef && row[1] == 0 && row[2] == 0);
         CHECK(rv1126b_drm_stop() == 0);
-        CHECK(restores == 1);
+        CHECK(restores == (outputs ? 1 : 0) && disables == (outputs ? 0 : 1));
         released();
         free(canvas);
     }
+    outputs = 2;
+    fault = RESTORE;
+    restores = disables = 0;
+    CHECK(rv1126b_drm_start("mock", 270) == 0);
+    CHECK(rv1126b_drm_stop() < 0);
+    CHECK(restores == 1 && disables == 0);
+    released();
+    restores = disables = 0;
+    CHECK(rv1126b_drm_start("mock", 270) == 0);
+    CHECK(rv1126b_drm_stop_for_poweroff() == 0);
+    CHECK(restores == 0 && disables == 1);
+    released();
+    CHECK(rv1126b_drm_stop_for_poweroff() == 0);
+    CHECK(disables == 1);
+    fault = DISABLE;
+    restores = disables = 0;
+    CHECK(rv1126b_drm_start("mock", 270) == 0);
+    CHECK(rv1126b_drm_stop_for_poweroff() < 0);
+    CHECK(restores == 0 && disables == 1);
+    released();
     puts("DRM failure cleanup, padded framebuffer and original CRTC/output restoration: PASS");
     return 0;
 }

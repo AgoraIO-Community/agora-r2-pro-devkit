@@ -6,6 +6,7 @@ This profile records the Linux interfaces observed on the original test device. 
 | --- | --- |
 | CPU / OS | AArch64, RV1126B, Buildroot 2024.02, Linux 6.1.172, glibc 2.41 |
 | Display | 480×640 DSI, `/dev/dri/card0`; 640×480 logical canvas rotated 270° |
+| Backlight | `pwm-backlight` at `/sys/class/backlight/backlight`; supervised poweroff verifies `brightness=0` and `bl_power=4` before system poweroff |
 | Audio | Existing `botstation_capture` / `botstation_playback` ALSA plugs; SDK 16 kHz mono S16, 20 ms |
 | Input | Discover `axs_ts` touch and `adc-keys`; conversation key 139; left/right volume |
 | Camera | Optional `rkisp_mainpath` V4L2 capture + MPP JPEG, 640×480, at most 3 fps, 180° |
@@ -13,5 +14,7 @@ This profile records the Linux interfaces observed on the original test device. 
 | Wi-Fi setup | Open `mybot-xxxx` 2.4 GHz AP, `192.168.4.1`; runtime tools/driver and AP+STA or safe station ownership required |
 
 `board_config.h` defines defaults. Existing CLI/environment overrides remain available. Logical UI dimensions and font/layout choices belong to the UI component.
+
+Ordinary display stop restores the saved DRM output. Accepted planned shutdown closes the owned display output and uses the fixed helper to disable the backlight. Preparation interruption or command failure triggers a restore attempt; late shutdown signals during handoff do not relight it. Software poweroff does not guarantee that all board power rails are off. A physical long press has been observed to power the unit on/off, but no POWER input mapping was found and the PMIC key node is disabled; the actual hardware path remains unconfirmed.
 
 The original product service shares the hardware and must be stopped by the operator before testing. Leave the camera 3A and existing network services running. AP setup never globally stops external network managers; if the driver cannot provide AP+STA and an external manager owns the station, explicitly hand off that interface before testing or use `--no-wifi-provisioning`. See [Wi-Fi setup](../../../../docs/user/wifi-provisioning.zh-CN.md). Current verified behavior and remaining checks are tracked in the [validation matrix](../../../../docs/validation/README.md); build or mock-test success does not establish physical device behavior.
