@@ -4,6 +4,7 @@ Changes to project-maintained code follow Semantic Versioning. Validation eviden
 
 ## 0.5.3 — Unreleased
 
+- Select video by default for supervised deployment; require explicit `video: false` for voice and show the selected profile in deployment plans.
 - Derive compact hotspot names from the full permanent MAC and detect stopped AP services with a settings retry path.
 - Clean owned Wi-Fi process groups and recover or report failed video pipelines with bounded retries.
 - Validate rollback profiles, board prerequisites, startup modes and actual local application health before reporting deployment success.
