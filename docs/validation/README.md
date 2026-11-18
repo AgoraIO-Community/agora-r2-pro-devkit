@@ -82,6 +82,18 @@ ctest --test-dir build/host-asan --output-on-failure \
 
 设备内备份为 `/userdata/mybot/backups/20261118-video-default-053/`；回退链接继续保留 0.5.2。主机回执曾因本轮设置备份预占同名目录而写入失败，确认设备切换完成后，将设置备份移到独立的忽略目录并补齐回执，未重复部署。脱敏结果在 `local/deployment/20261118-video-default-053/regression.json`。本轮未重启设备，未导出私有内容或摘要。
 
+## 2026-11-18：新设备首次部署
+
+本轮目标是另一台同板型的新设备，部署前没有 MyBot 发布、配置、私有数据或绑定。为本机 CPU Serial 按现有算法派生独立身份，并确认与前一台设备不同；未导入旧设备身份、绑定或 Wi-Fi 凭据。私有设置与目标选择留在忽略目录，硬件身份原值不公开。
+
+从干净提交 `24758f9` 重建中文 voice/video，应用和监督器 ABI 均 `errors=[]`，打包语义及 **65** 项内部摘要通过。新包 `mybot-rv1126b-0.5.3-aarch64.tar.gz` 位于 `dist/new-device-20261118/`，SHA256 为 `03cf89177dc44d0588590cc4dead933c45fa2a343a52e7d5b81eb46ccba62796`，源码摘要为 `d2f3b5fe44a54bc760b28d1a594972ac3dba39d8c48e43a4407258e0b2291f13`；该候选与先前提交的同版本包有各自的 manifest 和归档身份。
+
+以 tag `20261118-new-device-video-053` 完成设备内备份、安装、原厂业务停用和自启动服务安装；逐项重载 dnsmasq / dhcpcd 策略后启动。设备最初无联网路由，正常进入 AP；现场配网后 Wi-Fi 配置从 1 项变为 2 项，该新配置保留，未按部署前字节覆盖。首轮联网时系统仍为 2021 年，时钟守卫超时并在有限重试后停止服务；未将这一轮计为业务通过。之后确认系统 NTP 已自行同步至正确 UTC，写入 RTC，再受控重启服务恢复启动，未手动替换网络凭据。
+
+最终观察到 `service=running`、`application_verified=yes`、`application_health=ready`，有效 `video=1`，实际所选视频程序路径匹配，已完成新设备绑定。一个应用、一个监督器、原厂业务零实例，65 项文件校验通过；无 unclean 标记或部署锁，最新启动日志无崩溃、资源清理失败、监督器失败或 ALSA 打开错误。音频别名实际定义于 `/etc/alsa/conf.d/90-botstation.conf`，不能因 PCM 枚举未显示就认定缺失。
+
+本机没有 `previous` 发布，原始系统备份留在 `/userdata/mybot/backups/20261118-new-device-video-053/`。脱敏回执、启动、校时恢复和最终回归记录保存在 `local/deployment/20261118-new-device-video-053/`。本轮未执行整机重启、实际通话或视频出帧验收；RTC 写入不等同于断电保持验收。
+
 ## 如何复核
 
 标准命令见[测试指南](../development/testing.zh-CN.md)，目标输入及交付入口见[构建](../user/build.zh-CN.md)和[发布](../development/releasing.zh-CN.md)。手册命令见[维护指南](../development/manual.zh-CN.md)。公共 CI 配置存在不代表本轮已在 GitHub 执行；本页只记录实际观察到的结果。
