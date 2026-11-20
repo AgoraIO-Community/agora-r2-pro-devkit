@@ -4,8 +4,6 @@
 
 解包后可离线阅读[中文操作手册 PDF](../docs/device-operations.zh-CN.pdf)。源码仓库提供[构建指南](../docs/user/build.zh-CN.md)与[部署指南](../docs/user/deployment.zh-CN.md)。硬件验收范围以[验证状态](../docs/validation/README.md)为准。
 
-已有设备 AP、设备本机 HTTP 提交保存及 SDK 恢复的记录；手机无线接入、DHCP/captive browser、错误密码、重启复用和完整语音仍需专项验收。新制品不能继承旧包的真机结论。
-
 ## 校验与直接运行
 
 将归档解包到 `/userdata` 下的独立目录。在包目录执行：

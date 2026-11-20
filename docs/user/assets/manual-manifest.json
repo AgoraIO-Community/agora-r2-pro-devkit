@@ -1,14 +1,14 @@
 {
   "schema_version": 2,
   "document_date": "2026-11-20",
-  "application_version": "0.6.1",
+  "application_version": "1.0.0",
   "ui_source_sha256": "beea72d5e1e41da2f1c9506e4b4d1b18aee13df8e2010f3d644c5880d5aad608",
   "scene_sha256": {
     "zh-CN": "26d5e63c3a9830bc324a7689734b5d0da53313c186a93a12d71c0ae8cbfad227",
     "en-US": "894c04f9b95f3a494961b048d45749fc74995b427b2891c3571bf1ead4fd7378"
   },
   "inputs": {
-    "CMakeLists.txt": "7760f03293a4c820e429a08b75618df8eb1e7922057e7c822c635de2a256cff5",
+    "CMakeLists.txt": "9e5745ec2accf5fe95c3205bd5e594d16baa552c463479d748f1945214a2111d",
     "cmake/dependencies/lvgl-sources.cmake": "a03c4f8b0a756ed7b474954500f993fdfb00c607d6b04c24705ebf240791e594",
     "cmake/dependencies/lvgl.cmake": "6a05db13538d7c1a38a966fb6db52ab335caec77bc9f5d3cb622197bd48acb1a",
     "cmake/dependencies/public-headers.cmake": "bddff8bcef9c3bfc35fd960ab7862d91b6c9434a9812718e8015b0ef8ff61f3c",
@@ -47,8 +47,8 @@
     "vendor/mybot/include/mybot/platform/mybot_lcd.h": "b0ba099a4e78512e905a8ef9dce3dbf6f69d13204fedd6c32c42aec3913b33f8"
   },
   "outputs": {
-    "docs/device-operations.en.pdf": "ed57958ba036108e8c759db2398186bb38242c84b59ee534faa1e7a4ffb4bced",
-    "docs/device-operations.zh-CN.pdf": "8981588694dc8663b29fcbace9ae45439e9610d709d71491beb7a2a03fcf46ac",
+    "docs/device-operations.en.pdf": "7bcf508cfc83cf3457b6cb06d05b6a0b1235a1a28a1008ce2907d012709da06d",
+    "docs/device-operations.zh-CN.pdf": "112af00e6fe8f090560a0de6949b292965c2b242b1fc55068c85fe19aedbfbb9",
     "docs/user/assets/device-manual-en/ap-hotspot.png": "3a9d00c525c0f020467cb3ce493d98d830aa53b4dc2c74531f4f419d36eddf96",
     "docs/user/assets/device-manual-en/clock-error.png": "3c32599d878c90480ffa818c582f1e196f403067e2be89f602f47576cd0b1164",
     "docs/user/assets/device-manual-en/connecting-services.png": "6fc4d359553a43f82af641843863ca46784b8f547c1759175ac343fe03dcbce7",
