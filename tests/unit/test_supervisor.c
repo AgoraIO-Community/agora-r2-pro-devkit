@@ -496,7 +496,8 @@ static void test_unclean_blocks_restart(const char *mode) {
 
 static void test_unsafe_inputs(void) {
     prepare(__func__);
-    CHECK(mkdir(runtime_path, 0755) == 0);
+    CHECK(mkdir(runtime_path, 0700) == 0);
+    CHECK(chmod(runtime_path, 0755) == 0);
     CHECK(await_exit(start_supervisor("wait", 128)) == 1);
     CHECK(access(marker_path, F_OK) < 0);
     CHECK(chmod(runtime_path, 0700) == 0);
