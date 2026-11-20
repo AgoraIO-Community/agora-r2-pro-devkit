@@ -16,27 +16,9 @@
 
 ## 检查
 
-需要 Python 3.10+、CMake 3.25+、OpenSSL 与 libdrm 开发文件。依次执行 `python3 -m venv local/dev-tools` 和 `local/dev-tools/bin/python -m pip install -r requirements-dev.txt` 安装固定格式工具；质量检查自动选择它并校验版本。Ubuntu 24.04 依赖安装与 macOS 头文件配置见[构建指南](docs/user/build.zh-CN.md)。
+按[构建指南](docs/user/build.zh-CN.md)准备主机环境。根据改动范围执行[测试指南](docs/development/testing.zh-CN.md#标准主机门禁)中的命令。修改目标构建输入时，补做受影响的 AArch64 配置和运行包校验。在 PR 中列出实际检查结果及待验证的设备场景。
 
-```sh
-python3 scripts/doctor.py --host
-python3 scripts/check-dependencies.py
-python3 scripts/check-quality.py
-cmake --preset host-zh
-cmake --build --preset host-zh
-ctest --preset host-zh
-cmake --preset host-en
-cmake --build --preset host-en
-ctest --preset host-en
-cmake --preset host-ubsan
-cmake --build --preset host-ubsan
-ctest --preset host-ubsan
-git diff --check
-```
-
-执行 [CI](.github/workflows/ci.yml) 使用的工程质量检查；仅对自维护 C/C++ 使用 `.clang-format`。改动影响目标输入时检查语音/视频构建和打包；仅改文档不必运行硬件测试。未执行的检查说明原因。[测试指南](docs/development/testing.zh-CN.md)区分编译、主机测试和真机证据。
-
-中英文 README 保持行为和命令一致；按改动更新配置文档、`CHANGELOG.md` 及[验证状态](docs/validation/README.md)。旧交付包的真机结果不能移用于新二进制。
+中英文入口保持一致。按改动更新配置参考、变更日志及[设备验收记录](docs/validation/README.md)。
 
 ## 提交信息
 

@@ -22,7 +22,6 @@
 | [架构](development/architecture.zh-CN.md) | 模块边界、依赖方向和资源所有权 |
 | [测试](development/testing.zh-CN.md) | 本地检查、CI、预览和真机回归 |
 | [依赖与字体](development/dependencies.zh-CN.md) | 锁文件、快照、补丁、生成资源和 SDK 输入 |
-| [第三方目录规则](development/third-party-layout.zh-CN.md) | 平级源码快照、唯一归属、迁移和显式裁剪 |
 | [发布](development/releasing.zh-CN.md) | 制品身份、打包、验证及版本发布 |
 | [手册生成](development/manual.zh-CN.md) | 图文源稿、UI 配图、中英文 PDF 生成与检查 |
 
