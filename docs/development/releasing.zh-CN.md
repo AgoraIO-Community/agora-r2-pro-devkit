@@ -22,6 +22,8 @@ python3 scripts/check-quality.py
 
 开发候选允许脏源码，但必须如实标注。`src/` / `vendor/` 路径迁移会改变输入身份，必须重新生成目标二进制、ABI 报告和 manifest。正式发布使用已提交的源码重新构建，再加 `--release`；仅提交已构建的源码不会让旧 manifest 自动成为干净发布身份。
 
+正式打包再次核对目标运行库清单与 `dependencies.lock.json` 的固件基线，校验 staging 库的实际字节，并从应用、监督器和重置工具的 ELF 读取动态依赖。缺少解释器、未锁定的系统库、缺失或摘要不匹配的清单都会阻止归档。
+
 ## 生成候选包
 
 完整运行包由 `scripts/package-rv1126b.py` 统一装配和校验，普通 `cmake --install` 不安装应用运行环境。CMake 负责程序与 ABI/构建 manifest，打包脚本负责入口、运行库、资源、许可及摘要，避免维护两套不一致的交付布局。

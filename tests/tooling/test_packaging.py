@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import struct
 import subprocess
 import sys
 import tarfile
@@ -512,6 +513,54 @@ class PackagingTests(unittest.TestCase):
         self.args.release = True
         with self.assertRaisesRegex(ValueError, "clean, committed"):
             packager.package(self.root, self.args)
+
+    def test_clean_release_requires_a_firmware_manifest(self):
+        self.args.release = True
+        with self.assertRaisesRegex(ValueError, "runtime manifest"):
+            packager.package(self.root, self.args)
+        self.assertFalse(self.args.output_dir.exists())
+
+    def test_release_checks_staged_firmware_and_actual_elf_dependencies(self):
+        # Minimal AArch64 ELF sections consumed by the real dependency reader.
+        def elf(name="", needed=(), interpreter=""):
+            strings = b"\0"
+            dynamic = b""
+            for tag, item in [(1, dep) for dep in needed] + ([(14, name)] if name else []):
+                dynamic += struct.pack("<qQ", tag, len(strings))
+                strings += item.encode() + b"\0"
+            names = b"\0.shstrtab\0.interp\0.dynstr\0.dynamic\0"
+            offset = 64
+            table = bytes(64)
+            contents = b""
+            for section, data in ((".shstrtab", names), (".interp", interpreter.encode() + b"\0"),
+                                  (".dynstr", strings), (".dynamic", dynamic)):
+                table += struct.pack("<IIQQQQIIQQ", names.index(section.encode()), 0, 0, 0,
+                                     offset, len(data), 0, 0, 0, 0)
+                contents += data
+                offset += len(data)
+            header = struct.pack("<16sHHIQQQIHHHHHH", b"\x7fELF\x02\x01", 3, 183, 1, 0, 0,
+                                 offset, 0, 64, 0, 0, 64, 5, 1)
+            return header + contents + table
+
+        loader = self.staging / "lib/ld-linux-aarch64.so.1"
+        loader.parent.mkdir()
+        loader.write_bytes(elf(name=loader.name))
+        loader_hash = metadata.digest(loader)
+        lock = {"external": {"runtime": {"libraries": {"lib/" + loader.name: loader_hash}}}}
+        metadata.write_json(self.root / "dependencies.lock.json", lock)
+        manifest = self.base / "runtime.json"
+        metadata.write_json(manifest, {"libraries": [{"path": "/lib/" + loader.name, "sha256": loader_hash}]})
+        sdk = {"staging_dir": str(self.staging), "runtime_manifest": str(manifest), "rtsa_library": str(self.rtsa)}
+        binary = self.base / "payload"
+        binary.write_bytes(elf(interpreter="/lib/" + loader.name))
+        reports = [(binary, {"checked": [{"path": str(binary)}, {"path": str(loader)}]})]
+        packager.verify_release_runtime(self.root, sdk, reports)
+        binary.write_bytes(elf(needed=("libanother.so",), interpreter="/lib/" + loader.name))
+        with self.assertRaisesRegex(ValueError, "Missing firmware ABI closure: libanother.so"):
+            packager.verify_release_runtime(self.root, sdk, reports)
+        loader.write_bytes(loader.read_bytes() + b"changed")
+        with self.assertRaisesRegex(ValueError, "staged runtime SHA256 mismatch"):
+            packager.verify_release_runtime(self.root, sdk, reports)
 
     def test_existing_bundle_is_never_overwritten(self):
         destination, _, _ = packager.package(self.root, self.args)

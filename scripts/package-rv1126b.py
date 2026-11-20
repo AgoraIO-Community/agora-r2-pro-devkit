@@ -15,6 +15,9 @@ import tempfile
 from build_metadata import (digest, git, inputs_digest, public_abi, public_manifest, source_snapshot,
                             verified_abi, verify_manifest, write_json)
 
+from runtime_baseline import validate_runtime
+from target_elf import inspect as inspect_elf
+
 ROOT = Path(__file__).resolve().parents[1]
 
 EXECUTABLE_ASSETS = {
@@ -126,18 +129,61 @@ def runtime_notice(root, name):
     return re.sub(r"\]\(([^)]+)\)", link, source.read_text())
 
 
+def verify_release_runtime(root, sdk, reports):
+    staging = Path(sdk["staging_dir"])
+    if not sdk.get("runtime_manifest"):
+        raise ValueError("Release requires the target runtime manifest")
+    baseline = json.loads((root / "dependencies.lock.json").read_text())["external"]["runtime"]["libraries"]
+    validate_runtime(staging, sdk.get("runtime_manifest"), baseline)
+    pinned = {((staging / name).resolve(), digest): Path(name).name for name, digest in baseline.items()}
+    rtsa = Path(sdk["rtsa_library"]).resolve()
+    inspected = {}
+    for binary_path, report in reports:
+        supplied, needed = set(), set()
+        if not any(Path(entry["path"]).resolve() == binary_path.resolve() for entry in report["checked"]):
+            raise ValueError("Release ABI report must include its executable")
+        for entry in report["checked"]:
+            path = Path(entry["path"]).resolve()
+            if path not in inspected:
+                inspected[path] = inspect_elf(path)
+            elf = inspected[path]
+            if path == binary_path.resolve():
+                if elf["interpreter"] != "/lib/ld-linux-aarch64.so.1":
+                    raise ValueError("Invalid release interpreter")
+                needed.add(Path(elf["interpreter"]).name)
+            else:
+                name = elf["soname"] or path.name
+                if path == rtsa and name == "libagora-rtc-sdk.so":
+                    supplied.add(name)
+                elif pinned.get((path, elf["sha256"])) == name:
+                    supplied.add(name)
+                else:
+                    raise ValueError("ABI dependency outside pinned firmware runtime: " + name)
+            needed.update(elf["needed"])
+        if needed - supplied:
+            raise ValueError("Missing firmware ABI closure: " + ", ".join(sorted(needed - supplied)))
+
+
 def package(root, args):
     root = Path(root)
     profiles = ("voice", "video") if args.profile == "all" else (args.profile,)
     validated = []
+    if args.release:
+        source = source_snapshot(root)
+        if source["dirty"] or not source["revision"]:
+            raise ValueError("Release packaging requires a clean, committed Git source tree")
     for profile in profiles:
         build = Path(getattr(args, profile + "_build")).resolve()
         manifest, report = verify_manifest(root, build, args.language, profile == "video")
         inputs = manifest['inputs']
+        reports = [(build / "mybot-rv1126b", report)]
         for role in ("supervisor", "factory-reset"):
-            verified_abi(build, inputs['config'], inputs['source']['sha256'], inputs_digest(inputs),
-                         binary_name='mybot-' + role, report_name='abi-report-' + role + '.json',
-                         require_rtsa=False)
+            helper = verified_abi(build, inputs['config'], inputs['source']['sha256'], inputs_digest(inputs),
+                                  binary_name='mybot-' + role, report_name='abi-report-' + role + '.json',
+                                  require_rtsa=False)
+            reports.append((build / ("mybot-" + role), helper))
+        if args.release:
+            verify_release_runtime(root, inputs["config"]["sdk"], reports)
         validated.append((profile, build, manifest, report))
     baseline = validated[0][2]["inputs"]
     for _, _, manifest, _ in validated[1:]:
@@ -146,10 +192,6 @@ def package(root, args):
                 inputs["dependencies"] != baseline["dependencies"] or
                 inputs["config"]["version"] != baseline["config"]["version"]):
             raise ValueError("Profiles were built from different source/dependencies/version")
-    if args.release:
-        source = source_snapshot(root)
-        if source["dirty"] or not source["revision"]:
-            raise ValueError("Release packaging requires a clean, committed Git source tree")
     version = baseline["config"]["version"]
     name = "mybot-rv1126b-" + version
     if args.language != "zh-CN":
@@ -241,7 +283,7 @@ def main():
     parser.add_argument("--video-build", type=Path,
                         help="Default: build/rv1126b-video-zh (or -en for en-US)")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist")
-    parser.add_argument("--release", action="store_true", help="Require clean, committed source")
+    parser.add_argument("--release", action="store_true", help="Require committed source and the pinned firmware runtime for every ABI dependency")
     args = parser.parse_args()
     language_suffix = "zh" if args.language == "zh-CN" else "en"
     for profile in ("voice", "video"):
