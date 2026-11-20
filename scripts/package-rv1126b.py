@@ -110,21 +110,21 @@ def example_environment(root, language):
     return template
 
 
-def runtime_notice(root, name):
-    """Retarget project-owned notice links; retain every original statement."""
+def package_markdown(root, name, packaged, revision):
+    """Resolve project links against the checkout used to assemble the archive."""
     root = Path(root).resolve()
     source = root / name
-    packaged = dict(LICENSES)
 
     def link(match):
         target = match[1]
         if target.startswith(("https://", "http://", "#", "mailto:")):
             return match[0]
-        relative = str((source.parent / target).resolve().relative_to(root))
+        path, separator, fragment = target.partition("#")
+        relative = str((source.parent / path).resolve().relative_to(root))
         destination = packaged.get(relative)
         if destination is None:
-            destination = "https://github.com/junlon2006/mybot-rv1126b/blob/dev/" + relative
-        return "](" + destination + ")"
+            destination = f"https://github.com/junlon2006/mybot-rv1126b/blob/{revision or 'dev'}/{relative}"
+        return "](" + destination + separator + fragment + ")"
 
     return re.sub(r"\]\(([^)]+)\)", link, source.read_text())
 
@@ -254,11 +254,15 @@ def package(root, args):
         (staging / "run.sh").chmod(0o755)
         (staging / "example.env").write_text(environment)
         readme = "README.en.md" if args.language == "en-US" else "README.zh-CN.md"
-        shutil.copyfile(root / "packaging" / readme, staging / readme)
+        manual = "docs/device-operations." + ("en" if args.language == "en-US" else "zh-CN") + ".pdf"
+        (staging / "docs").mkdir()
+        shutil.copyfile(root / manual, staging / manual)
+        (staging / readme).write_text(package_markdown(root, "packaging/" + readme,
+                                                     {manual: manual}, origin["revision"]))
         (staging / "licenses").mkdir()
         for source, filename in LICENSES:
             if source in ("THIRD_PARTY_NOTICES.md", "docs/dependencies/licensing.md"):
-                (staging / "licenses" / filename).write_text(runtime_notice(root, source))
+                (staging / "licenses" / filename).write_text(package_markdown(root, source, dict(LICENSES), origin["revision"]))
             else:
                 shutil.copyfile(root / source, staging / "licenses" / filename)
         checksums = [digest(path) + "  " + str(path.relative_to(staging))

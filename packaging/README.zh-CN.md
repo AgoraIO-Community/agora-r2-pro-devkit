@@ -2,7 +2,7 @@
 
 适用于 RV1126B TEST2 RK805B V10 的既有 AArch64 Buildroot 系统。版本、语言及语音/视频变体以包内 manifest 和 `./run.sh --version` 为准。
 
-完整步骤见[中文操作手册 PDF](https://github.com/junlon2006/mybot-rv1126b/blob/dev/docs/device-operations.zh-CN.pdf)、[构建指南](https://github.com/junlon2006/mybot-rv1126b/blob/dev/docs/user/build.zh-CN.md)与[部署指南](https://github.com/junlon2006/mybot-rv1126b/blob/dev/docs/user/deployment.zh-CN.md)。硬件验收范围以[验证状态](https://github.com/junlon2006/mybot-rv1126b/blob/dev/docs/validation/README.md)为准。
+解包后可离线阅读[中文操作手册 PDF](../docs/device-operations.zh-CN.pdf)。源码仓库提供[构建指南](../docs/user/build.zh-CN.md)与[部署指南](../docs/user/deployment.zh-CN.md)。硬件验收范围以[验证状态](../docs/validation/README.md)为准。
 
 已有设备 AP、设备本机 HTTP 提交保存及 SDK 恢复的记录；手机无线接入、DHCP/captive browser、错误密码、重启复用和完整语音仍需专项验收。新制品不能继承旧包的真机结论。
 

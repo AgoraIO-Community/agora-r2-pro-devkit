@@ -47,8 +47,10 @@ class PackagingTests(unittest.TestCase):
         self.write(self.root / ".gitignore", "/build*/\n/local/\n/dist/\n")
         self.write(self.root / "packaging/run.sh", 'case "${RV1126B_VIDEO:-0}" in\n0) :;;\n1) :;;\nesac\n')
         self.write(self.root / "packaging/example.env", (ROOT / "packaging/example.env").read_text())
-        self.write(self.root / "packaging/README.zh-CN.md", "fixture guide\n")
-        self.write(self.root / "packaging/README.en.md", "English fixture guide\n")
+        for language in ("zh-CN", "en"):
+            readme = "packaging/README." + language + ".md"
+            self.write(self.root / readme, (ROOT / readme).read_text())
+            self.write(self.root / ("docs/device-operations." + language + ".pdf"), "fixture PDF " + language)
         for source in packager.EXECUTABLE_ASSETS.values():
             self.write(self.root / source, "#!/bin/sh\nexit 0\n")
         for source in packager.DATA_ASSETS.values():
@@ -311,15 +313,21 @@ class PackagingTests(unittest.TestCase):
                     self.args.voice_build = self.create_build("voice-en", False, language)
                     self.args.video_build = self.create_build("video-en", True, language)
                 destination, archive, _ = packager.package(self.root, self.args)
-                expected = (self.root / "packaging" / readme).read_bytes()
-                self.assertEqual((destination / readme).read_bytes(), expected)
+                packaged = (destination / readme).read_text()
+                revision = metadata.read_json(destination / "package-manifest.json")["source"]["revision"]
+                self.assertIn(f"/blob/{revision}/docs/user/deployment.zh-CN.md", packaged)
+                self.assertNotIn("/blob/dev/", packaged)
+                manual = "docs/device-operations." + ("en" if language == "en-US" else language) + ".pdf"
+                self.assertIn("](" + manual + ")", packaged)
+                self.assertEqual((destination / manual).read_bytes(), (self.root / manual).read_bytes())
                 self.assertFalse((destination / other).exists())
                 checksums = dict((name, checksum) for checksum, name in
                                  (line.split("  ", 1) for line in
                                   (destination / "SHA256SUMS").read_text().splitlines()))
                 self.assertEqual(checksums[readme], metadata.digest(destination / readme))
+                self.assertEqual(checksums[manual], metadata.digest(destination / manual))
                 with tarfile.open(archive) as stream:
-                    self.assertEqual(stream.extractfile(destination.name + "/" + readme).read(), expected)
+                    self.assertEqual(stream.extractfile(destination.name + "/" + readme).read(), packaged.encode())
 
     def test_packaged_authorization_preserves_text_and_resolves_source_links(self):
         statement = ('Official statement. [Project](../../LICENSE) and [AOSL](../../vendor/aosl/LICENSE).\n'
@@ -340,7 +348,8 @@ class PackagingTests(unittest.TestCase):
         strip_targets = lambda text: re.sub(r'\]\([^)]+\)', ']()', text)
         self.assertEqual(strip_targets(statement), strip_targets(actual))
         self.assertIn('https://www.shengwang.cn/contact-sales/', actual)
-        self.assertIn('https://github.com/junlon2006/mybot-rv1126b/blob/dev/VENDORED_SOURCES.md', actual)
+        revision = metadata.read_json(destination / "package-manifest.json")["source"]["revision"]
+        self.assertIn(f"https://github.com/junlon2006/mybot-rv1126b/blob/{revision}/VENDORED_SOURCES.md", actual)
         packaged_root_notice = (destination / 'licenses/THIRD_PARTY_NOTICES.md').read_text()
         self.assertEqual(strip_targets(root_notice), strip_targets(packaged_root_notice))
         self.assertEqual((destination / 'licenses/mybot-THIRD_PARTY_NOTICES.md').read_text(), original_vendor_notice)

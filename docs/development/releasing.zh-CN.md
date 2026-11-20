@@ -40,7 +40,7 @@ python3 scripts/package-rv1126b.py --profile all --language zh-CN
 
 包内包含所选二进制、仓库内固定的 AArch64 RTSA 库、中英文 PCM 提示音、run.sh、用户说明、许可、字体来源、`build-manifest-voice.json` / `build-manifest-video.json`、对应 ABI 报告及 `SHA256SUMS`。RTSA 来源记录、原始中英文 README 和 `PACKAGE_INFO` 随包保存在 `licenses/`，名称分别为 `RTSA_SOURCE.txt`、`RTSA-README.zh-CN.md`、`RTSA-README.en.md`、`RTSA-PACKAGE_INFO.txt`。源码树保留完整 SDK，设备运行包只携带选定 AArch64 库。公开 manifest/ABI 归一化宿主路径，保留依赖身份；本地报告仍保留诊断信息。
 
-中文包附 `README.zh-CN.md`，英文包附 `README.en.md`，分别链接对应语言的完整 PDF。项目自有授权摘要和第三方总声明的包内副本将源码相对链接转换为已附许可文件或 HTTPS 源码链接，正文与官方商务入口保留；vendor 原始许可及 SDK 文档按原字节附带。
+中文包附 `README.zh-CN.md`，英文包附 `README.en.md`，各自附带对应语言的完整 PDF，解包后可从 README 离线打开。其他项目文档链接固定到 `package-manifest.json` 中的打包提交，该提交推送后可在线打开。项目自有授权摘要和第三方总声明的包内副本将源码相对链接转换为已附许可文件或 HTTPS 源码链接，正文与官方商务入口保留；vendor 原始许可及 SDK 文档按原字节附带。
 
 `licenses/cjson-LICENSE.txt` 保留 namespaced cJSON 原注释中的完整 Dave Gamble MIT 版权和条款；测试逐字比较源码注释提取结果、保留副本及归档内容。许可副本另在依赖锁登记，不以根许可证或简述替代。
 
