@@ -30,6 +30,9 @@ ctest --preset host-ubsan
 git diff --check
 ```
 
+CI 在质量检查任务中运行一次 Python 工具套件。三个主机 preset 用 `ctest --preset <preset> -LE tooling`
+运行各自的原生用例及 UI 基线。本地直接运行 `ctest --preset <preset>` 会同时执行两组测试。
+
 macOS 需要时为 doctor 加 `--drm-include PATH`，为 configure 加 `-DRV1126B_TEST_DRM_INCLUDE=PATH`，见[构建指南](../user/build.zh-CN.md)。完整门禁不能因缺少 DRM 头文件而静默省略测试。`scripts/test-host.sh` 保留兼容入口；运行的实际环境与日志分别登记。
 
 现有检查覆盖像素旋转/dirty rectangle/pitch、输入语义和关闭、真实 LVGL 流程/表情/字形/文字边界、稳定身份 HMAC、显示 worker、DRM 失败清理与原输出恢复。治理增加配置/运行保护、ALSA 与网络失败清理/线程退出，以及工具链/制品一致性的边界检查。Wi-Fi 增加控制器模拟后端测试和真实 loopback HTTP/DNS 协议测试，覆盖异步提交、错误密码重试、成功后保存、队列冲突、已有网络保留及取消停止；后端纯逻辑覆盖扫描/接口解析、凭据校验和私有存储。门户测试包括 Host/Origin/CSRF、请求长度/重复 framing、UTF-8/JSON 转义、DNS 标签/压缩/截断及慢客户端关闭。主机测试不启动真实 hostapd 或变更网络接口，loopback socket 需获运行环境允许。准确测试名称以 `ctest --preset host-zh -N` 和测试报告为准，不把测试数量当作验收标准。

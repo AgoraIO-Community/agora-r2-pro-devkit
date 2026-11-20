@@ -27,6 +27,8 @@ static int test_supervisor_dup2(int old_fd, int new_fd);
 static char temporary[PATH_MAX], runtime_path[PATH_MAX], logs_path[PATH_MAX];
 static char marker_path[PATH_MAX], executable_path[PATH_MAX];
 static char power_command[PATH_MAX], power_marker[PATH_MAX];
+static const char *test_case, *payload_mode;
+static pid_t supervisor_pid;
 
 static int test_supervisor_fcntl(int fd, int command, ...) {
     if (command == F_GETFL || command == F_GETFD)
@@ -77,7 +79,8 @@ static void remove_tree(const char *path) {
     CHECK(closedir(directory) == 0 && rmdir(path) == 0);
 }
 
-static void prepare(void) {
+static void prepare(const char *name) {
+    test_case = name;
     strcpy(temporary, "/tmp/mybot-supervisor-test-XXXXXX");
     CHECK(mkdtemp(temporary));
     CHECK(snprintf(runtime_path, sizeof(runtime_path), "%s/runtime", temporary) > 0);
@@ -278,7 +281,23 @@ static pid_t start_supervisor(const char *mode, size_t log_limit) {
             config.reset_directory = temporary;
         _exit(rv1126b_supervisor_run(&config));
     }
+    supervisor_pid = pid;
+    payload_mode = mode;
     return pid;
+}
+
+static void wait_timeout(pid_t pid, const char *expected) {
+    char path[PATH_MAX], line[128], state[48] = "unavailable";
+    CHECK(snprintf(path, sizeof(path), "%s/mybot.log", logs_path) < (int)sizeof(path));
+    FILE *log = fopen(path, "r");
+    if (log) {
+        while (fgets(line, sizeof(line), log))
+            (void)sscanf(line, "supervisor: %47[a-z_]", state);
+        fclose(log);
+    }
+    fprintf(stderr, "%s (%s): timeout waiting for %.*s, pid=%ld, last supervisor state=%s\n",
+            test_case, payload_mode, (int)strcspn(expected, "\n"), expected, (long)pid, state);
+    abort();
 }
 
 static bool query_state(char *state, size_t capacity) {
@@ -293,7 +312,8 @@ static bool query_state(char *state, size_t capacity) {
     }
     CHECK(write(fd, "status\n", 7) == 7);
     struct pollfd ready = {.fd = fd, .events = POLLIN};
-    CHECK(poll(&ready, 1, 2000) > 0);
+    if (poll(&ready, 1, 2000) <= 0)
+        wait_timeout(supervisor_pid, "status reply");
     ssize_t length = read(fd, state, capacity - 1);
     CHECK(length > 0);
     state[length] = '\0';
@@ -309,7 +329,7 @@ static void await_state(const char *expected) {
             return;
         pause_ms(5);
     }
-    CHECK(false);
+    wait_timeout(supervisor_pid, expected);
 }
 
 static int await_exit(pid_t pid) {
@@ -324,7 +344,7 @@ static int await_exit(pid_t pid) {
         }
         pause_ms(5);
     }
-    CHECK(false);
+    wait_timeout(pid, "process exit");
     return -1;
 }
 
@@ -351,11 +371,11 @@ static void read_marker(pid_t *first, pid_t *second) {
         }
         pause_ms(5);
     }
-    CHECK(false);
+    wait_timeout(supervisor_pid, "payload PID marker");
 }
 
 static void test_stop_and_duplicate_owner(void) {
-    prepare();
+    prepare(__func__);
     CHECK(setenv("MYBOT_TEST_SECRET", "not-for-service-logs", 1) == 0);
     pid_t supervisor = start_supervisor("wait", 512 * 1024);
     await_state("running\n");
@@ -382,7 +402,7 @@ static void test_stop_and_duplicate_owner(void) {
 }
 
 static void test_restart_budget(void) {
-    prepare();
+    prepare(__func__);
     pid_t supervisor = start_supervisor("failure", 512 * 1024);
     await_state("failed\n");
     CHECK(rv1126b_supervisor_control(runtime_path, 0) == 1);
@@ -396,10 +416,10 @@ static void test_restart_budget(void) {
 }
 
 static void test_normal_exit_and_logs(void) {
-    prepare();
+    prepare(__func__);
     CHECK(await_exit(start_supervisor("exit", 512 * 1024)) == 0);
     remove_tree(temporary);
-    prepare();
+    prepare(__func__);
     pid_t supervisor = start_supervisor("logs", 128);
     await_state("running\n");
     pid_t child;
@@ -422,7 +442,7 @@ static void test_normal_exit_and_logs(void) {
 static void test_descendant_cleanup(void) {
 #ifdef __linux__
     for (int orphan = 0; orphan < 2; ++orphan) {
-        prepare();
+        prepare(__func__);
         pid_t foreign = fork();
         CHECK(foreign >= 0);
         if (foreign == 0) {
@@ -454,7 +474,7 @@ static void test_descendant_cleanup(void) {
 }
 
 static void test_unclean_blocks_restart(const char *mode) {
-    prepare();
+    prepare(__func__);
     pid_t supervisor = start_supervisor(mode, 512 * 1024);
     await_state("failed\n");
     CHECK(rv1126b_supervisor_control(runtime_path, 0) == 1);
@@ -475,7 +495,7 @@ static void test_unclean_blocks_restart(const char *mode) {
 }
 
 static void test_unsafe_inputs(void) {
-    prepare();
+    prepare(__func__);
     CHECK(mkdir(runtime_path, 0755) == 0);
     CHECK(await_exit(start_supervisor("wait", 128)) == 1);
     CHECK(access(marker_path, F_OK) < 0);
@@ -494,22 +514,22 @@ static void test_unsafe_inputs(void) {
 }
 
 static void test_planned_poweroff(void) {
-    prepare();
+    prepare(__func__);
     CHECK(await_exit(start_supervisor("power-clean", 128)) == 0);
     CHECK(access(power_marker, F_OK) == 0);
     remove_tree(temporary);
 
-    prepare();
+    prepare(__func__);
     CHECK(await_exit(start_supervisor("power-delayed-commit", 128)) == 0);
     CHECK(access(power_marker, F_OK) == 0);
     remove_tree(temporary);
 
-    prepare();
+    prepare(__func__);
     CHECK(await_exit(start_supervisor("power-disabled", 128)) == 0);
     CHECK(access(power_marker, F_OK) < 0 && errno == ENOENT);
     remove_tree(temporary);
 
-    prepare();
+    prepare(__func__);
     CHECK(await_exit(start_supervisor("power-nonzero", 128)) == 1);
     CHECK(access(power_marker, F_OK) < 0 && errno == ENOENT);
     remove_tree(temporary);
@@ -521,7 +541,7 @@ static void test_planned_poweroff(void) {
 #endif
     };
     for (size_t i = 0; i < sizeof(unclean_modes) / sizeof(unclean_modes[0]); ++i) {
-        prepare();
+        prepare(__func__);
         pid_t supervisor = start_supervisor(unclean_modes[i], 128);
         await_state("failed\n");
         CHECK(access(power_marker, F_OK) < 0 && errno == ENOENT);
@@ -532,7 +552,7 @@ static void test_planned_poweroff(void) {
 }
 
 static void test_poweroff_peer_and_commit(void) {
-    prepare();
+    prepare(__func__);
     pid_t supervisor = start_supervisor("power-no-commit", 128);
     await_state("running\n");
     pause_ms(100);
@@ -548,7 +568,7 @@ static void test_poweroff_peer_and_commit(void) {
 
 static void test_factory_reset(void) {
     char pending[PATH_MAX];
-    prepare();
+    prepare(__func__);
     CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
           (int)sizeof(pending));
     CHECK(await_exit(start_supervisor("reset-clean", 8192)) == 0);
@@ -560,7 +580,7 @@ static void test_factory_reset(void) {
     CHECK(access(power_marker, F_OK) < 0 && errno == ENOENT);
     remove_tree(temporary);
 
-    prepare();
+    prepare(__func__);
     CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
           (int)sizeof(pending));
     pid_t other = start_supervisor("reset-other-station", 128);
@@ -580,7 +600,7 @@ static void test_factory_reset(void) {
     CHECK(lstat(pending, &status) == 0 && S_ISLNK(status.st_mode));
     remove_tree(temporary);
 
-    prepare();
+    prepare(__func__);
     CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
           (int)sizeof(pending));
     pid_t supervisor = start_supervisor("reset-no-commit", 128);
@@ -592,7 +612,7 @@ static void test_factory_reset(void) {
     CHECK(rv1126b_supervisor_control(runtime_path, 1) == 0 && await_exit(supervisor) == 0);
     remove_tree(temporary);
 
-    prepare();
+    prepare(__func__);
     CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
           (int)sizeof(pending));
     supervisor = start_supervisor("reset-fail", 128);
@@ -616,7 +636,7 @@ static void check_private_log(const char *message) {
 }
 
 static void test_poweroff_helper_diagnostics(void) {
-    prepare();
+    prepare(__func__);
     int fd = open(power_command, O_WRONLY | O_TRUNC);
     CHECK(fd >= 0);
     char script[PATH_MAX * 2 + 256];
@@ -637,7 +657,7 @@ static void test_poweroff_helper_diagnostics(void) {
     const char *messages[] = {"cannot preserve poweroff diagnostics",
                               "cannot attach poweroff diagnostics"};
     for (size_t index = 0; index < sizeof(modes) / sizeof(modes[0]); ++index) {
-        prepare();
+        prepare(__func__);
         CHECK(await_exit(start_supervisor(modes[index], 512 * 1024)) == 1);
         CHECK(access(power_marker, F_OK) < 0 && errno == ENOENT);
         CHECK(rv1126b_supervisor_control(runtime_path, 0) == 3);
