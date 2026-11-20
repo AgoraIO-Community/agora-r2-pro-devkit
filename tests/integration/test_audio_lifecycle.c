@@ -46,6 +46,7 @@ static void *audio_calloc(size_t count, size_t size) {
         ++allocations;
     return result;
 }
+
 static void *audio_realloc(void *pointer, size_t size) {
     bool was_null = pointer == NULL;
     void *result = realloc(pointer, size);
@@ -53,11 +54,13 @@ static void *audio_realloc(void *pointer, size_t size) {
         ++allocations;
     return result;
 }
+
 static void audio_free(void *pointer) {
     if (pointer)
         --allocations;
     free(pointer);
 }
+
 static int audio_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attributes) {
     if (fail_mutex)
         return EAGAIN;
@@ -66,12 +69,14 @@ static int audio_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *a
         ++mutexes;
     return result;
 }
+
 static int audio_mutex_destroy(pthread_mutex_t *mutex) {
     int result = pthread_mutex_destroy(mutex);
     CHECK(result == 0);
     --mutexes;
     return result;
 }
+
 static int audio_clock_gettime(clockid_t clock, struct timespec *time) {
     CHECK(clock == CLOCK_MONOTONIC);
     time->tv_sec = (time_t)(fake_ms / 1000);
@@ -79,6 +84,7 @@ static int audio_clock_gettime(clockid_t clock, struct timespec *time) {
     ++fake_ms;
     return 0;
 }
+
 static int audio_nanosleep(const struct timespec *requested, struct timespec *remaining) {
     (void)remaining;
     CHECK(requested->tv_sec == 0 && requested->tv_nsec == 1000000);
@@ -112,6 +118,7 @@ static int audio_nanosleep(const struct timespec *requested, struct timespec *re
 static int configure_result(void) {
     return ++init_step == fail_step ? -EIO : 0;
 }
+
 int snd_pcm_open(snd_pcm_t **pcm, const char *device, snd_pcm_stream_t stream, int flags) {
     CHECK(strcmp(device, stream == SND_PCM_STREAM_CAPTURE ? "mock-capture" : "mock-playback") == 0);
     CHECK(flags == SND_PCM_NONBLOCK && handles == 0);
@@ -123,12 +130,14 @@ int snd_pcm_open(snd_pcm_t **pcm, const char *device, snd_pcm_stream_t stream, i
     }
     return result;
 }
+
 int snd_pcm_close(snd_pcm_t *pcm) {
     CHECK(pcm == &hardware && pcm->open && handles == 1);
     pcm->open = 0;
     --handles;
     return 0;
 }
+
 const char *snd_strerror(int error) {
     (void)error;
     return "injected ALSA error";
@@ -141,21 +150,25 @@ int snd_pcm_hw_params_any(snd_pcm_t *pcm, snd_pcm_hw_params_t *params) {
     CHECK_PCM_PARAMS();
     return configure_result();
 }
+
 int snd_pcm_hw_params_set_access(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, int access) {
     CHECK_PCM_PARAMS();
     CHECK(access == SND_PCM_ACCESS_RW_INTERLEAVED);
     return configure_result();
 }
+
 int snd_pcm_hw_params_set_format(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, int format) {
     CHECK_PCM_PARAMS();
     CHECK(format == SND_PCM_FORMAT_S16_LE);
     return configure_result();
 }
+
 int snd_pcm_hw_params_set_channels(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned channels) {
     CHECK_PCM_PARAMS();
     CHECK(channels == 1);
     return configure_result();
 }
+
 int snd_pcm_hw_params_set_rate_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *params, unsigned *rate,
                                     int *direction) {
     CHECK_PCM_PARAMS();
@@ -163,64 +176,76 @@ int snd_pcm_hw_params_set_rate_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
     *rate = (unsigned)negotiated_rate;
     return configure_result();
 }
+
 int snd_pcm_hw_params_set_period_size_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
                                            snd_pcm_uframes_t *frames, int *direction) {
     CHECK_PCM_PARAMS();
     CHECK(*frames > 0 && !direction);
     return configure_result();
 }
+
 int snd_pcm_hw_params_set_buffer_size_near(snd_pcm_t *pcm, snd_pcm_hw_params_t *params,
                                            snd_pcm_uframes_t *frames) {
     CHECK_PCM_PARAMS();
     CHECK(*frames > 0);
     return configure_result();
 }
+
 int snd_pcm_hw_params(snd_pcm_t *pcm, snd_pcm_hw_params_t *params) {
     CHECK_PCM_PARAMS();
     return configure_result();
 }
+
 int snd_pcm_get_params(snd_pcm_t *pcm, snd_pcm_uframes_t *buffer, snd_pcm_uframes_t *period) {
     CHECK(pcm == &hardware && pcm->open);
     *buffer = 960;
     *period = 160;
     return configure_result();
 }
+
 int snd_pcm_sw_params_current(snd_pcm_t *pcm, snd_pcm_sw_params_t *params) {
     CHECK_PCM_PARAMS();
     params->threshold = 1;
     return configure_result();
 }
+
 int snd_pcm_sw_params_set_avail_min(snd_pcm_t *pcm, snd_pcm_sw_params_t *params,
                                     snd_pcm_uframes_t frames) {
     CHECK_PCM_PARAMS();
     CHECK(frames > 0);
     return configure_result();
 }
+
 int snd_pcm_sw_params_set_start_threshold(snd_pcm_t *pcm, snd_pcm_sw_params_t *params,
                                           snd_pcm_uframes_t frames) {
     CHECK_PCM_PARAMS();
     params->threshold = frames;
     return configure_result();
 }
+
 int snd_pcm_sw_params(snd_pcm_t *pcm, snd_pcm_sw_params_t *params) {
     CHECK_PCM_PARAMS();
     return configure_result();
 }
+
 int snd_pcm_sw_params_get_start_threshold(const snd_pcm_sw_params_t *params,
                                           snd_pcm_uframes_t *frames) {
     CHECK(params);
     *frames = params->threshold;
     return configure_result();
 }
+
 int snd_pcm_prepare(snd_pcm_t *pcm) {
     CHECK(pcm == &hardware && pcm->open);
     ++prepare_calls;
     return prepare_error;
 }
+
 int snd_pcm_drop(snd_pcm_t *pcm) {
     CHECK(pcm == &hardware && pcm->open);
     return drop_error;
 }
+
 int snd_pcm_drain(snd_pcm_t *pcm) {
     CHECK(pcm == &hardware && pcm->open);
     ++drain_calls;
@@ -230,6 +255,7 @@ int snd_pcm_drain(snd_pcm_t *pcm) {
     }
     return drain_error;
 }
+
 snd_pcm_sframes_t snd_pcm_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_uframes_t frames) {
     CHECK(pcm == &hardware && pcm->open);
     ++read_calls;
@@ -239,6 +265,7 @@ snd_pcm_sframes_t snd_pcm_readi(snd_pcm_t *pcm, void *buffer, snd_pcm_uframes_t 
         ((int16_t *)buffer)[i] = 42;
     return result;
 }
+
 snd_pcm_sframes_t snd_pcm_writei(snd_pcm_t *pcm, const void *buffer, snd_pcm_uframes_t frames) {
     CHECK(pcm == &hardware && pcm->open);
     ++write_calls;
@@ -252,15 +279,18 @@ snd_pcm_sframes_t snd_pcm_writei(snd_pcm_t *pcm, const void *buffer, snd_pcm_ufr
     }
     return result;
 }
+
 int snd_pcm_delay(snd_pcm_t *pcm, snd_pcm_sframes_t *frames) {
     CHECK(pcm == &hardware && pcm->open);
     *frames = 0;
     return 0;
 }
+
 int snd_pcm_state(snd_pcm_t *pcm) {
     CHECK(pcm == &hardware && pcm->open);
     return 0;
 }
+
 const char *snd_pcm_state_name(int state) {
     (void)state;
     return "mock";
@@ -269,6 +299,7 @@ const char *snd_pcm_state_name(int state) {
 static void check_released(void) {
     CHECK(allocations == 0 && mutexes == 0 && handles == 0);
 }
+
 static void test_partial_initialization(void) {
     const mybot_audio_capture_ops_t *ops = rv1126b_capture_ops();
     void *ctx = NULL;

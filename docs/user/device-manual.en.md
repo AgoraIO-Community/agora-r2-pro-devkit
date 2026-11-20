@@ -560,7 +560,7 @@ Record the version, screen state and nearby failure logs before troubleshooting.
 | No phone setup page | Stay on the mybot hotspot and open http://192.168.4.1/ |
 | Wrong password / hotspot disappears | Wait for the attempt to finish; rejoin the restored hotspot and retry |
 | Phone succeeds, device still waits | Check routing, DNS, time and CA; inspect application state, not just the phone message |
-| Time unavailable | Check date and time services; default wait is 30 seconds after networking, with time no earlier than 2026-01-01 UTC |
+| System time / Time unavailable | A waiting device resumes after time sync. On error, check the time service and confirm the date is 2026-01-01 UTC or later. |
 | Service connection / TLS failure | Check regional HTTPS address, DNS, CA, time and connectivity |
 
 The clock threshold rejects obviously invalid dates; it does not prove accurate NTP synchronization. Keep system time services. If needed, a maintainer can configure the optional BusyBox helper using the time guide; time synchronization is not started during Wi-Fi setup.

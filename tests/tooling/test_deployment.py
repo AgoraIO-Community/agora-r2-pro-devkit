@@ -38,6 +38,9 @@ class DeploymentTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.base = Path(self.temporary.name)
+        receipt_root = patch.object(deployment, "RECEIPT_ROOT", self.base / "receipts")
+        receipt_root.start()
+        self.addCleanup(receipt_root.stop)
         self.name = "mybot-rv1126b-0.4.0-aarch64"
         config = {"version": "0.4.0", "language": "zh-CN", "video": False,
                   "board": "rv1126b-test2-rk805b-v10", "ptime_ms": 20}
@@ -343,7 +346,7 @@ class DeploymentTests(unittest.TestCase):
             self.assertEqual(deployment.main(arguments), 0)
         adb.assert_not_called()
         self.assertEqual(json.loads(output.getvalue())["profile"], "video")
-        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt"), \
+        with patch.object(deployment, "Adb") as adb_class, \
                 patch.object(deployment, "release_load_check", wraps=deployment.release_load_check) as load, \
                 patch.object(deployment, "wait_for_application", return_value="service=running\n") as wait, \
                 redirect_stdout(io.StringIO()):
@@ -395,16 +398,28 @@ class DeploymentTests(unittest.TestCase):
         settings = self.base / "settings.json"
         settings.write_text(json.dumps(self.settings))
         settings.chmod(0o600)
-        output = io.StringIO()
-        with patch.object(deployment, "Adb") as adb, redirect_stdout(output):
-            self.assertEqual(deployment.main(["deploy", "--package", str(path), "--sha256", checksum,
-                                              "--settings", str(settings)]), 0)
-        adb.assert_not_called()
-        plan = json.loads(output.getvalue())
-        self.assertTrue(plan["dry_run"])
-        self.assertEqual(plan["profile"], "voice")
-        self.assertNotIn(self.settings["device_id"], output.getvalue())
-        self.assertNotIn(self.settings["server"], output.getvalue())
+        for action in ("deploy", "rollback"):
+            for start in (False, True):
+                arguments = [action, "--settings", str(settings)]
+                if action == "deploy":
+                    arguments += ["--package", str(path), "--sha256", checksum]
+                if start:
+                    arguments += ["--start", "--dry-run"]
+                with self.subTest(action=action, start=start), patch.object(deployment, "Adb") as adb, \
+                        patch.object(deployment, "reserve_receipt") as reserve, redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(deployment.main(arguments), 0)
+                    adb.assert_not_called()
+                    reserve.assert_not_called()
+                    plan = json.loads(output.getvalue())
+                    self.assertTrue(plan["dry_run"])
+                    self.assertEqual(plan["profile"], "voice")
+                    self.assertEqual(plan["start_requested"], start)
+                    self.assertEqual(plan["install_boot_service"], action == "deploy")
+                    self.assertEqual(plan["apply_network_policy"], action == "deploy")
+                    self.assertEqual(plan["release"], self.name if action == "deploy" else "previous")
+                    self.assertFalse(plan["reboot"])
+                    self.assertNotIn(self.settings["device_id"], output.getvalue())
+                    self.assertNotIn(self.settings["server"], output.getvalue())
 
     def test_adb_selection_requires_an_unambiguous_authorized_device(self):
         result = subprocess.CompletedProcess([], 0, "List of devices attached\na\tdevice\nb\tdevice\n", "")
@@ -431,7 +446,7 @@ class DeploymentTests(unittest.TestCase):
         settings.write_text(json.dumps(self.settings))
         settings.chmod(0o600)
         output = io.StringIO()
-        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt") as receipt:
+        with patch.object(deployment, "Adb") as adb_class:
             adb = adb_class.return_value
             adb.shell.return_value = "backup_sha256=" + "b" * 64 + "\n"
             with redirect_stdout(output):
@@ -447,7 +462,7 @@ class DeploymentTests(unittest.TestCase):
             self.assertLess(install.index("S99mybot stop"), install.index(".current-$tag"))
             self.assertIn("/etc/mybot-rv1126b/poweroff.sh 755", install)
             self.assertNotIn("reboot", install)
-            self.assertNotIn(self.settings["device_id"], json.dumps(receipt.call_args.args[2]))
+            self.assertNotIn(self.settings["device_id"], (deployment.RECEIPT_ROOT / "fixture" / "receipt.json").read_text())
             syntax = subprocess.run(["sh", "-n"], input=install, text=True, capture_output=True)
             self.assertEqual(syntax.returncode, 0, syntax.stderr)
             self.assertEqual(calls[-1][1][0], "rmdir /run/mybot-deploy.lock\n")
@@ -553,7 +568,7 @@ class DeploymentTests(unittest.TestCase):
         settings = self.base / "settings.json"
         settings.write_text(json.dumps(self.settings))
         settings.chmod(0o600)
-        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt"), \
+        with patch.object(deployment, "Adb") as adb_class, \
                 redirect_stdout(io.StringIO()):
             adb = adb_class.return_value
             adb.shell.return_value = ""
@@ -571,7 +586,7 @@ class DeploymentTests(unittest.TestCase):
         settings = self.base / "settings.json"
         settings.write_text(json.dumps(self.settings))
         settings.chmod(0o600)
-        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt") as receipt, \
+        with patch.object(deployment, "Adb") as adb_class, \
                 patch("sys.stderr", new_callable=io.StringIO):
             adb = adb_class.return_value
             adb.shell.side_effect = ["", RuntimeError("target profile mismatch")]
@@ -582,7 +597,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertEqual(len(scripts), 2)
         self.assertFalse(any("tar -C / -czf" in script or "S99mybot stop" in script or
                              ".current-$tag" in script for script in scripts))
-        receipt.assert_not_called()
+        self.assertFalse(deployment.RECEIPT_ROOT.exists())
 
     def capability_fixture(self, failure=None):
         target = (self.base / "target").resolve()
@@ -687,7 +702,7 @@ class DeploymentTests(unittest.TestCase):
         settings = self.base / "settings.json"
         settings.write_text(json.dumps(self.settings))
         settings.chmod(0o600)
-        with patch.object(deployment, "Adb") as adb_class, patch.object(deployment, "receipt") as receipt, \
+        with patch.object(deployment, "Adb") as adb_class, \
                 patch("sys.stderr", new_callable=io.StringIO):
             adb = adb_class.return_value
             adb.shell.side_effect = ["", "", RuntimeError("staged load check failed")]
@@ -698,7 +713,7 @@ class DeploymentTests(unittest.TestCase):
         self.assertIn("capabilities=ready", scripts[0])
         self.assertIn("--version", scripts[-1])
         self.assertFalse(any("S99mybot stop" in script for script in scripts))
-        receipt.assert_not_called()
+        self.assertEqual(json.loads((deployment.RECEIPT_ROOT / "fixture/receipt.json").read_text())["phase"], "backed_up")
 
     def status_fixture(self, *, state='ready', service='running', version='0.4.0',
                        alive=True, wrong_executable=False, mode=0o600, expected=None, video=None,
@@ -841,7 +856,7 @@ class DeploymentTests(unittest.TestCase):
         settings = self.base / 'settings.json'
         settings.write_text(json.dumps(self.settings))
         settings.chmod(0o600)
-        with patch.object(deployment, 'Adb') as adb_class, patch.object(deployment, 'receipt') as receipt, \
+        with patch.object(deployment, 'Adb') as adb_class, \
                 patch.object(deployment, 'wait_for_application', side_effect=RuntimeError('startup failed')) as wait, \
                 patch('sys.stderr', new_callable=io.StringIO):
             adb = adb_class.return_value
@@ -851,7 +866,32 @@ class DeploymentTests(unittest.TestCase):
                                  '--settings', str(settings), '--tag', 'fixture', '--execute', '--start'])
         wait.assert_called_once_with(adb, self.name, False)
         self.assertFalse(any(call.args[0] == 'rmdir /run/mybot-deploy.lock\n' for call in adb.shell.call_args_list))
-        receipt.assert_not_called()
+        self.assertEqual(json.loads((deployment.RECEIPT_ROOT / "fixture/receipt.json").read_text())["phase"], "switched")
+
+    def test_two_devices_reserve_distinct_receipts_and_reject_a_reused_tag(self):
+        path, checksum = self.archive()
+        settings = self.base / "settings.json"
+        settings.write_text(json.dumps(self.settings))
+        settings.chmod(0o600)
+        args = ["deploy", "--package", str(path), "--sha256", checksum,
+                "--settings", str(settings), "--execute"]
+        with patch.object(deployment, "Adb") as adapter, redirect_stdout(io.StringIO()):
+            first, second = Mock(), Mock()
+            first.shell.return_value = second.shell.return_value = ""
+            adapter.side_effect = [first, second, second]
+            for serial in ("first", "second"):
+                self.assertEqual(deployment.main([*args, "--serial", serial]), 0)
+            records = list(deployment.RECEIPT_ROOT.glob("*/receipt.json"))
+            self.assertEqual(len(records), 2)
+            data = records[0].read_bytes()
+            self.assertEqual(json.loads(data)["phase"], "completed")
+            second.reset_mock()
+            with self.assertRaises(SystemExit), patch("sys.stderr", new_callable=io.StringIO):
+                deployment.main([*args, "--tag", records[0].parent.name, "--serial", "second"])
+            self.assertEqual(records[0].read_bytes(), data)
+            second.command.assert_not_called()
+            self.assertEqual(second.shell.call_count, 1)
+            self.assertIn("capabilities=ready", second.shell.call_args.args[0])
 
     def test_private_settings_permissions_are_enforced(self):
         path = self.base / "settings.json"
@@ -888,7 +928,8 @@ class DeploymentTests(unittest.TestCase):
         self.assertNotIn("reboot", script)
 
     def test_receipt_contains_no_identity_credentials(self):
-        path = deployment.receipt("fixture", "deploy", {"device_backup_only": True}, self.base / "output")
+        path = deployment.reserve_receipt("fixture")
+        deployment.record_phase(path, {"device_backup_only": True}, "reserved")
         self.assertEqual(path.stat().st_mode & 0o777, 0o600)
         self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
         self.assertNotIn(self.settings["device_id"], path.read_text())

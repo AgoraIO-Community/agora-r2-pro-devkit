@@ -20,7 +20,7 @@ typedef struct {
 typedef struct {
     unsigned connect_budget_ms, attempt_ms, commit_budget_ms;
     unsigned submit_grace_ms, finish_grace_ms, success_hold_ms;
-    unsigned scan_interval_ms, offline_grace_ms;
+    unsigned scan_interval_ms, offline_grace_ms, route_interval_ms;
     unsigned init_budget_ms, init_retry_ms, station_grace_ms;
 } wifi_service_timing_t;
 

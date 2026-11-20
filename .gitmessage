@@ -4,6 +4,7 @@
 #   <type>[optional scope][!]: <subject>
 #
 # Types: feat | fix | docs | style | refactor | perf | test | build | ci | chore | revert
-# Keep the subject under 72 characters, imperative mood, lowercase except identifiers.
+# Use at most 72 Unicode characters in the complete subject line.
+# Use the imperative mood and lowercase except identifiers.
 # Add ! after the type or scope for breaking changes, and describe the break in a
 # BREAKING CHANGE: footer in the body.

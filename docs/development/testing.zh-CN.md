@@ -4,7 +4,7 @@
 
 ## 标准主机门禁
 
-格式工具基线为 clang-format 11，准确版本由 `requirements-dev.txt` 固定。Ubuntu 24.04 系统自带的其他版本不能替代该基线。在仓库根目录准备忽略的虚拟环境，CI 也安装同一份固定依赖：
+CI 从 `requirements-dev.txt` 安装固定发行包 `clang-format==11.0.1.1`。本地质量检查接受报告为 11.x 的 clang-format 可执行文件。Ubuntu 24.04 自带的 18.x 超出支持范围。在仓库根目录准备忽略的虚拟环境，CI 也安装同一份固定依赖：
 
 ```sh
 sudo apt install python3-venv
@@ -12,7 +12,7 @@ python3 -m venv local/dev-tools
 local/dev-tools/bin/python -m pip install -r requirements-dev.txt
 ```
 
-`check-quality.py` 自动选择 `local/dev-tools/bin/clang-format`，无需激活虚拟环境；没有该工具时再查找 PATH。显式 `--clang-format PATH` 可指定其他安装位置，但所选工具版本仍必须匹配固定基线，否则检查失败并显示修复方式。准备环境后，在仓库根目录执行：
+`check-quality.py` 自动选择 `local/dev-tools/bin/clang-format`，无需激活虚拟环境；没有该工具时再查找 PATH。显式 `--clang-format PATH` 可指定其他安装位置，检查脚本会核对该程序报告的主版本，否则检查失败并显示修复方式。准备环境后，在仓库根目录执行：
 
 ```sh
 python3 scripts/doctor.py --host
@@ -29,6 +29,9 @@ cmake --build --preset host-ubsan
 ctest --preset host-ubsan
 git diff --check
 ```
+
+CI 在质量检查任务中运行一次 Python 工具套件。三个主机 preset 用 `ctest --preset <preset> -LE tooling`
+运行各自的原生用例及 UI 基线。本地直接运行 `ctest --preset <preset>` 会同时执行两组测试。
 
 macOS 需要时为 doctor 加 `--drm-include PATH`，为 configure 加 `-DRV1126B_TEST_DRM_INCLUDE=PATH`，见[构建指南](../user/build.zh-CN.md)。完整门禁不能因缺少 DRM 头文件而静默省略测试。`scripts/test-host.sh` 保留兼容入口；运行的实际环境与日志分别登记。
 
@@ -48,9 +51,7 @@ UI 测试保留配对码前导零、最长状态行、23 种表情、双语文�
 
 目标检查验证 AArch64、动态加载器、依赖闭包、GLIBC 版本、RPATH、所选 RTSA 和配置身份；打包校验所选 profile/language、构建是否过期、manifest/ABI 与二进制是否对应及输出结构。负向场景包括缺失变体、混用语言/版本、修改已构建输入及过期 ABI。不能为了交付通过而手工编辑报告或关闭一致性检查。
 
-第三方目录或导入范围变更必须额外检查：当前快照文件归属唯一、未登记文件被拒绝、受保护输入不能静默删除、历史档案不变，以及锁更新器重复运行无变化。目录调整先逐文件验证依赖字节一致，再审查独立的范围变化。RTSA 完整包导入先按官方归档逐文件核对，再验证锁能拒绝包内文件删除、篡改或未登记文件。四套目标构建使用全新目录；额外重新配置旧缓存，确认新 `AOSL_DIR`、仓库内 `AGORA_SDK_DIR` 及 AArch64 `AGORA_RTC_LIBRARY` 生效，仍只有一个 `aosl` target。运行代码不变不代表可以省略目标构建与打包检查。
-
-源码目录重构还要检查所有活动构建、脚本和文档引用采用 `src/application/`、`src/platform/`、`src/ui/` 与 `vendor/`；历史记录保留原路径。依赖和生成字库逐文件校验迁移前后字节一致，公共头文件命名空间和 CMake target 保持稳定。schema 2 活动依赖检查验证当前快照唯一归属、路径安全、补丁/字库/许可身份和受保护输入；更新器须拒绝未显式接受的 vendor 改动及许可/必需输入的静默裁剪，同时验证重复更新无变化、RTSA 完整包清单与历史档案不变。历史路径映射仅保留在 schema 1 档案。路径变化后的新配置、二进制和 manifest 必须配套，不复用旧产物作为新版本检查结果。
+第三方快照、补丁及生成资源的更新选项见[依赖维护流程](dependencies.zh-CN.md)。调整源码布局时，检查旧构建缓存重新配置后的 SDK 路径、公共头文件与 CMake target，并在干净目录重建所交付的目标配置。依赖专项测试覆盖快照归属、路径、保护项、锁更新及完整 RTSA 包清单。
 
 只有字体/生成器相关变更需要固定输入与工具环境下的 `generate-ui-fonts.py --check`。普通源码构建消费已提交 C 字库，不安装字体工具。源码格式、SPDX、脚本语法和文档链接按 CI 中的实际质量入口执行；第三方及生成文件不批量重排。
 

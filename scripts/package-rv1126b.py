@@ -12,8 +12,11 @@ import shutil
 import tarfile
 import tempfile
 
-from build_metadata import (digest, git, inputs_digest, public_abi, public_manifest, source_snapshot,
+from build_metadata import (checkout_origin, digest, git, inputs_digest, public_abi, public_manifest,
                             verified_abi, verify_manifest, write_json)
+
+from runtime_baseline import validate_runtime
+from target_elf import inspect as inspect_elf
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -107,38 +110,81 @@ def example_environment(root, language):
     return template
 
 
-def runtime_notice(root, name):
-    """Retarget project-owned notice links; retain every original statement."""
+def package_markdown(root, name, packaged, revision):
+    """Resolve project links against the checkout used to assemble the archive."""
     root = Path(root).resolve()
     source = root / name
-    packaged = dict(LICENSES)
 
     def link(match):
         target = match[1]
         if target.startswith(("https://", "http://", "#", "mailto:")):
             return match[0]
-        relative = str((source.parent / target).resolve().relative_to(root))
+        path, separator, fragment = target.partition("#")
+        relative = str((source.parent / path).resolve().relative_to(root))
         destination = packaged.get(relative)
         if destination is None:
-            destination = ("https://github.com/AgoraIO-Community/"
-                           "agora-r2-pro-devkit/blob/main/") + relative
-        return "](" + destination + ")"
+            destination = f"https://github.com/AgoraIO-Community/agora-r2-pro-devkit/blob/{revision or 'main'}/{relative}"
+        return "](" + destination + separator + fragment + ")"
 
     return re.sub(r"\]\(([^)]+)\)", link, source.read_text())
+
+
+def verify_release_runtime(root, sdk, reports):
+    staging = Path(sdk["staging_dir"])
+    if not sdk.get("runtime_manifest"):
+        raise ValueError("Release requires the target runtime manifest")
+    baseline = json.loads((root / "dependencies.lock.json").read_text())["external"]["runtime"]["libraries"]
+    validate_runtime(staging, sdk.get("runtime_manifest"), baseline)
+    pinned = {((staging / name).resolve(), digest): Path(name).name for name, digest in baseline.items()}
+    rtsa = Path(sdk["rtsa_library"]).resolve()
+    inspected = {}
+    for binary_path, report in reports:
+        supplied, needed = set(), set()
+        if not any(Path(entry["path"]).resolve() == binary_path.resolve() for entry in report["checked"]):
+            raise ValueError("Release ABI report must include its executable")
+        for entry in report["checked"]:
+            path = Path(entry["path"]).resolve()
+            if path not in inspected:
+                inspected[path] = inspect_elf(path)
+            elf = inspected[path]
+            if path == binary_path.resolve():
+                if elf["interpreter"] != "/lib/ld-linux-aarch64.so.1":
+                    raise ValueError("Invalid release interpreter")
+                needed.add(Path(elf["interpreter"]).name)
+            else:
+                name = elf["soname"] or path.name
+                if path == rtsa and name == "libagora-rtc-sdk.so":
+                    supplied.add(name)
+                elif pinned.get((path, elf["sha256"])) == name:
+                    supplied.add(name)
+                else:
+                    raise ValueError("ABI dependency outside pinned firmware runtime: " + name)
+            needed.update(elf["needed"])
+        if needed - supplied:
+            raise ValueError("Missing firmware ABI closure: " + ", ".join(sorted(needed - supplied)))
 
 
 def package(root, args):
     root = Path(root)
     profiles = ("voice", "video") if args.profile == "all" else (args.profile,)
     validated = []
+    origin = checkout_origin(root)
+    if args.release and (origin["dirty"] or not origin["revision"]):
+        raise ValueError("Release packaging requires a clean, committed Git source tree")
     for profile in profiles:
         build = Path(getattr(args, profile + "_build")).resolve()
         manifest, report = verify_manifest(root, build, args.language, profile == "video")
         inputs = manifest['inputs']
+        if args.release and (inputs["source"]["dirty"] or not inputs["source"]["revision"]):
+            raise ValueError("Release requires binaries built from clean, committed source")
+        reports = [(build / "mybot-rv1126b", report)]
         for role in ("supervisor", "factory-reset"):
-            verified_abi(build, inputs['config'], inputs['source']['sha256'], inputs_digest(inputs),
-                         binary_name='mybot-' + role, report_name='abi-report-' + role + '.json',
-                         require_rtsa=False)
+            helper = verified_abi(build, inputs['config'], inputs['source']['sha256'], inputs_digest(inputs),
+                                  binary_name='mybot-' + role, report_name='abi-report-' + role + '.json',
+                                  require_rtsa=False)
+            reports.append((build / ("mybot-" + role), helper))
+        if args.release:
+            verify_release_runtime(root, inputs["config"]["sdk"], reports)
         validated.append((profile, build, manifest, report))
     baseline = validated[0][2]["inputs"]
     for _, _, manifest, _ in validated[1:]:
@@ -147,10 +193,6 @@ def package(root, args):
                 inputs["dependencies"] != baseline["dependencies"] or
                 inputs["config"]["version"] != baseline["config"]["version"]):
             raise ValueError("Profiles were built from different source/dependencies/version")
-    if args.release:
-        source = source_snapshot(root)
-        if source["dirty"] or not source["revision"]:
-            raise ValueError("Release packaging requires a clean, committed Git source tree")
     version = baseline["config"]["version"]
     name = "mybot-rv1126b-" + version
     if args.language != "zh-CN":
@@ -171,6 +213,7 @@ def package(root, args):
         staging = Path(temporary) / name
         (staging / "bin").mkdir(parents=True)
         (staging / "lib").mkdir()
+        write_json(staging / "package-manifest.json", {"schema": 1, "source": origin})
         for profile, build, manifest, report in validated:
             filename = "mybot-rv1126b" + ("-video" if profile == "video" else "")
             shutil.copyfile(build / "mybot-rv1126b", staging / "bin" / filename)
@@ -211,11 +254,15 @@ def package(root, args):
         (staging / "run.sh").chmod(0o755)
         (staging / "example.env").write_text(environment)
         readme = "README.en.md" if args.language == "en-US" else "README.zh-CN.md"
-        shutil.copyfile(root / "packaging" / readme, staging / readme)
+        manual = "docs/device-operations." + ("en" if args.language == "en-US" else "zh-CN") + ".pdf"
+        (staging / "docs").mkdir()
+        shutil.copyfile(root / manual, staging / manual)
+        (staging / readme).write_text(package_markdown(root, "packaging/" + readme,
+                                                     {manual: manual}, origin["revision"]))
         (staging / "licenses").mkdir()
         for source, filename in LICENSES:
             if source in ("THIRD_PARTY_NOTICES.md", "docs/dependencies/licensing.md"):
-                (staging / "licenses" / filename).write_text(runtime_notice(root, source))
+                (staging / "licenses" / filename).write_text(package_markdown(root, source, dict(LICENSES), origin["revision"]))
             else:
                 shutil.copyfile(root / source, staging / "licenses" / filename)
         checksums = [digest(path) + "  " + str(path.relative_to(staging))
@@ -226,6 +273,8 @@ def package(root, args):
         archive_digest = digest(temporary_archive)
         temporary_checksum = Path(temporary) / checksum.name
         temporary_checksum.write_text(archive_digest + "  " + archive.name + "\n")
+        if checkout_origin(root) != origin:
+            raise ValueError("Packaging checkout changed during assembly; retry with stable inputs")
         # Publish only after every verification, copy and archive operation succeeded.
         staging.rename(destination)
         temporary_archive.rename(archive)
@@ -242,7 +291,7 @@ def main():
     parser.add_argument("--video-build", type=Path,
                         help="Default: build/rv1126b-video-zh (or -en for en-US)")
     parser.add_argument("--output-dir", type=Path, default=ROOT / "dist")
-    parser.add_argument("--release", action="store_true", help="Require clean, committed source")
+    parser.add_argument("--release", action="store_true", help="Require committed source and the pinned firmware runtime for every ABI dependency")
     args = parser.parse_args()
     language_suffix = "zh" if args.language == "zh-CN" else "en"
     for profile in ("voice", "video"):

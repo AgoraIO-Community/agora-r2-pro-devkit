@@ -14,12 +14,12 @@
 | `--capture-device PCM` | `RV1126B_CAPTURE_DEVICE` | `botstation_capture` |
 | `--playback-device PCM` | `RV1126B_PLAYBACK_DEVICE` | `botstation_playback` |
 | `--interface IF` | `RV1126B_INTERFACE` | 空；SDK 网络监测/路由过滤，不指定 Wi-Fi 配网接口 |
-| `--wifi-interface IF` | `RV1126B_WIFI_INTERFACE` | 空，自动选择 nl80211 无线接口 |
+| `--wifi-interface IF` | `RV1126B_WIFI_INTERFACE` | 直接运行默认为空，自动发现 nl80211 接口。受监督部署默认使用板载 `wlan0` |
 | `--no-wifi-provisioning` | 无 | 仅监测既有网络，禁用自动/手动 AP 配网 |
 | `--time-sync-timeout SECONDS` | `RV1126B_TIME_SYNC_TIMEOUT` | 30；联网且退出 AP 后等待时间合理性的秒数，范围 1–300 |
 | `--time-sync-helper PATH` | `RV1126B_TIME_SYNC_HELPER` | 空；默认只等待 OS 校时，显式指定绝对可执行路径才允许启动前台 helper |
-| `--input-device PATH` | `RV1126B_INPUT_DEVICE` | `auto`；可选 `none`、`stdin` 或 evdev 路径 |
-| `--touch-device PATH` | `RV1126B_TOUCH_DEVICE` | `auto`；可选 `none` 或 evdev 路径 |
+| `--input-device PATH` | `RV1126B_INPUT_DEVICE` | `auto`；自动发现及重连按键设备。可选 `none`、`stdin` 或 evdev 路径 |
+| `--touch-device PATH` | `RV1126B_TOUCH_DEVICE` | `auto`；自动发现及重连触摸设备，重连时先松手再操作。可选 `none` 或 evdev 路径 |
 | `--talk-key CODE` | 无 | 139（KEY_MENU），音量/左右键不能用作会话键 |
 | `--drm-device PATH` | 无 | `/dev/dri/card0` |
 | `--rotation DEGREES` | 无 | 270，只接受 0/90/180/270 |
@@ -41,7 +41,7 @@
 
 ## 系统时间
 
-网络就绪且 AP 配网结束后，应用才开始等待系统时间达到 2026-01-01 00:00:00 UTC。该门槛仅检查合理性，不证明准确授时；默认只等待 OS 现有校时，30 秒超时后在 UI/标准错误说明原因并非零退出，不跳过 TLS 验证。网络断开会取消当前等待与自有 helper，恢复后重新计算完整窗口。
+网络就绪且 AP 配网结束后，应用才开始等待系统时间达到 2026-01-01 00:00:00 UTC。该门槛仅检查合理性，不证明准确授时；默认只等待 OS 现有校时，30 秒后记录超时原因并保持等待，每秒复查，时间恢复后自动启动 SDK。网络断开会取消当前等待与自有 helper，恢复后重新计算完整窗口。
 
 可通过 `--time-sync-helper` 显式选择包内 `"$PWD/assets/time/sync-busybox.sh"`，不自动启用。只有时钟无效且 `/proc` 检查确认没有 `ntpd`、`chronyd`、`systemd-timesyncd` 或 `openntpd` 时才运行；既有服务优先，无法检查时明确失败。helper 无参数调用，退出时钟仍无效也会失败，取消只清理本应用启动的进程组。工具、权限、UDP 123 和设备测试要求见[系统时间指南](time-sync.zh-CN.md)。
 
@@ -49,7 +49,16 @@
 
 CPU Serial 经规范化和 HMAC-SHA256 派生为 `RV1126B-` 加 24 位大写十六进制字符。`--identity-interface` 只接受稳定的永久 MAC；不能证明永久地址时失败。显式 `--device-id` 优先于身份派生。
 
-身份算法、KV 目录及服务配置是升级兼容边界。当前候选版保持 0.1.0、0.1.1 的身份策略；不要为了升级而删除目录、改身份来源或重新创建 ID。目录保存绑定凭据、输出音量、Wi-Fi 派生密钥及 RTSA 日志，不与原厂服务共享。Wi-Fi 最多保存 10 个网络。私有模式保存于 `wifi/wifi.credentials`（0600），私有上级目录为 0700；受监督部署使用下述系统协作模式的唯一主记录。开放网络不保存密码；加密网络保存派生 PSK，仍应按凭据保护。只有连接并获得可用 IPv4 和路由后才保存候选网络；失败不覆盖已有配置。备份和反馈日志时避免公开凭据。
+升级时保留服务地址、身份来源和 KV 目录。KV 保存绑定、音量和 RTSA 日志。Wi-Fi 配置依运行模式保存。
+
+### Wi-Fi 凭据与备份
+
+| 运行方式 | Wi-Fi 主记录 | 升级、备份与恢复范围 |
+| --- | --- | --- |
+| 受监督部署默认启用系统协作，也可在直接运行时设置 `MYBOT_SYSTEM_WPA_CONFIG` | 该变量指定的系统配置，部署默认 `/etc/wpa_supplicant.conf` | 部署前在设备内备份系统配置及应用 KV。更换 KV 目录后，配网和网络列表操作仍会更新同一系统配置。 |
+| 直接运行且未设置 `MYBOT_SYSTEM_WPA_CONFIG` | `MYBOT_KV_STORE_DIR/wifi/wifi.credentials`，文件 0600，目录 0700 | 备份和恢复选定的 KV 目录。保留原属主及权限，使用该目录时会读取其中的网络列表。 |
+
+每种模式最多管理 10 个网络。加密网络的派生 PSK 属于凭据。设备维护备份须私密保管。租约记录位于运行目录，由 DHCP 事件生成。模式切换需要显式迁移所需网络。
 
 ## 输入及音视频契约
 
@@ -71,9 +80,9 @@ UI 逻辑画布 640×480，默认旋转 270°到物理 480×640；终端/签名/
 
 受监督部署使用 `/etc/mybot-rv1126b.conf`（0600），资源固定到本次启动选择的物理版本目录。部署 settings 省略 `video` 时选择视频程序，显式 `"video": false` 选择语音；所选程序缺失时拒绝部署。`MYBOT_KV_STORE_DIR` 保持 `/userdata/mybot-rv1126b`，该目录必须是真实目录且权限为 0700。`MYBOT_STATUS_PATH` 指定私有运行目录内的匿名状态文件，只有版本、PID 和状态，不含身份或凭据。
 
-设置 `MYBOT_SYSTEM_WPA_CONFIG=/etc/wpa_supplicant.conf` 启用系统协作模式。系统 Wi-Fi 文件为唯一持久主记录，应用读取并管理其网络列表，成功连接后原子提交并要求现有 supplicant 重配置；退出不删除已提交的网络。`MYBOT_DHCPCD_LEASE_DIR=/run/mybot-network/leases` 配合部署的 dhcpcd hook，以租约代次、BSSID 和实际接口地址确认新连接。保存后另有最多 30 秒等待目标网络的关联、租约与路由稳定，确认前手机保持“正在连接”；超时保留已提交的网络并允许重试。系统模式不另外写私有 `wifi.credentials`，也不启动竞争的 STA/DHCP 客户端。
+系统协作模式在候选网络取得可用 IPv4 和路由后原子提交配置，并要求现有 supplicant 重载。`MYBOT_DHCPCD_LEASE_DIR=/run/mybot-network/leases` 配合部署的 dhcpcd hook，以租约代次、BSSID 和实际接口地址确认新连接。保存后另有最多 30 秒等待目标网络的关联、租约与路由稳定，确认前手机保持“正在连接”；超时保留已提交的网络并允许重试。系统 supplicant 和 dhcpcd 继续管理 STA。
 
-没有设置系统模式时仍使用应用私有 Wi-Fi 存储。两种模式切换应明确导入记录，不将两份配置作为并行主记录。部署与恢复步骤见[部署指南](deployment.zh-CN.md)。
+部署与恢复步骤见[部署指南](deployment.zh-CN.md)。
 
 ## 设置和产品输入
 

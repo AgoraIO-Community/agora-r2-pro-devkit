@@ -31,9 +31,11 @@ class ManualAssetsTests(unittest.TestCase):
             self.put('docs/user/assets/' + directory + '/ready.png', b'fixture image bytes\n')
             self.put(pdf, b'fixture PDF bytes\n')
         inputs, ui_digest, version = manual.snapshot(self.root)
-        self.manifest = {'schema_version': 1, 'document_date': '2026-11-17',
+        outputs = manual.hashes(self.root, manual.output_names(self.root))
+        scenes = {language: manual.scene_digest(outputs, values[1]) for language, values in manual.LANGUAGES.items()}
+        self.manifest = {'schema_version': 2, 'scene_sha256': scenes, 'document_date': '2026-11-17',
                          'application_version': version, 'ui_source_sha256': ui_digest,
-                         'inputs': inputs, 'outputs': manual.hashes(self.root, manual.output_names(self.root))}
+                         'inputs': inputs, 'outputs': outputs}
         self.write_manifest()
 
     def put(self, name, data):
@@ -48,6 +50,22 @@ class ManualAssetsTests(unittest.TestCase):
         self.assertEqual(manual.check(self.root), self.manifest)
         self.put('src/application/main.c', b'unrelated application change\n')
         self.assertEqual(manual.check(self.root), self.manifest)
+
+    def test_reference_docs_licenses_and_dependency_metadata_do_not_stale_the_manual(self):
+        for name in ('docs/validation/README.md', 'src/ui/views/SOURCES.md',
+                     'vendor/lvgl/LICENCE.txt', 'docs/user/assets/fonts/LICENSE.txt',
+                     'src/ui/fonts/sources.json', 'dependencies.lock.json'):
+            self.put(name, b'new reference material')
+        self.assertEqual(manual.check(self.root), self.manifest)
+
+    def test_cover_digest_belongs_to_the_rendered_language(self):
+        outputs = self.manifest['outputs'].copy()
+        outputs['docs/user/assets/device-manual/ready.png'] = '9' * 64
+        self.assertNotEqual(manual.scene_digest(outputs, 'device-manual'), self.manifest['scene_sha256']['zh-CN'])
+        self.assertEqual(manual.scene_digest(outputs, 'device-manual-en'), self.manifest['scene_sha256']['en-US'])
+        self.put('src/ui/src/view.c', b'changed renderer')
+        with self.assertRaisesRegex(ValueError, 'manual UI source identity changed'):
+            manual.check(self.root)
 
     def test_renderer_and_new_ui_inputs_are_detected(self):
         self.put('src/ui/src/new-view.c', b'new screen\n')
@@ -80,7 +98,7 @@ class ManualAssetsTests(unittest.TestCase):
         self.write_manifest()
         with self.assertRaisesRegex(ValueError, 'schema'):
             manual.read_manifest(self.root)
-        self.manifest['schema_version'] = 1
+        self.manifest['schema_version'] = 2
         self.manifest['document_date'] = 'not-a-date'
         self.write_manifest()
         with self.assertRaises(ValueError):

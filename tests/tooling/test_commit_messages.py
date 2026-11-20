@@ -19,13 +19,13 @@ class CommitMessageTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
 
-    def check(self, message, stdin):
+    def check(self, message, stdin, env=None):
         if stdin:
             return subprocess.run(['sh', str(HOOK), '--stdin'], input=message,
-                                  capture_output=True, text=True)
+                                  capture_output=True, text=True, env=env)
         path = self.root / 'message.txt'
         path.write_text(message)
-        return subprocess.run(['sh', str(HOOK), str(path)], capture_output=True, text=True)
+        return subprocess.run(['sh', str(HOOK), str(path)], capture_output=True, text=True, env=env)
 
     def test_hook_file_and_ci_stdin_accept_the_same_complete_messages(self):
         cases = [
@@ -50,6 +50,17 @@ class CommitMessageTests(unittest.TestCase):
                 with self.subTest(message=message, stdin=stdin):
                     result = self.check(message, stdin)
                     self.assertEqual(result.returncode == 0, accepted, result.stderr)
+
+    def test_subject_length_counts_unicode_characters_in_the_c_locale(self):
+        header = "fix(ui): "
+        env = {**os.environ, "LC_ALL": "C", "PYTHONUTF8": "0", "PYTHONCOERCECLOCALE": "0"}
+        for character in ("x", "文", "😀"):
+            for length in (72, 73):
+                message = header + character * (length - len(header)) + "\n"
+                for stdin in (False, True):
+                    with self.subTest(character=character, length=length, stdin=stdin):
+                        result = self.check(message, stdin, env)
+                        self.assertEqual(result.returncode == 0, length == 72, result.stderr)
 
     def test_ci_workflow_checks_complete_messages_for_push_pr_and_dispatch(self):
         # Execute the actual workflow shell block; no YAML dependency or copied

@@ -45,6 +45,9 @@ struct Presentation {
 };
 
 #if CONFIG_MYBOT_LANGUAGE_ZH_CN
+constexpr Presentation kClockWaiting = {"系统时间", "等待系统校时", kGreeting};
+constexpr Presentation kClockFailed = {"时间不可用", "请检查校时服务", kError};
+constexpr char kClockThreshold[] = "日期需为 2026 年或以后";
 constexpr Presentation kScreens[] = {
     {"启动中", "正在初始化", kNeutral},
     {"等待网络", "正在连接网络", kGreeting},
@@ -58,6 +61,9 @@ constexpr Presentation kScreens[] = {
     {"正在退出", "正在结束服务", kMuted},
 };
 #else
+constexpr Presentation kClockWaiting = {"System time", "Waiting for system time", kGreeting};
+constexpr Presentation kClockFailed = {"Time unavailable", "Check time service; restart", kError};
+constexpr char kClockThreshold[] = "Required: 2026 or later";
 constexpr Presentation kScreens[] = {
     {"Starting", "Please wait", kNeutral},
     {"Waiting for network", "Connect the device to a network", kGreeting},
@@ -618,11 +624,9 @@ void mybot_pixel_glasses_update(const mybot_lcd_content_t *content, const char *
         set_text(s_view->detail, "");
         set_hidden(s_view->detail, true);
     } else if (workflow_changed && copied_status.clock_state) {
-        if (copied_status.clock_state == MYBOT_DISPLAY_CLOCK_WAITING)
-            show_guide({"System time", "Checking system time", kGreeting});
-        else
-            show_guide({"Time unavailable", "Check time service; restart", kError});
-        set_text(s_view->detail, "Required: 2026 or later");
+        show_guide(copied_status.clock_state == MYBOT_DISPLAY_CLOCK_WAITING ? kClockWaiting
+                                                                            : kClockFailed);
+        set_text(s_view->detail, kClockThreshold);
         set_hidden(s_view->detail, false);
     } else if (workflow_changed && content->screen != MYBOT_LCD_SCREEN_READY &&
                content->screen != MYBOT_LCD_SCREEN_IN_CONVERSATION) {
