@@ -13,11 +13,14 @@ import shlex
 import struct
 import subprocess
 import tarfile
+import tempfile
 import time
+import uuid
 
 from build_metadata import MANIFEST_SCHEMA, inputs_digest
 
 ROOT = Path(__file__).resolve().parents[1]
+RECEIPT_ROOT = ROOT / "local/deployment"
 DEVICE_ROOT = "/userdata/mybot"
 DATA_ROOT = "/userdata/mybot-rv1126b"
 SERVICE = "/etc/init.d/S99mybot"
@@ -510,7 +513,7 @@ printf 'network_policy_restart_required=true\\n'
 """
 
 
-def switch_release(name, fallback, start=False):
+def switch_release(name, fallback):
     return f"""
 target={shlex.quote('releases/' + name)}
 [ -d "$base/$target" ] && [ ! -L "$base/$target" ] || exit 60
@@ -530,7 +533,6 @@ ln -s "$target" "$base/.current-$tag"
 mv -Tf "$base/.current-$tag" "$base/current"
 sync
 printf 'current=%s\\n' "$target"
-{SERVICE + ' start >/dev/null 2>&1 || exit 62' if start else ':'}
 """
 
 
@@ -689,16 +691,26 @@ def wait_for_application(adb, release, video, timeout=30):
         time.sleep(0.2)
 
 
-def receipt(tag, action, values, output_root=ROOT / "local/deployment"):
+def reserve_receipt(tag):
     if not TAG.fullmatch(tag):
         raise ValueError("Invalid deployment tag")
-    directory = Path(output_root) / tag
+    directory = RECEIPT_ROOT / tag
     directory.mkdir(parents=True, exist_ok=False, mode=0o700)
-    directory.chmod(0o700)
-    path = directory / "receipt.json"
-    path.write_text(json.dumps({"schema": 1, "action": action, **values}, indent=2) + "\n")
-    path.chmod(0o600)
-    return path
+    return directory / "receipt.json"
+
+
+def record_phase(path, values, phase):
+    # An interruption leaves either the previous complete checkpoint or the new one.
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as staged:
+        try:
+            json.dump({**values, "phase": phase}, staged, indent=2)
+            staged.write("\n")
+            staged.flush()
+            os.fsync(staged.fileno())
+            staged.close()
+            os.replace(staged.name, path)
+        finally:
+            Path(staged.name).unlink(missing_ok=True)
 
 
 def main(argv=None):
@@ -719,13 +731,15 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.execute and args.dry_run:
         parser.error("--execute and --dry-run are mutually exclusive")
+    receipt_path = None
     try:
         package = verify_package(args.package, args.sha256) if args.package else None
         rollback = verify_package(args.rollback_package, args.rollback_sha256, legacy=True) if args.rollback_package else None
         settings = read_settings(args.settings) if args.settings else None
         if args.action in ("deploy", "rollback") and settings is None:
             raise ValueError("A private --settings file is required before changing installed versions")
-        if args.action == "deploy" and not package:
+        deploying = args.action == "deploy"
+        if deploying and not package:
             raise ValueError("deploy requires --package and --sha256")
         if package and settings:
             selected = "video" if settings["video"] else "voice"
@@ -733,18 +747,18 @@ def main(argv=None):
                 raise ValueError(f"Package lacks the selected {selected} profile")
         if args.release and not NAME.fullmatch(args.release):
             raise ValueError("Invalid installed release name")
-        tag = args.tag or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        tag = args.tag or (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ-") + uuid.uuid4().hex)
         if not TAG.fullmatch(tag):
             raise ValueError("Invalid deployment tag")
         if args.action in ("deploy", "rollback") and not args.execute:
             print(json.dumps({"action": args.action, "dry_run": True, "tag": tag,
-                              "release": package["name"] if package else args.release or "previous",
+                              "release": package["name"] if deploying else args.release or "previous",
                               "profile": "video" if settings["video"] else "voice",
                               "backup": DEVICE_ROOT + "/backups/" + tag,
                               "data": "preserve existing private store; never import stock auth",
                               "identity": "compare server/id on device; token is never read",
-                              "network": "usb0 dnsmasq bind-dynamic + dhcpcd deny mbap*; operator reload required",
-                              "autostart": args.start, "reboot": False}, indent=2))
+                              "install_boot_service": deploying, "apply_network_policy": deploying,
+                              "start_requested": args.start, "reboot": False}, indent=2))
             return 0
         adb = Adb(args.adb, args.serial)
         adb.select()
@@ -763,9 +777,19 @@ def main(argv=None):
                     raise ValueError("No checked previous release is available")
                 rollback_target = value[9:]
             adb.shell(rollback_release_check(rollback_target, settings))
-        # Backup completes before uploads, system changes, or link replacement.
+        selected = package["name"] if deploying else rollback_target
+        receipt_path = reserve_receipt(tag)
+        values = {"schema": 2, "action": args.action, "tag": tag, "release": selected,
+                  "backup": DEVICE_ROOT + "/backups/" + tag,
+                  "package_sha256": package["sha256"] if package else None,
+                  "start_requested": args.start, "device_backup_only": True}
+        record_phase(receipt_path, values, "reserved")
         output = adb.shell(begin_transaction(tag))
-        if args.action == "deploy":
+        for line in output.splitlines():
+            if line.startswith("backup_sha256=") and SHA256.fullmatch(line.split("=", 1)[1]):
+                values["backup_sha256"] = line.split("=", 1)[1]
+        record_phase(receipt_path, values, "backed_up")
+        if deploying:
             staging_script = f"base={DEVICE_ROOT}\ntag={shlex.quote(tag)}\n"
             if rollback:
                 staging_script += install_release(adb, rollback, tag)
@@ -795,31 +819,29 @@ cat > "$backup/service.conf.new" <<'MYBOT_PRIVATE_CONFIGURATION'
 chmod 600 "$backup/service.conf.new"
 install_file "$backup/service.conf.new" /etc/mybot-rv1126b.conf 600
 """
-            deployment += switch_release(package["name"], rollback["name"] if rollback else None, args.start)
-            output += adb.shell(deployment)
+            deployment += switch_release(package["name"], rollback["name"] if rollback else None)
+            adb.shell(deployment)
         else:
             rollback_script = f"base={DEVICE_ROOT}\ntag={shlex.quote(tag)}\n"
             rollback_script += identity_check(settings)
             rollback_script += rollback_release_check(rollback_target, settings)
             rollback_script += f"{SERVICE} stop >/dev/null 2>&1 || exit 80\n"
-            rollback_script += switch_release(rollback_target, None, args.start)
-            output += adb.shell(rollback_script)
+            rollback_script += switch_release(rollback_target, None)
+            adb.shell(rollback_script)
+        record_phase(receipt_path, values, "switched")
         if args.start:
-            selected = package["name"] if args.action == "deploy" else rollback_target
+            adb.shell(f"{SERVICE} start >/dev/null 2>&1 || exit 62\n")
             print(wait_for_application(adb, selected, settings["video"]).strip())
+            record_phase(receipt_path, values, "verified")
         adb.shell("rmdir /run/mybot-deploy.lock\n")
-        values = {"tag": tag, "backup": DEVICE_ROOT + "/backups/" + tag,
-                  "package_sha256": package["sha256"] if package else None,
-                  "device_backup_only": True, "data_preserved": True}
-        for line in output.splitlines():
-            if line.startswith("backup_sha256=") and SHA256.fullmatch(line.split("=", 1)[1]):
-                values["backup_sha256"] = line.split("=", 1)[1]
-        print("Receipt:", receipt(tag, args.action, values))
-        print("Deployment completed; network policy reload remains an operator step. No reboot requested.")
+        values["data_preserved"] = True
+        record_phase(receipt_path, values, "completed")
+        print("Receipt:", receipt_path)
+        print("Deployment completed; reload the network policy." if deploying else "Rollback completed.")
         return 0
     except (OSError, ValueError, KeyError, tarfile.TarError, UnicodeError, struct.error,
             RuntimeError, subprocess.SubprocessError) as error:
-        parser.error(str(error))
+        parser.error(f"{error}. Inspect deployment receipt at {receipt_path}" if receipt_path else str(error))
 
 
 if __name__ == "__main__":

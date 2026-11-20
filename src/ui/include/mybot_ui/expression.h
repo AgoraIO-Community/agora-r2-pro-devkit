@@ -9,8 +9,7 @@
 extern "C" {
 #endif
 
-/* IDs follow the product simulator's EMOTIONS table. They describe display
- * artwork only and do not change the SDK, connectivity, or motor state. */
+/* Stable identifiers for the artwork displayed by the renderer. */
 typedef enum {
     MYBOT_EXPRESSION_NEUTRAL = 0,
     MYBOT_EXPRESSION_GREETING,
@@ -38,11 +37,12 @@ typedef enum {
     MYBOT_EXPRESSION_COUNT,
 } mybot_expression_t;
 
-/* Stable uppercase simulator name, or NULL for an invalid ID. The returned
+/* Stable uppercase expression name, or NULL for an invalid ID. The returned
  * storage is immutable and valid for the process lifetime. */
 const char *mybot_expression_name(mybot_expression_t expression);
 
-/* Accept an exact simulator name, ignoring ASCII letter case. */
+/* Match a complete name ignoring ASCII letter case. Return 0 and set the
+ * output on success, or -1 for an unknown name or a NULL argument. */
 int mybot_expression_from_name(const char *name, mybot_expression_t *expression);
 
 #ifdef __cplusplus

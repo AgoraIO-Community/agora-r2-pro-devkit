@@ -2,7 +2,16 @@
 
 固定来源和许可见 [VENDORED_SOURCES](../../VENDORED_SOURCES.md) 与 [THIRD_PARTY_NOTICES](../../THIRD_PARTY_NOTICES.md)。本工程保留自维护代码与快照的边界，构建包装位于 `cmake/dependencies/`，不为迁移目录而重写上游源码。
 
-agent-studio-device-firmware、AOSL、LVGL、RTSA 分别位于 `vendor/mybot/`、`vendor/aosl/`、`vendor/lvgl/`、`vendor/rtsa/`，各自拥有独立依赖快照。RTSA 是工程必需依赖，完整保留官方包。SDK 通过父工程设置的 `AOSL_DIR` 引用平级 AOSL，只创建一个 `aosl` target。视图和生成字库属于 `src/ui/` 的项目管理资源，不作为第三方源码依赖。目录范围及不可删除的构建输入见[第三方目录规则](third-party-layout.zh-CN.md)。
+## 快照与构建边界
+
+| 快照 | 构建边界和必需输入 |
+| --- | --- |
+| `vendor/mybot/` | SDK 公共头、实现、Linux adapters 和 PCM 资源。SDK 的 CMake 使用 `docs/Doxyfile.in`、RTSA 帧长检查及包配置模板。 |
+| `vendor/aosl/` | 通用实现及 Linux HAL。父工程设置 `AOSL_DIR`，由 agent-studio-device-firmware 创建唯一的 `aosl` target。库构建还使用 `test/aosl_test.c`。 |
+| `vendor/lvgl/` | 生产渲染所需源码、头文件、许可及已登记的 mask callback 补丁。见[LVGL 集成说明](../dependencies/lvgl.md)。 |
+| `vendor/rtsa/` | 完整官方 SDK 包，包含所有架构的库、示例和文档。RV1126B 链接其中的 AArch64 库。 |
+
+`src/ui/` 中的视图由项目维护，生成字库由字体输入和生成器清单管理。ALSA、OpenSSL、libdrm、MPP 和 libc 使用目标系统提供的库。
 
 ## 当前清单与历史档案
 
@@ -60,17 +69,11 @@ python3 scripts/update-dependencies-lock.py \
 
 同一变更重复更新应无差异。更新锁后重新执行 SDK 配置，旧本地配置绑定的是旧 lock 哈希；目标二进制、manifest 和 ABI 报告需重新构建。运行双语、UBSan、相关目标构建、资源基线及制品检查，并记录实际证据；不将旧包的真机结果算作新制品验收。
 
-旧版 `--map`、`--omit`、目录迁移等参数已退出活动工具；其历史结果完整保存在 schema 1 档案。schema 2 不再按旧路径冻结当前自有源码。
-
 ## 完整 RTSA 包与外部系统依赖
 
-RTSA 固定为 AArch64 Linux GNU 1.10.1 的已记录 20 ms 包，完整内置于 `vendor/rtsa/`。官方归档 SHA256 为 `850834b5b925ffb7fb447e97cf9ec5dc33fe0a0f68108e1a4954ee7590870fbe`；99 个文件共 38,268,142 字节，逐文件登记在独立快照中。保留全部头文件、库、示例、原始说明与协作资源，不因当前构建仅使用部分内容而裁剪。归档内两个空 `bin/` 架构目录不含文件，不影响 Git 中完整文件集合的记录。
+当前 RTSA 版本、归档 SHA256 和目标库身份见[固定来源记录](../dependencies/RTSA_SOURCE.txt)。构建选择 `vendor/rtsa/agora_sdk/lib/aarch64/libagora-rtc-sdk.so`，同时核对 AArch64 ELF、库摘要和 20 ms 配置。
 
-目标配置自动使用 `vendor/rtsa/agora_sdk/` 和其中的 `lib/aarch64/libagora-rtc-sdk.so`，不再要求外部 `--rtsa-sdk`。CMake 覆盖旧缓存的 RTSA 路径；本地配置仍绑定仓库外 SDK 或旧锁时，重新运行配置命令。原始 `.config` 含 x86_64 包描述，原样保留；实际目标选择同时核对 AArch64 ELF、库哈希和功能配置，不凭元数据中的名称判断架构。
-
-更新 RTSA 时从已核对官方来源与 SHA256 的完整归档重新导入，保留全部官方文件，并同步快照、归档身份、头文件/库哈希、配置契约和来源记录。不得只替换动态库或删除示例与厂商文档；完整包是本项目的依赖契约。
-
-RTSA 快照中的 `archive_files` 保存相对于包根目录的官方文件哈希，与仓库路径清单 `files` 一一对应。普通锁刷新会拒绝完整包的文件修改、增添或删除；升级版本时需审查并显式更新官方归档身份与完整清单，不能通过刷新把裁剪后的目录接受为新基线。
+升级 RTSA 时从官方来源核验归档，完整导入，更新 `archive_files`、头文件、库、配置和来源记录。普通锁刷新只接受与官方包文件清单一致的内容。旧本地配置绑定仓库外路径或旧依赖锁时，先重新配置 SDK。
 
 工具链、开发 staging/sysroot 和运行库快照仍需显式配置，见[构建指南](../user/build.zh-CN.md)。运行库 manifest 证明 ABI 检查使用的依赖身份；它不是设备完整固件记录，也不是开发 sysroot。目标 ALSA/OpenSSL/libdrm/MPP/libc 仍使用系统库，不向设备系统目录覆盖这些依赖。个人 SDK 路径与构建缓存不进入源码仓库。配置/doctor 不下载依赖或连接设备。
 
@@ -83,4 +86,4 @@ local/font-tools/bin/python scripts/generate-ui-fonts.py
 local/font-tools/bin/python scripts/generate-ui-fonts.py --check
 ```
 
-环境路径只是示例，关键是输入哈希和工具版本一致。终端/签名为 DejaVu Sans Mono Bold 18/20 px，中文为 Source Han Sans SC Normal 40 px，配对码为 Montserrat Medium 64 px；4 bpp 抗锯齿。英文输入来自 Matplotlib 3.8.2 的对应字体，并与官方 wheel 核对。生成文件保留派生名称和原 Bitstream/SIL OFL 许可，不手工修改位图数据。0.1.1 的历史实现依据见[原生字体记录](../history/ui-native-fonts.zh-CN.md)。
+环境路径只是示例，关键是输入哈希和工具版本一致。终端/签名为 DejaVu Sans Mono Bold 18/20 px，中文为 Source Han Sans SC Normal 40 px，配对码为 Montserrat Medium 64 px；4 bpp 抗锯齿。英文输入来自 Matplotlib 3.8.2 的对应字体，并与官方 wheel 核对。生成文件保留派生名称和原 Bitstream/SIL OFL 许可，不手工修改位图数据。

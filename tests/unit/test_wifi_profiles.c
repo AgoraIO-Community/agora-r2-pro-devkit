@@ -29,6 +29,7 @@ static char *file_text(const char *path) {
     CHECK(!fclose(file));
     return text;
 }
+
 static void write_text(const char *path, const char *text) {
     int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     CHECK(fd >= 0 && !fchmod(fd, 0600));
@@ -53,6 +54,7 @@ static bool reload(void *context) {
     free(text);
     return true;
 }
+
 static void system_profiles(void) {
     wifi_credentials_t profiles = {0};
     char error[WIFI_ERROR_CAPACITY];
@@ -145,6 +147,7 @@ static void system_profiles(void) {
     CHECK(!unlink(path) && !rmdir(directory));
     free(committed);
 }
+
 static void dhcpcd_events(void) {
     const char *event = "version=1\ngeneration=event-2\nbssid=02:11:22:33:44:AA\n"
                         "ipv4=192.0.2.10\nssid_hex=6e65772d6e6574776f726b\n";
@@ -190,6 +193,7 @@ static void dhcpcd_events(void) {
     CHECK(!wifi_read_dhcpcd_lease(temporary, "wlan0", &lease));
     CHECK(!unlink(path) && !rmdir(temporary));
 }
+
 static void bounded_text(void) {
     wifi_buffer_t buffer;
     wifi_buffer_init(&buffer, 4);
@@ -210,6 +214,7 @@ static void bounded_text(void) {
     CHECK(!wifi_utf8_valid("\xf0\x80\x80\xaf", 4));
     CHECK(!wifi_utf8_valid("\xed\xa0\x80", 3) && !wifi_utf8_valid("\xf4\x90\x80\x80", 4));
 }
+
 int main(void) {
     system_profiles();
     dhcpcd_events();

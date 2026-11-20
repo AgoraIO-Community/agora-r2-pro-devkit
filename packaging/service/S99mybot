@@ -14,20 +14,7 @@ start() {
         state=$?
         [ "$state" -eq 3 ] || return 1
     fi
-    "$service_dir/run-service.sh" prepare || return 1
-    "$service_dir/run-service.sh" supervise </dev/null >/dev/null 2>&1 &
-    launcher=$!
-    attempt=0
-    while [ "$attempt" -lt 200 ]; do
-        if "$supervisor" status --runtime "$runtime" >/dev/null 2>&1; then
-            return 0
-        fi
-        kill -0 "$launcher" 2>/dev/null || return 1
-        attempt=$((attempt + 1))
-        sleep 0.1
-    done
-    echo 'MyBot: service did not become available; inspect private service logs' >&2
-    return 1
+    "$service_dir/run-service.sh" supervise
 }
 
 stop() {

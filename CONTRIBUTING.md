@@ -16,27 +16,9 @@ Never include tokens, private device identities, credentials, runtime data, pers
 
 ## Checks
 
-Use Python 3.10+, CMake 3.25+, OpenSSL and libdrm development files. Install the pinned formatting tool with `python3 -m venv local/dev-tools` followed by `local/dev-tools/bin/python -m pip install -r requirements-dev.txt`; the quality check selects it automatically and verifies its version. See [build setup](docs/user/build.zh-CN.md) for Ubuntu 24.04 packages and macOS header configuration.
+Set up the host toolchain using the [build guide](docs/user/build.zh-CN.md). Run the checks for your change using the commands in the [testing guide](docs/development/testing.zh-CN.md#标准主机门禁). Changes to target build inputs also require the affected AArch64 profiles and package checks. Record the checks run and any remaining hardware validation in the PR.
 
-```sh
-python3 scripts/doctor.py --host
-python3 scripts/check-dependencies.py
-python3 scripts/check-quality.py
-cmake --preset host-zh
-cmake --build --preset host-zh
-ctest --preset host-zh
-cmake --preset host-en
-cmake --build --preset host-en
-ctest --preset host-en
-cmake --preset host-ubsan
-cmake --build --preset host-ubsan
-ctest --preset host-ubsan
-git diff --check
-```
-
-Run the repository quality check used by [CI](.github/workflows/ci.yml), and apply `.clang-format` only to maintained C/C++ files. Exercise target voice/video and packaging when the change affects their inputs; a host-only documentation change does not need hardware tests. Document unexecuted checks and their reason. The [testing guide](docs/development/testing.zh-CN.md) defines the distinction between compilation, host tests and hardware evidence.
-
-Keep English and Chinese README behavior and commands aligned. Update configuration docs, `CHANGELOG.md` and [validation status](docs/validation/README.md) when applicable. Do not mark a build as hardware-tested based on an earlier package.
+Keep the English and Chinese entry points aligned. Update the configuration reference, changelog and [device validation record](docs/validation/README.md) when their subject changes.
 
 ## Commit messages
 
@@ -50,7 +32,7 @@ Use Conventional Commits:
 [optional footer]
 ```
 
-Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert`. Keep the subject within 72 characters and use the imperative mood, for example `refactor(platform): isolate display ownership`. Separate the optional body and footer with blank lines. Mark an incompatible change with `!` and explain it in a `BREAKING CHANGE:` footer.
+Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert`. Use at most 72 Unicode code points in the full subject line, including the type and scope. Use the imperative mood, for example `refactor(platform): isolate display ownership`. Separate the optional body and footer with blank lines. Mark an incompatible change with `!` and explain it in a `BREAKING CHANGE:` footer.
 
 Install the repository hooks before committing:
 

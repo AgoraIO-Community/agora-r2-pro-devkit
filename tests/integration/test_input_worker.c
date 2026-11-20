@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 #define _POSIX_C_SOURCE 200809L
+#define _DARWIN_C_SOURCE
 #include <fcntl.h>
+#include <glob.h>
 #include <pthread.h>
 #include <stdarg.h>
 #include <unistd.h>
@@ -20,12 +22,23 @@ static int native_pipe2(int descriptors[2], int flags) {
     return 0;
 }
 
+static char touch_node[128];
+static unsigned discovered;
+
+static int fixture_glob(const char *pattern, int flags, int (*error)(const char *, int),
+                        glob_t *nodes) {
+    (void)pattern;
+    return glob(touch_node, flags, error, nodes);
+}
+
+#define glob fixture_glob
 #define pipe2 native_pipe2
 static int input_ioctl(int fd, unsigned long request, ...);
 
 #define ioctl input_ioctl
 #include "../../src/platform/src/drivers/input/evdev_input.c"
 #undef ioctl
+#undef glob
 #include "check.h"
 
 static struct {
@@ -36,7 +49,7 @@ static struct {
 
 /* Each kernel MT slot retains its axes even while its tracking ID is -1. */
 static int input_ioctl(int fd, unsigned long request, ...) {
-    if (!kernel_touch.enabled || fd != kernel_touch.fd) {
+    if (!kernel_touch.enabled || (kernel_touch.fd >= 0 && fd != kernel_touch.fd)) {
         errno = ENOTTY;
         return -1;
     }
@@ -44,6 +57,11 @@ static int input_ioctl(int fd, unsigned long request, ...) {
     va_start(arguments, request);
     void *out = va_arg(arguments, void *);
     va_end(arguments);
+    if (request == EVIOCGNAME(127)) {
+        strcpy(out, "axs_ts");
+        __atomic_add_fetch(&discovered, 1, __ATOMIC_RELEASE);
+        return 0;
+    }
     const size_t key_bytes = (KEY_MAX + 8) / 8;
     if (request == EVIOCGBIT(EV_KEY, key_bytes) || request == EVIOCGKEY(key_bytes)) {
         unsigned char *bits = out;
@@ -309,6 +327,64 @@ static void check_kernel_touch_seed(void) {
     close(descriptors[1]);
 }
 
+static void send_button(int writer, int down) {
+    const struct input_event frame[] = {{.type = EV_KEY, .code = BTN_TOUCH, .value = down},
+                                        {.type = EV_SYN, .code = SYN_REPORT}};
+    CHECK(write(writer, frame, sizeof(frame)) == (ssize_t)sizeof(frame));
+}
+
+static void check_auto_reconnect(void) {
+    char dir[] = "/tmp/mybot-evdev-XXXXXX";
+    CHECK(mkdtemp(dir) && snprintf(touch_node, sizeof(touch_node), "%s/event", dir) > 0);
+    kernel_touch.enabled = true;
+    kernel_touch.fd = -1;
+    kernel_touch.button_down = true;
+    kernel_touch.slots_supported = true;
+    kernel_touch.selected_slot = 0;
+    kernel_touch.tracking[0] = 1;
+    kernel_touch.tracking[1] = -1;
+    /* With 180-degree rotation this retained position maps to the settings gear. */
+    kernel_touch.x[0] = 43;
+    kernel_touch.y[0] = 435;
+    rv1126b_platform_config_t options = {
+        .input_device = "none", .touch_device = "auto", .enable_ui = true};
+    CHECK(rv1126b_input_start(&options, 180) == 0);
+    for (unsigned attempt = 1; attempt <= 2; ++attempt) {
+        int pipe_fds[2];
+        CHECK(native_pipe2(pipe_fds, 0) == 0);
+        char device[64];
+        CHECK(snprintf(device, sizeof(device), "/dev/fd/%d", pipe_fds[0]) > 0);
+        CHECK(symlink(device, touch_node) == 0);
+        int writer = pipe_fds[1];
+        const struct timespec step = {.tv_nsec = 10000000};
+        const struct timespec tap = {.tv_nsec = 80000000};
+        uint32_t start = now_ms();
+        while (__atomic_load_n(&discovered, __ATOMIC_ACQUIRE) < attempt && now_ms() - start < 4000)
+            nanosleep(&step, NULL);
+        CHECK(__atomic_load_n(&discovered, __ATOMIC_ACQUIRE) == attempt);
+        send_button(writer, 1);
+        nanosleep(&tap, NULL);
+        send_button(writer, 0);
+        nanosleep(&tap, NULL);
+        CHECK(settings_page() == MYBOT_SETTINGS_CLOSED);
+        send_button(writer, 1);
+        nanosleep(&tap, NULL);
+        send_button(writer, 0);
+        start = now_ms();
+        while (settings_page() != MYBOT_SETTINGS_MENU && now_ms() - start < 1000)
+            nanosleep(&step, NULL);
+        CHECK(settings_page() == MYBOT_SETTINGS_MENU);
+        rv1126b_input_settings_page(MYBOT_SETTINGS_CLOSED);
+        /* Leave an incomplete event at disconnect. A new device starts a fresh frame. */
+        CHECK(write(writer, "x", 1) == 1);
+        nanosleep(&step, NULL);
+        CHECK(unlink(touch_node) == 0 && close(writer) == 0 && close(pipe_fds[0]) == 0);
+    }
+    CHECK(rv1126b_input_stop() == 0);
+    kernel_touch.enabled = false;
+    CHECK(rmdir(dir) == 0);
+}
+
 static void handler(mybot_key_event_t event, void *user) {
     CHECK(user == &calls && event == MYBOT_KEY_EVENT_PAIR);
     pthread_mutex_lock(&lock);
@@ -348,6 +424,7 @@ int main(void) {
     check_menu_gestures();
     check_retained_mt_axes();
     check_kernel_touch_seed();
+    check_auto_reconnect();
     int input[2];
     CHECK(pipe(input) == 0);
     int saved = dup(STDIN_FILENO);

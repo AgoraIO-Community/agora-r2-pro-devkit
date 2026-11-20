@@ -26,6 +26,7 @@ static void status(void *context, wifi_portal_status_t *out) {
     *out = handler->current;
     pthread_mutex_unlock(&handler->mutex);
 }
+
 static void networks(void *context, wifi_scan_t *out) {
     (void)context;
     /* At most 32 bytes per SSID, retaining the hostile quote/script fixture. */
@@ -33,10 +34,12 @@ static void networks(void *context, wifi_scan_t *out) {
         .count = 2,
         .items = {{"WiFi \" <script>alert(1)</script>", -45, 3, 1}, {"测试网络", -60, 0, 6}}};
 }
+
 static void saved_networks(void *context, wifi_saved_names_t *out) {
     (void)context;
     *out = (wifi_saved_names_t){.count = 2, .items = {"home", "测试网络"}};
 }
+
 static bool submit(void *context, const char *ssid, const char *password, char *error) {
     (void)error;
     handler_t *handler = context;
@@ -54,6 +57,7 @@ static bool submit(void *context, const char *ssid, const char *password, char *
     pthread_mutex_unlock(&handler->mutex);
     return true;
 }
+
 static bool saved_action(void *context, const char *action, unsigned index,
                          const char *expected_ssid, char *error) {
     (void)error;
@@ -67,6 +71,7 @@ static bool saved_action(void *context, const char *action, unsigned index,
     pthread_mutex_unlock(&handler->mutex);
     return valid;
 }
+
 static bool finish(void *context, char *error) {
     (void)error;
     handler_t *handler = context;
@@ -75,6 +80,7 @@ static bool finish(void *context, char *error) {
     pthread_mutex_unlock(&handler->mutex);
     return true;
 }
+
 static void complete(handler_t *handler, bool success) {
     pthread_mutex_lock(&handler->mutex);
     CHECK(wifi_copy(handler->current.state, sizeof(handler->current.state),
@@ -82,6 +88,7 @@ static void complete(handler_t *handler, bool success) {
     handler->current.busy = false;
     pthread_mutex_unlock(&handler->mutex);
 }
+
 static unsigned short free_port(int type) {
     int fd = socket(AF_INET, type, 0);
     CHECK(fd >= 0);
@@ -95,6 +102,7 @@ static unsigned short free_port(int type) {
     close(fd);
     return port;
 }
+
 static int connect_to(unsigned short port) {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     CHECK(fd >= 0);
@@ -137,6 +145,7 @@ static const char *raw(unsigned short port, const char *request) {
     CHECK(responses[slot]);
     return responses[slot];
 }
+
 static const char *get(unsigned short port, const char *path) {
     wifi_buffer_t request;
     wifi_buffer_init(&request, 4096);
@@ -146,6 +155,7 @@ static const char *get(unsigned short port, const char *path) {
     wifi_buffer_free(&request);
     return result;
 }
+
 static const char *post(unsigned short port, const char *token, const char *path, const char *body,
                         const char *origin) {
     char expected_origin[64];
@@ -161,6 +171,7 @@ static const char *post(unsigned short port, const char *token, const char *path
     wifi_buffer_free(&request);
     return result;
 }
+
 static bool code(const char *response, unsigned expected) {
     char prefix[32];
     snprintf(prefix, sizeof(prefix), "HTTP/1.1 %u ", expected);
@@ -189,6 +200,7 @@ static packet_t dns(unsigned short port, const packet_t *query) {
     close(fd);
     return response;
 }
+
 int main(void) {
     signal(SIGPIPE, SIG_IGN);
     handler_t handler = {.mutex = PTHREAD_MUTEX_INITIALIZER,

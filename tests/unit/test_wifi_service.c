@@ -14,6 +14,9 @@ typedef struct {
     pthread_mutex_t mutex;
     unsigned initialized, ap_starts, ap_stops, connections, saves, portal_starts, portal_stops,
         scans;
+    unsigned ready_calls, probe_spacing, loads, invalid_profiles;
+    uint64_t last_probe;
+    wifi_service_t *probe_status;
     unsigned committed_checks, ap, init_result, route_on_init, ap_ok, portal_ok, connection_ok,
         routed, concurrent;
     unsigned block_connect, block_save, save_ok, reload_after_save, committed_ready, committed_ok;
@@ -30,6 +33,7 @@ static unsigned get(fake_state_t *s, size_t offset) {
     pthread_mutex_unlock(&s->mutex);
     return result;
 }
+
 static void put(fake_state_t *s, size_t offset, unsigned value) {
     pthread_mutex_lock(&s->mutex);
     *(unsigned *)((char *)s + offset) = value;
@@ -46,6 +50,7 @@ static void owned(fake_state_t *s) {
         s->wrong_thread = 1;
     pthread_mutex_unlock(&s->mutex);
 }
+
 static void increment(fake_state_t *s, size_t offset) {
     owned(s);
     pthread_mutex_lock(&s->mutex);
@@ -70,6 +75,7 @@ static const char *fake_ssid(void *context) {
     (void)context;
     return "mybot-test";
 }
+
 static bool fake_start_ap(void *context, char *error) {
     fake_state_t *s = context;
     INCREMENT(s, ap_starts);
@@ -78,20 +84,25 @@ static bool fake_start_ap(void *context, char *error) {
     wifi_error(error, ok ? "" : "Access point failure");
     return ok;
 }
+
 static void fake_stop_ap(void *context) {
     fake_state_t *s = context;
     INCREMENT(s, ap_stops);
     SET(s, ap, 0);
 }
+
 static bool fake_ap_running(void *context) {
     return GET((fake_state_t *)context, ap) != 0;
 }
+
 static bool fake_concurrent(void *context) {
     return GET((fake_state_t *)context, concurrent) != 0;
 }
+
 static bool fake_online(void *context) {
     return GET((fake_state_t *)context, routed) != 0;
 }
+
 static bool fake_scan(void *context, wifi_scan_t *scan, char *error) {
     fake_state_t *s = context;
     (void)error;
@@ -99,15 +110,20 @@ static bool fake_scan(void *context, wifi_scan_t *scan, char *error) {
     *scan = (wifi_scan_t){1, {{"test-network", -50, 3, 6}}};
     return true;
 }
+
 static bool fake_load(void *context, wifi_credentials_t *profiles, char *error) {
     fake_state_t *s = context;
-    (void)error;
-    owned(s);
+    INCREMENT(s, loads);
+    if (GET(s, invalid_profiles)) {
+        wifi_error(error, "Malformed system Wi-Fi configuration");
+        return false;
+    }
     pthread_mutex_lock(&s->mutex);
     *profiles = s->disk;
     pthread_mutex_unlock(&s->mutex);
     return true;
 }
+
 static bool fake_save(void *context, const wifi_credentials_t *profiles, char *error) {
     fake_state_t *s = context;
     INCREMENT(s, saves);
@@ -124,6 +140,7 @@ static bool fake_save(void *context, const wifi_credentials_t *profiles, char *e
     pthread_mutex_unlock(&s->mutex);
     return true;
 }
+
 static bool fake_wait_committed(void *context, const wifi_credential_t *profile, unsigned timeout,
                                 const wifi_cancel_t *cancel, char *error) {
     fake_state_t *s = context;
@@ -141,6 +158,7 @@ static bool fake_wait_committed(void *context, const wifi_credential_t *profile,
     wifi_error(error, ok ? "" : "Committed network did not settle");
     return ok;
 }
+
 static bool fake_connect(void *context, const wifi_credential_t *profile, unsigned timeout,
                          const wifi_cancel_t *cancel, char *error) {
     fake_state_t *s = context;
@@ -164,6 +182,7 @@ static bool fake_connect(void *context, const wifi_credential_t *profile, unsign
     wifi_error(error, ok ? "" : "Connection failed");
     return ok;
 }
+
 static bool fake_portal_start(void *context, const wifi_portal_handler_t *handler, char *error) {
     fake_state_t *s = context;
     CHECK(handler && handler->ops && handler->context);
@@ -172,12 +191,14 @@ static bool fake_portal_start(void *context, const wifi_portal_handler_t *handle
     wifi_error(error, ok ? "" : "HTTP/DNS bind failed");
     return ok;
 }
+
 static void fake_portal_stop(void *context) {
     fake_state_t *s = context;
     INCREMENT(s, portal_stops);
     while (GET(s, block_portal_stop))
         wifi_sleep_ms(1);
 }
+
 static void fake_destroy(void *context) {
     (void)context;
 }
@@ -196,10 +217,19 @@ static const wifi_portal_ops_t portal_ops = {fake_portal_start, fake_portal_stop
 static bool fake_ready(void *context) {
     fake_state_t *s = context;
     pthread_mutex_lock(&s->mutex);
+    ++s->ready_calls;
+    uint64_t now = wifi_now_ms();
+    s->probe_spacing = (unsigned)(now - s->last_probe);
+    s->last_probe = now;
+    if (s->probe_status) {
+        rv1126b_wifi_status_t snapshot;
+        wifi_service_snapshot(s->probe_status, &snapshot);
+    }
     const bool result = s->routed && (s->ready_mode || (s->connections > 0 && s->connection_ok));
     pthread_mutex_unlock(&s->mutex);
     return result;
 }
+
 static wifi_service_timing_t timing(void) {
     return (wifi_service_timing_t){.connect_budget_ms = 60,
                                    .attempt_ms = 30,
@@ -209,6 +239,7 @@ static wifi_service_timing_t timing(void) {
                                    .success_hold_ms = 1000,
                                    .scan_interval_ms = 1000,
                                    .offline_grace_ms = 20,
+                                   .route_interval_ms = 10,
                                    .init_budget_ms = 1000,
                                    .init_retry_ms = 10,
                                    .station_grace_ms = 80};
@@ -222,6 +253,7 @@ static fake_state_t *new_state(void) {
     s->save_ok = s->committed_ready = s->committed_ok = 1;
     return s;
 }
+
 static wifi_service_t *make_service(fake_state_t *s, bool enabled, bool force_ap, bool ready,
                                     const wifi_service_timing_t *deadlines) {
     SET(s, ready_mode, ready);
@@ -234,48 +266,57 @@ static wifi_service_t *make_service(fake_state_t *s, bool enabled, bool force_ap
     CHECK(service && !backend.ops && !portal.ops);
     return service;
 }
+
 static void close_service(wifi_service_t *service, fake_state_t *s) {
     wifi_service_destroy(service);
     CHECK(!GET(s, wrong_thread));
     CHECK(!pthread_mutex_destroy(&s->mutex));
     free(s);
 }
+
 static wifi_credential_t profile(const char *ssid) {
     wifi_credential_t result = {0};
     CHECK(wifi_copy(result.ssid, sizeof(result.ssid), ssid));
     memset(result.psk, 'a', 64);
     return result;
 }
+
 static void add_profile(fake_state_t *s, const char *ssid) {
     pthread_mutex_lock(&s->mutex);
     CHECK(s->disk.count < WIFI_MAX_NETWORKS);
     s->disk.items[s->disk.count++] = profile(ssid);
     pthread_mutex_unlock(&s->mutex);
 }
+
 static rv1126b_wifi_status_t snapshot(wifi_service_t *s) {
     rv1126b_wifi_status_t result;
     wifi_service_snapshot(s, &result);
     return result;
 }
+
 static wifi_portal_status_t status(wifi_service_t *s) {
     wifi_portal_status_t result;
     wifi_service_status(s, &result);
     return result;
 }
+
 static wifi_saved_names_t names(wifi_service_t *s) {
     wifi_saved_names_t result;
     wifi_service_saved_networks(s, &result);
     return result;
 }
+
 static bool has_networks(wifi_service_t *s) {
     wifi_scan_t scan;
     wifi_service_networks(s, &scan);
     return scan.count != 0;
 }
+
 static bool portal_state(wifi_service_t *s, const char *state) {
     const wifi_portal_status_t result = status(s);
     return !strcmp(result.state, state);
 }
+
 static bool first_name(wifi_service_t *s, const char *ssid) {
     const wifi_saved_names_t result = names(s);
     return result.count && !strcmp(result.items[0], ssid);
@@ -292,6 +333,7 @@ static void wait_ap(wifi_service_t *service) {
     const rv1126b_wifi_status_t value = snapshot(service);
     CHECK(value.ap_active && !strcmp(value.ssid, "mybot-test"));
 }
+
 static void test_disabled_and_existing_network(void) {
     fake_state_t *s = new_state();
     wifi_service_t *service = make_service(s, false, false, true, NULL);
@@ -329,6 +371,7 @@ static void test_boot_uses_route_acquired_during_initialization(void) {
         wifi_service_t *service = make_service(s, true, false, true, NULL);
         CHECK(wifi_service_start(service));
         AWAIT(GET(s, initialized) >= 2);
+        CHECK(!GET(s, loads));
         const rv1126b_wifi_status_t waiting = snapshot(service);
         CHECK(waiting.state == RV1126B_WIFI_WAITING && !waiting.error[0] && !waiting.ap_active);
         if (route_on_init)
@@ -336,6 +379,7 @@ static void test_boot_uses_route_acquired_during_initialization(void) {
         else
             SET(s, routed, 1);
         AWAIT(snapshot(service).state == RV1126B_WIFI_ONLINE);
+        CHECK(GET(s, loads) == route_on_init);
         CHECK(!GET(s, scans) && !GET(s, connections) && !GET(s, ap_starts) && !GET(s, saves));
         SET(s, routed, 0);
         AWAIT(snapshot(service).state == RV1126B_WIFI_RECOVERY_REQUIRED);
@@ -420,6 +464,21 @@ static void test_forced_provisioning_waits_for_backend_despite_existing_route(vo
     close_service(service, s);
 }
 
+static void test_online_route_sampling(void) {
+    fake_state_t *s = new_state();
+    wifi_service_timing_t deadlines = timing();
+    deadlines.route_interval_ms = 100;
+    wifi_service_t *service = make_service(s, true, false, true, &deadlines);
+    s->probe_status = service;
+    CHECK(wifi_service_start(service));
+    AWAIT(snapshot(service).state == RV1126B_WIFI_ONLINE && GET(s, ready_calls) >= 2);
+    AWAIT(GET(s, ready_calls) >= 3);
+    CHECK(GET(s, probe_spacing) >= deadlines.route_interval_ms);
+    SET(s, routed, 0);
+    AWAIT(snapshot(service).state == RV1126B_WIFI_RECOVERY_REQUIRED);
+    close_service(service, s);
+}
+
 static void test_offline_recovery_requires_sdk_acknowledgement(void) {
     fake_state_t *s = new_state();
     add_profile(s, "saved");
@@ -449,6 +508,7 @@ static void test_offline_recovery_requires_sdk_acknowledgement(void) {
     CHECK(GET(s, ap_starts) == starts);
     close_service(service, s);
 }
+
 static void test_ap_and_portal_rollback(void) {
     for (unsigned portal_failure = 0; portal_failure < 2; ++portal_failure) {
         fake_state_t *s = new_state();
@@ -471,6 +531,15 @@ static void test_ap_and_portal_rollback(void) {
     AWAIT(snapshot(service).state == RV1126B_WIFI_ERROR);
     CHECK(!snapshot(service).ap_active);
     CHECK(GET(s, initialized) == 1 && !strcmp(snapshot(service).error, "Missing AP tools"));
+    close_service(service, s);
+
+    s = new_state();
+    SET(s, invalid_profiles, 1);
+    service = make_service(s, true, false, false, NULL);
+    CHECK(wifi_service_start(service));
+    AWAIT(snapshot(service).state == RV1126B_WIFI_ERROR);
+    CHECK(GET(s, loads) == 1 &&
+          !strcmp(snapshot(service).error, "Malformed system Wi-Fi configuration"));
     close_service(service, s);
 }
 
@@ -565,6 +634,7 @@ static void test_saved_attempts_and_deadline(void) {
     CHECK(GET(s, connections) == 1 && !GET(s, ap_starts) && !GET(s, portal_starts));
     close_service(service, s);
 }
+
 static void test_candidate_failure_then_success_and_grace(void) {
     fake_state_t *s = new_state();
     wifi_service_t *service = make_service(s, true, false, false, NULL);
@@ -604,6 +674,7 @@ static void test_candidate_failure_then_success_and_grace(void) {
     CHECK(!wifi_service_finish(service, error));
     close_service(service, s);
 }
+
 static void test_requires_routed_ip_and_single_interface_recovery(void) {
     fake_state_t *s = new_state();
     SET(s, concurrent, 0);
@@ -623,6 +694,7 @@ static void test_requires_routed_ip_and_single_interface_recovery(void) {
     CHECK(!snapshot(service).ap_active);
     close_service(service, s);
 }
+
 static void test_saved_mutations_and_mru(void) {
     fake_state_t *s = new_state();
     for (unsigned i = 0; i < 10; ++i) {
@@ -669,6 +741,7 @@ static void test_saved_mutations_and_mru(void) {
     CHECK(saved.count == 10 && !strcmp(saved.items[0], "network-7") && matches == 1);
     close_service(service, s);
 }
+
 static void test_stop_cancels_and_auto_finish(void) {
     fake_state_t *s = new_state();
     SET(s, block_connect, 1);
@@ -697,6 +770,7 @@ static void test_stop_cancels_and_auto_finish(void) {
     CHECK(!snapshot(service).ap_active);
     close_service(service, s);
 }
+
 static void test_manual_request_during_close_and_late_finish(void) {
     fake_state_t *s = new_state();
     SET(s, connection_ok, 1);
@@ -736,6 +810,7 @@ static void test_manual_request_during_close_and_late_finish(void) {
     CHECK(wifi_now_ms() - before >= 40);
     close_service(service, s);
 }
+
 static void test_failed_persistence_does_not_change_cache(void) {
     fake_state_t *s = new_state();
     add_profile(s, "old");
@@ -769,6 +844,7 @@ static void test_failed_persistence_does_not_change_cache(void) {
     CHECK(wifi_service_finish(service, error));
     close_service(service, s);
 }
+
 static void test_profile_reload_settles_before_phone_success(void) {
     fake_state_t *s = new_state();
     SET(s, connection_ok, 1);
@@ -800,6 +876,7 @@ static void test_profile_reload_settles_before_phone_success(void) {
     CHECK(!snapshot(service).ap_active);
     close_service(service, s);
 }
+
 static void test_profile_reload_timeout_retains_committed_cache_and_cancels(void) {
     fake_state_t *s = new_state();
     add_profile(s, "old");
@@ -826,6 +903,7 @@ static void test_profile_reload_timeout_retains_committed_cache_and_cancels(void
           first_name(service, "new"));
     close_service(service, s);
 }
+
 static void test_public_lifecycle(void) {
     CHECK(rv1126b_wifi_start(NULL) == -1);
     const rv1126b_wifi_config_t disabled = {0};
@@ -840,12 +918,14 @@ static void test_public_lifecycle(void) {
     rv1126b_wifi_status(&stopped);
     CHECK(stopped.state == RV1126B_WIFI_WAITING && !stopped.ap_active);
 }
+
 int main(void) {
     test_disabled_and_existing_network();
     test_boot_uses_route_acquired_during_initialization();
     test_transient_init_timeout_and_stop();
     test_boot_allows_system_station_to_obtain_route();
     test_forced_provisioning_waits_for_backend_despite_existing_route();
+    test_online_route_sampling();
     test_offline_recovery_requires_sdk_acknowledgement();
     test_ap_and_portal_rollback();
     test_ap_exit_withdraws_guidance_before_cleanup_and_allows_retry();

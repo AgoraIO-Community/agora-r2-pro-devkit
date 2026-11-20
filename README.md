@@ -4,7 +4,7 @@
 
 An official Agora Linux application for RV1126B, built on agent-studio-device-firmware 1.3.0. It provides AP Wi-Fi setup with voice guidance, HTTPS pairing, bidirectional voice, persistent device identity and volume, a pixel-glasses UI, and optional V4L2/MPP JPEG uplink.
 
-The current source version is **<!-- project-version -->0.6.1<!-- /project-version -->**, targeting **RV1126B TEST2 RK805B V10**. [Validation status](docs/validation/README.md) distinguishes source checks, cross-builds and hardware evidence. New packages require their own hardware acceptance.
+The current application version is **<!-- project-version -->1.0.0<!-- /project-version -->**, targeting **RV1126B TEST2 RK805B V10**. [Validation status](docs/validation/README.md) distinguishes source checks, cross-builds and hardware evidence. New packages require their own hardware acceptance.
 
 ## Use
 

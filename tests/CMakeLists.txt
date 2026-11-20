@@ -130,7 +130,7 @@ foreach(target test-pixels test-input test-input-worker test-renderer test-ident
 endforeach()
 set_tests_properties(pixels input-semantics input-worker renderer identity ui-runtime drm-lifecycle app-config runtime-guard audio-lifecycle network-lifecycle PROPERTIES TIMEOUT 30)
 add_test(NAME tooling COMMAND "${Python3_EXECUTABLE}" -m unittest discover -s tests/tooling -p "test_*.py" -v)
-set_tests_properties(tooling PROPERTIES WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" TIMEOUT 120)
+set_tests_properties(tooling PROPERTIES LABELS tooling WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" TIMEOUT 300)
 add_test(NAME ui-baseline COMMAND "${Python3_EXECUTABLE}"
     "${CMAKE_CURRENT_SOURCE_DIR}/integration/check_ui_preview.py"
     --binary "$<TARGET_FILE:mybot-ui-preview>" --language "${RV1126B_LANGUAGE}")

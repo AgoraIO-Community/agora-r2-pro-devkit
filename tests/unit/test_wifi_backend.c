@@ -113,6 +113,7 @@ static void credentials(void) {
     CHECK(!wifi_valid_interface("../../wlan0"));
     CHECK(!wifi_valid_interface(long_interface));
 }
+
 static void parsing(void) {
     char decoded[128];
     size_t length = 0;
@@ -152,10 +153,12 @@ static void parsing(void) {
     CHECK(!wifi_network_id_for_ssid(profiles, "missing", id));
     CHECK(!wifi_network_id_for_ssid("7;bad\tother\tany\t\n", "other", id));
 }
+
 static bool reuse_lease(const char *before, const char *after) {
     return wifi_same_association_lease(before, after, "home network", "42", "routed-ipv4",
                                        "routed-ipv4");
 }
+
 static void same_network_lease(void) {
     const char *original = "wpa_state=COMPLETED\nssid=home\\x20network\n"
                            "bssid=02:11:22:33:44:AA\nid=7\n";
@@ -182,10 +185,12 @@ static void same_network_lease(void) {
     CHECK(!reuse_lease(original, "wpa_state=COMPLETED\nssid=home network\n"
                                  "bssid=02:11:22:33:44:aa\nid=7\n"));
 }
+
 static bool title_used(const char *title, const char *executable, const char *comm) {
     const char *arguments[] = {title, NULL};
     return wifi_process_identity_uses_interface("dhcpcd", "wlan0", executable, comm, arguments);
 }
+
 static void daemon_process_titles(void) {
     CHECK(title_used("dhcpcd: [manager] [ip4] [ip6]", "/usr/sbin/dhcpcd", ""));
     CHECK(title_used("dhcpcd: [manager] [ip4] [ip6]", "/usr/sbin/dhcpcd (deleted)", ""));
@@ -205,6 +210,7 @@ static void daemon_process_titles(void) {
     CHECK(!wifi_process_identity_uses_interface("wpa_supplicant", "wlan0", "", "", other));
     CHECK(!wifi_process_identity_uses_interface("dhcpcd", "wlan0", "", "", empty));
 }
+
 static void ap_radio_selection(void) {
     const char *capabilities =
         "Wiphy phy0\n Supported interface modes:\n  * managed\n  * AP\n"
@@ -255,6 +261,7 @@ static void ap_radio_selection(void) {
     CHECK(wifi_select_ap_radio(0, false, &plan, error) && plan.hw_mode == 'g' && plan.channel == 1);
     CHECK(!wifi_select_ap_radio(2500, false, &plan, error));
 }
+
 static void store(void) {
     char temporary[] = "/tmp/mybot-wifi-store-XXXXXX";
     CHECK(mkdtemp(temporary));
@@ -322,6 +329,7 @@ static bool is_cancelled(void *context) {
     CHECK(!pthread_mutex_unlock(&cancel->mutex));
     return result;
 }
+
 static void *request_cancel(void *context) {
     cancellation_t *cancel = context;
     wifi_sleep_ms(50);
@@ -330,6 +338,7 @@ static void *request_cancel(void *context) {
     CHECK(!pthread_mutex_unlock(&cancel->mutex));
     return NULL;
 }
+
 static void processes(const char *self) {
     wifi_buffer_t output;
     wifi_buffer_init(&output, WIFI_COMMAND_OUTPUT_LIMIT);
@@ -374,12 +383,14 @@ static int bind_control(const char *remote) {
     CHECK(!bind(descriptor, (struct sockaddr *)&address, sizeof(address)));
     return descriptor;
 }
+
 static bool supplicant_stopped(supplicant_t *s) {
     CHECK(!pthread_mutex_lock(&s->mutex));
     const bool result = s->stop;
     CHECK(!pthread_mutex_unlock(&s->mutex));
     return result;
 }
+
 static void *supplicant_worker(void *context) {
     supplicant_t *s = context;
     while (!supplicant_stopped(s)) {
@@ -411,6 +422,7 @@ static void *supplicant_worker(void *context) {
     }
     return NULL;
 }
+
 static void control_reload(bool replace_endpoint, bool reject_reload) {
     char temporary[] = "/tmp/mybot-wpa-control-XXXXXX";
     CHECK(mkdtemp(temporary));
@@ -445,6 +457,7 @@ static bool capture_command(void *context, const char *request) {
     CHECK(wifi_copy(capture->commands[capture->count++], sizeof(capture->commands[0]), request));
     return capture->accepted;
 }
+
 static void committed_selection(void) {
     const char *networks = "network id / ssid / bssid / flags\n"
                            "42\trequested\tany\t\n9\tother\tany\t[CURRENT]\n";
@@ -476,6 +489,7 @@ static void committed_selection(void) {
     CHECK(!reassociated && capture.count == 1 && !strcmp(capture.commands[0], "ENABLE_NETWORK 42"));
     CHECK(!strstr(error, "requested") && !strstr(error, "other"));
 }
+
 int main(int argc, char **argv) {
     if (argc == 2 && !strcmp(argv[1], "--ignore-term")) {
         signal(SIGTERM, SIG_IGN);

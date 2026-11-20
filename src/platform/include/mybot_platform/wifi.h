@@ -22,7 +22,8 @@ typedef enum {
 typedef struct {
     bool enabled;
     bool force_ap;
-    const char *interface_name; /* Empty selects the first wireless interface. */
+    /* Empty prefers wlan0, then the lexicographically first nl80211 interface. */
+    const char *interface_name;
     const char *storage_directory;
     const char *runtime_directory;
     const char *dhcp_script;

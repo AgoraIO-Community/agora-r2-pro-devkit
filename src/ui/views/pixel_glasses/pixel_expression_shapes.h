@@ -1,8 +1,6 @@
 /* SPDX-License-Identifier: MIT */
 /* Copyright (c) 2026 Project Contributors */
-/* Integer geometry follows the product simulator's src/expressions.js geek
- * face. Filled shapes use five small immutable A8 masks; no full-frame bitmap,
- * canvas, transformed group layer, or runtime object allocation is required. */
+/* Expressions use integer geometry and five immutable A8 masks. */
 #ifndef MYBOT_PIXEL_EXPRESSION_SHAPES_H_
 #define MYBOT_PIXEL_EXPRESSION_SHAPES_H_
 
@@ -64,7 +62,7 @@ constexpr Config kConfigs[] = {
     {{Eye::Dash, Eye::Dash}, Mouth::None, 0x7588a5, 450, Breathe, 0, false, false},
 };
 static_assert(sizeof(kConfigs) / sizeof(kConfigs[0]) == MYBOT_EXPRESSION_COUNT,
-              "Every simulator expression needs geometry");
+              "Every expression needs geometry");
 constexpr unsigned kPoints = 33;
 constexpr int kPolygonCenter = 80;
 constexpr int kLineCenter = 100;

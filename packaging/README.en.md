@@ -2,9 +2,7 @@
 
 For an existing AArch64 Buildroot system on RV1126B TEST2 RK805B V10. The bundled manifests and `./run.sh --version` identify the version, language and voice/video profiles.
 
-Follow the [English operations manual PDF](https://github.com/AgoraIO-Community/agora-r2-pro-devkit/blob/main/docs/device-operations.en.pdf), [build reference](https://github.com/AgoraIO-Community/agora-r2-pro-devkit/blob/main/docs/user/build.zh-CN.md) and [deployment reference](https://github.com/AgoraIO-Community/agora-r2-pro-devkit/blob/main/docs/user/deployment.zh-CN.md). The source references are in Chinese; the English PDF includes the complete procedure. The [validation record](https://github.com/AgoraIO-Community/agora-r2-pro-devkit/blob/main/docs/validation/README.md) defines the hardware acceptance scope.
-
-Recorded device checks cover AP startup, on-device HTTP credential submission/persistence and SDK recovery. Phone wireless access, DHCP/captive browsers, wrong passwords, reuse after reboot and complete voice checks still need dedicated acceptance. A new artifact does not inherit previous hardware results.
+The archive includes the [English operations manual PDF](../docs/device-operations.en.pdf). See the [build reference](../docs/user/build.zh-CN.md) and [deployment reference](../docs/user/deployment.zh-CN.md). The source references are in Chinese; the English PDF includes the complete procedure. The [validation record](../docs/validation/README.md) defines the hardware acceptance scope.
 
 ## Verify and run directly
 

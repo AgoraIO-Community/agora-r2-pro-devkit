@@ -44,38 +44,58 @@ def git(root, *args):
     return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.DEVNULL)
 
 
-def excluded(name):
-    parts = Path(name).parts
-    return (not parts or parts[0] in (".git", "local", "dist") or
-            parts[0].startswith("build") or "__pycache__" in parts or
-            parts[-1] == ".DS_Store" or parts[-1].endswith(".pyc"))
+def checkout_origin(root):
+    try:
+        revision = git(root, "rev-parse", "HEAD").decode().strip()
+        dirty = bool(git(root, "status", "--porcelain", "--untracked-files=all").strip())
+        return {"revision": revision, "dirty": dirty}
+    except subprocess.CalledProcessError:
+        return {"revision": None, "dirty": True}
+
+
+def target_source(name):
+    """Product sources shared by target profiles, including embedded/generated inputs."""
+    if name in ("CMakeLists.txt", "scripts/embed-wifi-portal.py", "scripts/build-manifest.py",
+                "scripts/build_metadata.py", "src/platform/src/services/wifi/portal.html"):
+        return True
+    path = Path(name)
+    if name.startswith("cmake/"):
+        return path.suffix in (".cmake", ".in")
+    if name.startswith(("src/", "vendor/mybot/", "vendor/aosl/", "vendor/lvgl/")):
+        if path.parts[0] == "vendor" and any(part in ("docs", "examples", "tests", "scripts", "assets")
+                                             for part in path.parts[2:]):
+            return False
+        return path.name == "CMakeLists.txt" or path.suffix in (
+            ".c", ".cc", ".cpp", ".h", ".hpp", ".inc", ".def", ".s", ".S", ".cmake", ".in")
+    return False
 
 
 def source_snapshot(root):
-    """Include tracked deletions and new governance files, never local build outputs."""
+    """Hash the target source set while recording the checkout's separate Git origin."""
     root = Path(root).resolve()
     try:
         names = set(git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
                     .decode().strip("\0").split("\0"))
-        revision = git(root, "rev-parse", "HEAD").decode().strip()
-        dirty = bool(git(root, "status", "--porcelain", "--untracked-files=all").strip())
     except subprocess.CalledProcessError:
-        names = {str(path.relative_to(root)) for path in root.rglob("*") if path.is_file()}
-        revision, dirty = None, True
+        names = {str(path.relative_to(root)) for directory in ("src", "cmake", "vendor", "scripts")
+                 for path in (root / directory).rglob("*") if path.is_file()}
+        names.add("CMakeLists.txt")
     entries = []
     for name in sorted(names):
-        if excluded(name):
+        if not target_source(name):
             continue
         path = root / name
         if path.is_symlink():
-            # Source symlinks bind their target text; source-tree files bind contents.
-            entries.append([name, "symlink", str(path.readlink())])
+            target = path.resolve(strict=True)
+            if not target.is_relative_to(root) or not target.is_file():
+                raise ValueError("Target source link must resolve to a file in the checkout: " + name)
+            entries.append([name, "symlink", str(path.readlink()), digest(target)])
         elif path.is_file():
             entries.append([name, "file", digest(path), bool(path.stat().st_mode & 0o111)])
         elif not path.exists():
             entries.append([name, "deleted"])
-    return {"sha256": json_digest(entries), "file_count": len(entries),
-            "revision": revision, "dirty": dirty}
+    return {"scope": "target-sources-v1", "sha256": json_digest(entries),
+            "file_count": len(entries), **checkout_origin(root)}
 
 
 def tree_snapshot(path):
@@ -292,7 +312,7 @@ def build_inputs(root, build):
     portable_dependencies["toolchain_file_sha256"] = json_digest(
         portable_text(Path(toolchain["file"]).read_text(), paths))
     identity = {"schema": IDENTITY_SCHEMA, "config": portable_config,
-                "source": {key: source[key] for key in ("sha256", "file_count")},
+                "source": {key: source[key] for key in ("scope", "sha256", "file_count")},
                 "dependencies": portable_dependencies}
     return {"schema": MANIFEST_SCHEMA, "config": config, "source": source,
             "dependencies": dependencies, "identity": identity}
@@ -306,7 +326,8 @@ def inputs_digest(inputs, *, public=False):
     for field in ("version", "language", "video", "ptime_ms", "board"):
         if identity["config"][field] != inputs["config"][field]:
             raise ValueError("Portable inputs identity does not match configuration")
-    if any(identity["source"][key] != inputs["source"][key] for key in ("sha256", "file_count")):
+    if (any(identity["source"][key] != inputs["source"][key] for key in ("sha256", "file_count")) or
+            identity["source"].get("scope") != inputs["source"].get("scope")):
         raise ValueError("Portable inputs identity does not match source")
     if public and (inputs["config"]["flags_sha256"] != json_digest(identity["config"]["flags"]) or
                    inputs["dependencies"] != identity["dependencies"] or
@@ -366,7 +387,12 @@ def verify_manifest(root, build, language, video):
     if manifest.get("schema") != MANIFEST_SCHEMA:
         raise ValueError("Unsupported build manifest; rebuild")
     current = build_inputs(root, build)
-    if manifest.get("inputs") != current:
+    # Packaging can follow a documentation or asset commit. Preserve the actual
+    # build origin and still compare every compiler, dependency and source input.
+    recorded_source = manifest["inputs"]["source"]
+    comparable = {**current, "source": {**current["source"], "revision": recorded_source["revision"],
+                                        "dirty": recorded_source["dirty"]}}
+    if manifest["inputs"] != comparable:
         raise ValueError("Stale build manifest: source/configuration/dependencies changed; rebuild")
     config = current["config"]
     if config["language"] != language or config["video"] != video:

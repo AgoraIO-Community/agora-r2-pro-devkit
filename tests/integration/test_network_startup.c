@@ -22,6 +22,7 @@ static const char *ap_ssid(void *context) {
     (void)context;
     return "startup-test";
 }
+
 static bool start_ap(void *context, char *error) {
     state_t *s = context;
     pthread_mutex_lock(&s->mutex);
@@ -31,6 +32,7 @@ static bool start_ap(void *context, char *error) {
     wifi_error(error, "");
     return true;
 }
+
 static void stop_ap(void *context) {
     state_t *s = context;
     pthread_mutex_lock(&s->mutex);
@@ -39,6 +41,7 @@ static void stop_ap(void *context) {
     s->ap = false;
     pthread_mutex_unlock(&s->mutex);
 }
+
 static bool ap_running(void *context) {
     state_t *s = context;
     pthread_mutex_lock(&s->mutex);
@@ -46,10 +49,12 @@ static bool ap_running(void *context) {
     pthread_mutex_unlock(&s->mutex);
     return value;
 }
+
 static bool concurrent(void *context) {
     (void)context;
     return true;
 }
+
 static bool online(void *context) {
     state_t *s = context;
     pthread_mutex_lock(&s->mutex);
@@ -57,12 +62,14 @@ static bool online(void *context) {
     pthread_mutex_unlock(&s->mutex);
     return value;
 }
+
 static bool scan(void *context, wifi_scan_t *out, char *error) {
     (void)context;
     *out = (wifi_scan_t){0};
     wifi_error(error, "");
     return true;
 }
+
 static bool load(void *context, wifi_credentials_t *out, char *error) {
     state_t *s = context;
     pthread_mutex_lock(&s->mutex);
@@ -71,6 +78,7 @@ static bool load(void *context, wifi_credentials_t *out, char *error) {
     wifi_error(error, "");
     return true;
 }
+
 static bool save(void *context, const wifi_credentials_t *profiles, char *error) {
     state_t *s = context;
     pthread_mutex_lock(&s->mutex);
@@ -79,6 +87,7 @@ static bool save(void *context, const wifi_credentials_t *profiles, char *error)
     wifi_error(error, "");
     return true;
 }
+
 static bool wait_committed(void *context, const wifi_credential_t *credential, unsigned timeout,
                            const wifi_cancel_t *cancel, char *error) {
     (void)credential;
@@ -86,6 +95,7 @@ static bool wait_committed(void *context, const wifi_credential_t *credential, u
     wifi_error(error, "");
     return !wifi_cancelled(cancel) && online(context);
 }
+
 static bool connect_network(void *context, const wifi_credential_t *credential, unsigned timeout,
                             const wifi_cancel_t *cancel, char *error) {
     (void)credential;
@@ -99,6 +109,7 @@ static bool connect_network(void *context, const wifi_credential_t *credential, 
     wifi_error(error, "");
     return routed;
 }
+
 static void no_destroy(void *context) {
     (void)context;
 }
@@ -123,6 +134,7 @@ static void await_state(wifi_service_t *service, rv1126b_wifi_state_t expected) 
     } while (wifi_now_ms() < deadline);
     CHECK(status.state == expected);
 }
+
 static void recovery_after_portal_closes(void) {
     state_t state = {
         .mutex = PTHREAD_MUTEX_INITIALIZER, .routed = true, .lose_route_on_ap_stop = true};
@@ -169,6 +181,7 @@ static void recovery_after_portal_closes(void) {
     wifi_service_destroy(service);
     CHECK(!pthread_mutex_destroy(&state.mutex));
 }
+
 static void acknowledgement_guards(void) {
     rv1126b_network_gate_t gate = {0};
     rv1126b_wifi_status_t status = {.state = RV1126B_WIFI_RECOVERY_REQUIRED};
@@ -202,6 +215,7 @@ static void acknowledgement_guards(void) {
           RV1126B_NETWORK_GATE_READY);
     CHECK(!gate.recovery_requested);
 }
+
 int main(void) {
     recovery_after_portal_closes();
     acknowledgement_guards();

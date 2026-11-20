@@ -8,6 +8,9 @@
 extern "C" {
 #endif
 
+/* A payload exits with this status when it cannot confirm SDK shutdown. */
+#define RV1126B_EXIT_UNCLEAN 78
+
 /* Standalone process supervision; no SDK, device, network or shell dependency.
  * A zero policy field selects the production default. argv must remain valid
  * until run returns. Production descendant adoption requires Linux /proc. */
