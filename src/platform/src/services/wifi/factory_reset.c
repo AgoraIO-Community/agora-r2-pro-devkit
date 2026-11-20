@@ -111,7 +111,7 @@ static bool clear_files(int state, const factory_reset_paths_t *paths) {
         (data >= 0 && (factory_file_status(data, "device_auth", false) < 0 ||
                        factory_file_status(data, "volume.settings", false) < 0)) ||
         (wifi >= 0 && factory_file_status(wifi, "wifi.credentials", false) < 0) ||
-        (leases >= 0 && factory_file_status(leases, "wlan0.lease", false) < 0))
+        (leases >= 0 && factory_file_status(leases, FACTORY_STATION ".lease", false) < 0))
         goto done;
     stage = "station profile reload or disconnect";
     if (!clear_network(paths))
@@ -148,7 +148,7 @@ int factory_reset_run(const factory_reset_paths_t *paths, const char *station) {
         close(state);
         return pending;
     }
-    if (station && *station && strcmp(station, "wlan0")) {
+    if (!factory_station_supported(station)) {
         fprintf(stderr, "Factory reset requires the board station wlan0\n");
         close(state);
         return -1;

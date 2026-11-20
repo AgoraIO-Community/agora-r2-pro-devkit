@@ -5,6 +5,7 @@
 #endif
 #define _POSIX_C_SOURCE 200809L
 #include "mybot_platform/supervisor.h"
+#include "wifi/factory_reset_internal.h"
 
 #include <dirent.h>
 #include <errno.h>
@@ -531,7 +532,9 @@ static bool persist_reset(const char *path) {
 static void accept_transition(supervisor_t *service, int fd, transition_t transition) {
     if (service->failed || service->unclean || service->stopping || service->cleaning ||
         service->transition != TRANSITION_NONE || !peer_is_application(service, fd) ||
-        (transition == TRANSITION_RESET && !service->policy.reset_directory) ||
+        (transition == TRANSITION_RESET &&
+         (!service->policy.reset_directory ||
+          !factory_station_supported(getenv("RV1126B_WIFI_INTERFACE")))) ||
         (transition == TRANSITION_POWEROFF &&
          !poweroff_command_safe(service->policy.poweroff_command))) {
         reply(fd, "failed\n");

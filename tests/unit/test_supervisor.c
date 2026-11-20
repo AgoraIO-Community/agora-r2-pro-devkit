@@ -141,6 +141,12 @@ static int child_payload(const char *mode, const char *marker) {
                 pause();
         }
         int result = rv1126b_factory_reset_request();
+        if (!strcmp(mode, "reset-other-station")) {
+            CHECK(result < 0 && write(fd, "rejected\n", 9) == 9);
+            close(fd);
+            for (;;)
+                pause();
+        }
         if (!strcmp(mode, "reset-disabled") || !strcmp(mode, "reset-unsafe")) {
             close(fd);
             return result < 0 ? 0 : 8;
@@ -266,6 +272,8 @@ static pid_t start_supervisor(const char *mode, size_t log_limit) {
                                               .log_limit_bytes = log_limit};
         if (!strncmp(mode, "power-", 6) && strcmp(mode, "power-disabled"))
             config.poweroff_command = power_command;
+        CHECK(setenv("RV1126B_WIFI_INTERFACE",
+                     !strcmp(mode, "reset-other-station") ? "wlan1" : "wlan0", 1) == 0);
         if (!strncmp(mode, "reset-", 6) && strcmp(mode, "reset-disabled"))
             config.reset_directory = temporary;
         _exit(rv1126b_supervisor_run(&config));
@@ -555,6 +563,15 @@ static void test_factory_reset(void) {
     prepare();
     CHECK(snprintf(pending, sizeof(pending), "%s/factory-reset.pending", temporary) <
           (int)sizeof(pending));
+    pid_t other = start_supervisor("reset-other-station", 128);
+    struct stat rejection;
+    for (unsigned int i = 0;
+         i < 500 && (stat(marker_path, &rejection) < 0 || rejection.st_size != 9); ++i)
+        pause_ms(10);
+    CHECK(stat(marker_path, &rejection) == 0 && rejection.st_size == 9);
+    await_state("running\n");
+    CHECK(access(pending, F_OK) < 0 && errno == ENOENT);
+    CHECK(rv1126b_supervisor_control(runtime_path, 1) == 0 && await_exit(other) == 0);
     CHECK(await_exit(start_supervisor("reset-disabled", 128)) == 0);
     CHECK(access(pending, F_OK) < 0 && errno == ENOENT);
     CHECK(symlink("unrelated", pending) == 0);

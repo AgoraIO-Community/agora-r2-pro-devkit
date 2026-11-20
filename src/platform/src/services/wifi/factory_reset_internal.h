@@ -3,6 +3,7 @@
 #define RV1126B_FACTORY_RESET_INTERNAL_H
 
 #include <stdbool.h>
+#include <string.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -11,6 +12,12 @@ extern "C" {
 #define FACTORY_STATE_DIRECTORY "/userdata/mybot"
 #define FACTORY_SETUP_FILE "factory-reset.setup"
 #define FACTORY_PENDING_FILE "factory-reset.pending"
+
+#define FACTORY_STATION "wlan0"
+
+static inline bool factory_station_supported(const char *station) {
+    return !station || !*station || !strcmp(station, FACTORY_STATION);
+}
 
 /* Opens an owned mode-0700 directory without following symlinks in its path.
  * Optional directories may return -1 with errno=ENOENT. */
