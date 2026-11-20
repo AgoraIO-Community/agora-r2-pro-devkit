@@ -36,6 +36,8 @@ typedef enum {
     MANUAL_RETRY,
     RECOVERY,
     CLOCK_FAILURE,
+    CLOCK_LATE,
+    CLOCK_POWEROFF,
     VIDEO_FAILURE,
     INPUT_FAILURE,
     SDK_START_FAILURE,
@@ -138,6 +140,9 @@ rv1126b_time_sync_state_t rv1126b_time_sync_poll(rv1126b_time_sync_t *context, b
     CHECK(context == &clock_context);
     if (!ready)
         return RV1126B_TIME_WAIT_NETWORK;
+    if ((fixture.scenario == CLOCK_LATE && fixture_now < 1500) ||
+        fixture.scenario == CLOCK_POWEROFF)
+        return RV1126B_TIME_TIMEOUT;
     return fixture.scenario == CLOCK_FAILURE ? RV1126B_TIME_FAILED : RV1126B_TIME_READY;
 }
 
@@ -277,7 +282,8 @@ int rv1126b_key_poweroff_requested(void) {
     bool active = fixture.scenario == POWEROFF || fixture.scenario == POWEROFF_REJECTED ||
                   fixture.scenario == POWEROFF_DISPLAY_FAILURE;
     return !fixture.power_sent &&
-           ((active && fixture.sdk_active) || fixture.scenario == POWEROFF_WAITING);
+           ((active && fixture.sdk_active) || fixture.scenario == POWEROFF_WAITING ||
+            (fixture.scenario == CLOCK_POWEROFF && fixture.statuses[RV1126B_APP_WAITING_CLOCK]));
 }
 
 int rv1126b_poweroff_request(void) {
@@ -430,6 +436,12 @@ static void run(scenario_t scenario, int expected) {
     } else if (scenario == RECOVERY) {
         CHECK(fixture.starts == 2 && fixture.stops == 2 && fixture.recoveries == 1);
         CHECK(position(SDK_STOP) < position(RECOVERY_REQUEST));
+    } else if (scenario == CLOCK_LATE || scenario == CLOCK_POWEROFF) {
+        CHECK(fixture.statuses[RV1126B_APP_WAITING_CLOCK] && !fixture.clock_failed);
+        if (scenario == CLOCK_LATE)
+            CHECK(fixture.starts == 1 && fixture.statuses[RV1126B_APP_READY]);
+        else
+            CHECK(!fixture.starts && fixture.power_sent && position(UI_STOP_FOR_POWEROFF) >= 0);
     } else if (scenario == CLOCK_FAILURE) {
         CHECK(fixture.starts == 0 && fixture.clock_failed && position(UI_START) < 0);
     } else if (scenario == VIDEO_FAILURE) {

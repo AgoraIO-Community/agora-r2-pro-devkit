@@ -29,7 +29,7 @@ struct rv1126b_time_sync {
     unsigned int timeout_seconds;
     char helper[PATH_MAX];
     char error[192];
-    uint64_t online_started;
+    uint64_t online_started, last_late_probe;
     bool online_window;
     bool helper_attempted;
     bool helper_cancelled;
@@ -371,6 +371,14 @@ rv1126b_time_sync_state_t rv1126b_time_sync_poll(rv1126b_time_sync_t *sync, bool
         sync->state = RV1126B_TIME_WAIT_NETWORK;
         return sync->state;
     }
+    if (sync->state == RV1126B_TIME_TIMEOUT) {
+        uint64_t now;
+        if (sync->backend.monotonic(sync->backend_context, &now) < 0 || now < sync->last_late_probe)
+            return fail(sync, "Cannot track elapsed time; inspect system clock support");
+        if (now - sync->last_late_probe < 1000)
+            return sync->state;
+        sync->last_late_probe = now;
+    }
     int64_t realtime;
     if (sync->backend.realtime(sync->backend_context, &realtime) < 0) {
         release_helper(sync, false);
@@ -428,6 +436,7 @@ rv1126b_time_sync_state_t rv1126b_time_sync_poll(rv1126b_time_sync_t *sync, bool
         }
         snprintf(sync->error, sizeof(sync->error),
                  "System time is still invalid; check NTP/network or configure a one-shot helper");
+        sync->last_late_probe = now;
         sync->state = RV1126B_TIME_TIMEOUT;
         return sync->state;
     }

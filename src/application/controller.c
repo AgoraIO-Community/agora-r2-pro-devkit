@@ -284,14 +284,15 @@ int rv1126b_controller_run(const rv1126b_app_config_t *settings, const mybot_con
                         rv1126b_time_sync_error(time_sync));
                 last_time_state = (int)time_state;
             }
-            rv1126b_ui_time_status(time_state == RV1126B_TIME_WAIT_CLOCK
-                                       ? MYBOT_DISPLAY_CLOCK_WAITING
-                                       : MYBOT_DISPLAY_CLOCK_INACTIVE);
-            publish_status(status.ap_active                        ? RV1126B_APP_AP
-                           : wifi_failed                           ? RV1126B_APP_WIFI_ERROR
-                           : time_state == RV1126B_TIME_WAIT_CLOCK ? RV1126B_APP_WAITING_CLOCK
-                                                                   : RV1126B_APP_WAITING_NETWORK);
-            if (time_state == RV1126B_TIME_FAILED || time_state == RV1126B_TIME_TIMEOUT) {
+            bool waiting_clock =
+                time_state == RV1126B_TIME_WAIT_CLOCK || time_state == RV1126B_TIME_TIMEOUT;
+            rv1126b_ui_time_status(waiting_clock ? MYBOT_DISPLAY_CLOCK_WAITING
+                                                 : MYBOT_DISPLAY_CLOCK_INACTIVE);
+            publish_status(status.ap_active ? RV1126B_APP_AP
+                           : wifi_failed    ? RV1126B_APP_WIFI_ERROR
+                           : waiting_clock  ? RV1126B_APP_WAITING_CLOCK
+                                            : RV1126B_APP_WAITING_NETWORK);
+            if (time_state == RV1126B_TIME_FAILED) {
                 fprintf(stderr,
                         "Cannot start services: %s\n"
                         "Check the system time service or configure --time-sync-helper; "
