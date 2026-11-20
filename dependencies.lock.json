@@ -1234,7 +1234,7 @@
   ],
   "generated_fonts": {
     "manifest": "src/ui/fonts/sources.json",
-    "manifest_sha256": "a98d5fc19f52bef791f369b1536e17e3b8e2762ab03acdc900849e03060e3e70",
+    "manifest_sha256": "d0d03d7640c0a8994867eb9e27e5fb7642e76d48f91e5877742cf8f9147548e0",
     "inputs": {
       "DejaVuSansMono-Bold.ttf": {
         "url": "https://cdn.jsdelivr.net/gh/matplotlib/matplotlib@v3.8.2/lib/matplotlib/mpl-data/fonts/ttf/DejaVuSansMono-Bold.ttf",
@@ -1254,7 +1254,7 @@
     "pillow_version": "10.2.0",
     "freetype_version": "2.13.2",
     "outputs": {
-      "src/ui/fonts/generated/lvgl_fonts.c": "f1d0b1cc038cf70fbe1257708fa6e9a512504e4c7ecbc66515be35aa766ccde7",
+      "src/ui/fonts/generated/lvgl_fonts.c": "0de1750a295bae17f784f276984acd480a06ced9d89546fa83e2545a0173e55b",
       "src/ui/fonts/generated/pair_font.c": "879e3ce6b590b612f8ecc326508678cfbe9747e6f5c606fb10eba6ac53e5747b",
       "src/ui/fonts/generated/pixel_fonts.c": "20122d9384ffebde5f0e412adc2ecc97e33fe56fb932dc39b6de4164b6ba9d35"
     }

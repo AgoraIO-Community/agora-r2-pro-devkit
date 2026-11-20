@@ -205,6 +205,15 @@ static void check_settings(uint32_t *now) {
 }
 
 int main(void) {
+#if CONFIG_MYBOT_LANGUAGE_ZH_CN
+    const char *clock_title = "系统时间", *clock_wait = "等待系统校时";
+    const char *clock_fault = "时间不可用", *clock_help = "请检查校时服务";
+    const char *clock_threshold = "日期需为 2026 年或以后";
+#else
+    const char *clock_title = "System time", *clock_wait = "Waiting for system time";
+    const char *clock_fault = "Time unavailable", *clock_help = "Check time service; restart";
+    const char *clock_threshold = "Required: 2026 or later";
+#endif
     rv1126b_renderer_settings(MYBOT_SETTINGS_MENU);
     s_frame = calloc(RV1126B_UI_WIDTH * RV1126B_UI_HEIGHT, sizeof(uint32_t));
     CHECK(s_frame);
@@ -282,10 +291,10 @@ int main(void) {
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);
         CHECK(rv1126b_renderer_canvas());
-        lv_obj_t *time_title = find_label(ap_root, "System time");
+        lv_obj_t *time_title = find_visible_label(ap_root, clock_title);
         CHECK(time_title && lv_obj_is_visible(time_title));
-        CHECK(find_label(ap_root, "Checking system time"));
-        CHECK(find_label(ap_root, "Required: 2026 or later"));
+        CHECK(find_visible_label(ap_root, clock_wait));
+        CHECK(find_visible_label(ap_root, clock_threshold));
         CHECK(find_label(ap_root, "> state: waiting_time"));
         check_visible_labels(ap_root);
         uint64_t time_waiting = hash(rv1126b_renderer_canvas());
@@ -294,9 +303,9 @@ int main(void) {
         rv1126b_renderer_update(&provisioning, &status, now += 100);
         rv1126b_renderer_step(now += 500);
         CHECK(rv1126b_renderer_canvas());
-        time_title = find_label(ap_root, "Time unavailable");
+        time_title = find_visible_label(ap_root, clock_fault);
         CHECK(time_title && lv_obj_is_visible(time_title));
-        CHECK(find_label(ap_root, "Check time service; restart"));
+        CHECK(find_visible_label(ap_root, clock_help));
         CHECK(find_label(ap_root, "> state: time_failed"));
         check_visible_labels(ap_root);
         CHECK(hash(rv1126b_renderer_canvas()) != time_waiting);
@@ -334,7 +343,7 @@ int main(void) {
         CHECK(rv1126b_renderer_expression(MYBOT_EXPRESSION_HAPPY) == 0);
         rv1126b_renderer_step(now += 500);
         CHECK(rv1126b_renderer_canvas());
-        time_title = find_label(ap_root, "System time");
+        time_title = find_visible_label(ap_root, clock_title);
         CHECK(time_title && lv_obj_is_visible(time_title));
         check_visible_labels(ap_root);
         status.clock_state = MYBOT_DISPLAY_CLOCK_INACTIVE;
