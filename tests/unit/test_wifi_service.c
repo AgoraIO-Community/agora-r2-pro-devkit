@@ -14,6 +14,9 @@ typedef struct {
     pthread_mutex_t mutex;
     unsigned initialized, ap_starts, ap_stops, connections, saves, portal_starts, portal_stops,
         scans;
+    unsigned ready_calls, probe_spacing;
+    uint64_t last_probe;
+    wifi_service_t *probe_status;
     unsigned committed_checks, ap, init_result, route_on_init, ap_ok, portal_ok, connection_ok,
         routed, concurrent;
     unsigned block_connect, block_save, save_ok, reload_after_save, committed_ready, committed_ok;
@@ -196,6 +199,14 @@ static const wifi_portal_ops_t portal_ops = {fake_portal_start, fake_portal_stop
 static bool fake_ready(void *context) {
     fake_state_t *s = context;
     pthread_mutex_lock(&s->mutex);
+    ++s->ready_calls;
+    uint64_t now = wifi_now_ms();
+    s->probe_spacing = (unsigned)(now - s->last_probe);
+    s->last_probe = now;
+    if (s->probe_status) {
+        rv1126b_wifi_status_t snapshot;
+        wifi_service_snapshot(s->probe_status, &snapshot);
+    }
     const bool result = s->routed && (s->ready_mode || (s->connections > 0 && s->connection_ok));
     pthread_mutex_unlock(&s->mutex);
     return result;
@@ -209,6 +220,7 @@ static wifi_service_timing_t timing(void) {
                                    .success_hold_ms = 1000,
                                    .scan_interval_ms = 1000,
                                    .offline_grace_ms = 20,
+                                   .route_interval_ms = 10,
                                    .init_budget_ms = 1000,
                                    .init_retry_ms = 10,
                                    .station_grace_ms = 80};
@@ -417,6 +429,21 @@ static void test_forced_provisioning_waits_for_backend_despite_existing_route(vo
     SET(s, init_result, WIFI_BACKEND_READY);
     wait_ap(service);
     CHECK(!GET(s, connections) && GET(s, portal_starts) == 1 && first_name(service, "retained"));
+    close_service(service, s);
+}
+
+static void test_online_route_sampling(void) {
+    fake_state_t *s = new_state();
+    wifi_service_timing_t deadlines = timing();
+    deadlines.route_interval_ms = 100;
+    wifi_service_t *service = make_service(s, true, false, true, &deadlines);
+    s->probe_status = service;
+    CHECK(wifi_service_start(service));
+    AWAIT(snapshot(service).state == RV1126B_WIFI_ONLINE && GET(s, ready_calls) >= 2);
+    AWAIT(GET(s, ready_calls) >= 3);
+    CHECK(GET(s, probe_spacing) >= deadlines.route_interval_ms);
+    SET(s, routed, 0);
+    AWAIT(snapshot(service).state == RV1126B_WIFI_RECOVERY_REQUIRED);
     close_service(service, s);
 }
 
@@ -846,6 +873,7 @@ int main(void) {
     test_transient_init_timeout_and_stop();
     test_boot_allows_system_station_to_obtain_route();
     test_forced_provisioning_waits_for_backend_despite_existing_route();
+    test_online_route_sampling();
     test_offline_recovery_requires_sdk_acknowledgement();
     test_ap_and_portal_rollback();
     test_ap_exit_withdraws_guidance_before_cleanup_and_allows_retry();
