@@ -48,6 +48,18 @@ def maintained_files():
                    and not name.startswith(('vendor/', 'build', 'local/', 'dist/'))})
 
 
+def missing_function_spacing(source):
+    """Find adjacent definitions in clang-formatted C, including leading documentation."""
+    tokens = re.compile(r"""/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'""", re.S)
+    # Keep offsets and line breaks while ignoring braces and parentheses inside comments or strings.
+    masked = tokens.sub(lambda match: re.sub(r'[^\n]', ' ', match[0]), source)
+    # A top-level closing brace is at column zero. Declarations, initializers and directives
+    # terminate the lookahead before the next function body.
+    boundaries = re.finditer(r'^}[ \t]*\n(?=\s*[A-Za-z_][^#;{}=]*\([^#;{}=]*\)\s*\{)', masked, re.M)
+    return [source.count('\n', 0, match.end()) + 1 for match in boundaries
+            if source[match.end():].partition('\n')[0].strip()]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clang-format', metavar='PATH',
@@ -69,6 +81,9 @@ def main():
         name = path.relative_to(ROOT).as_posix()
         if path.suffix in ('.c', '.h', '.cc', '.cpp') and not name.startswith(GENERATED) and path.name not in DATA_FILES:
             formatted.append(path)
+            if path.suffix in ('.c', '.h') and path.relative_to(ROOT).parts[0] in ('src', 'tests', 'tools'):
+                for number in missing_function_spacing(path.read_text()):
+                    errors.append(f'{name}:{number}: separate top-level C functions with a blank line')
             if 'SPDX-License-Identifier:' not in '\n'.join(path.read_text().splitlines()[:5]):
                 errors.append(name + ': missing SPDX')
         if path.suffix == '.py':

@@ -22,6 +22,7 @@ int rv1126b_drm_start(const char *path, unsigned rotation) {
     ++started;
     return failure == 1 ? -1 : 0;
 }
+
 int rv1126b_drm_stop(void) {
     ++stopped;
     return 0;
@@ -32,20 +33,24 @@ int rv1126b_drm_stop_for_poweroff(void) {
     ++poweroff_stops;
     return failure == 3 ? -1 : 0;
 }
+
 int rv1126b_drm_present(const uint32_t *canvas, const rv1126b_rect_t *area, void *user) {
     (void)canvas;
     (void)area;
     (void)user;
     return 0;
 }
+
 int rv1126b_renderer_create(rv1126b_present_fn present, void *user, uint32_t now) {
     (void)user;
     (void)now;
     CHECK(present);
     return failure == 2 ? -1 : 0;
 }
+
 void rv1126b_renderer_destroy(void) {
 }
+
 void rv1126b_renderer_update(const mybot_lcd_content_t *content,
                              const mybot_display_runtime_status_t *status, uint32_t now) {
     (void)now;
@@ -59,6 +64,7 @@ void rv1126b_renderer_update(const mybot_lcd_content_t *content,
     ++renders;
     pthread_mutex_unlock(&test_lock);
 }
+
 void rv1126b_renderer_settings(mybot_settings_page_t page) {
     pthread_mutex_lock(&test_lock);
     last_settings = page;
@@ -82,10 +88,12 @@ static void wait_settings(mybot_settings_page_t expected, int previous) {
 void rv1126b_renderer_step(uint32_t now) {
     (void)now;
 }
+
 int rv1126b_renderer_expression(int expression) {
     (void)expression;
     return 0;
 }
+
 int rv1126b_renderer_failed(void) {
     return 0;
 }

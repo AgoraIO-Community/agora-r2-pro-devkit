@@ -37,17 +37,20 @@ static const rv1126b_platform_config_t config = {.network_interface = "eth0"};
 const rv1126b_platform_config_t *rv1126b_platform_config(void) {
     return &config;
 }
+
 static void *network_calloc(size_t count, size_t size) {
     void *result = calloc(count, size);
     if (result)
         ++contexts;
     return result;
 }
+
 static void network_free(void *pointer) {
     if (pointer)
         --contexts;
     free(pointer);
 }
+
 static int network_pipe2(int descriptors[2], int flags) {
     CHECK(flags == (O_CLOEXEC | O_NONBLOCK));
     if (fail_pipe) {
@@ -64,6 +67,7 @@ static int network_pipe2(int descriptors[2], int flags) {
     }
     return 0;
 }
+
 static int network_close(int descriptor) {
     if (descriptor == wake_fds[0])
         wake_fds[0] = -1;
@@ -73,6 +77,7 @@ static int network_close(int descriptor) {
         CHECK(false);
     return close(descriptor);
 }
+
 static int network_pthread_create(pthread_t *thread, const pthread_attr_t *attributes,
                                   void *(*worker)(void *), void *argument) {
     return fail_thread ? EAGAIN : pthread_create(thread, attributes, worker, argument);
@@ -133,6 +138,7 @@ static int fixture_getifaddrs(struct ifaddrs **addresses) {
     pthread_mutex_unlock(&fixture_lock);
     return 0;
 }
+
 static void fixture_freeifaddrs(struct ifaddrs *addresses) {
     pthread_mutex_lock(&fixture_lock);
     CHECK(address_lists > 0);
@@ -140,6 +146,7 @@ static void fixture_freeifaddrs(struct ifaddrs *addresses) {
     pthread_mutex_unlock(&fixture_lock);
     free(addresses);
 }
+
 static FILE *fixture_fopen(const char *path, const char *mode) {
     CHECK(strcmp(path, "/proc/net/route") == 0 && strcmp(mode, "r") == 0);
     pthread_mutex_lock(&fixture_lock);
@@ -153,6 +160,7 @@ static FILE *fixture_fopen(const char *path, const char *mode) {
     pthread_mutex_unlock(&fixture_lock);
     return file;
 }
+
 static int fixture_fclose(FILE *file) {
     pthread_mutex_lock(&fixture_lock);
     CHECK(route_files > 0);
@@ -160,20 +168,24 @@ static int fixture_fclose(FILE *file) {
     pthread_mutex_unlock(&fixture_lock);
     return fclose(file);
 }
+
 static int fixture_ferror(FILE *file) {
     pthread_mutex_lock(&fixture_lock);
     int result = fixture.read_error || ferror(file);
     pthread_mutex_unlock(&fixture_lock);
     return result;
 }
+
 static void check_released(void) {
     CHECK(contexts == 0 && address_lists == 0 && route_files == 0);
     CHECK(wake_fds[0] == -1 && wake_fds[1] == -1);
 }
+
 static void check_readiness(int expected) {
     CHECK(rv1126b_network_ready("eth0") == expected);
     check_released();
 }
+
 static void test_ready_requires_usable_address_and_default_route(void) {
     check_readiness(1);
     CHECK(rv1126b_network_ready(NULL) == 1);
@@ -212,6 +224,7 @@ static void test_ready_requires_usable_address_and_default_route(void) {
     check_readiness(-1);
     fixture.read_error = 0;
 }
+
 static void handler(mybot_wifi_event_t event, void *user_data) {
     CHECK(user_data == &callbacks);
     pthread_mutex_lock(&fixture_lock);
@@ -223,17 +236,20 @@ static void handler(mybot_wifi_event_t event, void *user_data) {
         pthread_cond_wait(&fixture_changed, &fixture_lock);
     pthread_mutex_unlock(&fixture_lock);
 }
+
 static struct timespec deadline(void) {
     struct timespec result;
     CHECK(clock_gettime(CLOCK_REALTIME, &result) == 0);
     result.tv_sec += 5;
     return result;
 }
+
 static uint64_t monotonic_ms(void) {
     struct timespec result;
     CHECK(clock_gettime(CLOCK_MONOTONIC, &result) == 0);
     return (uint64_t)result.tv_sec * 1000 + (uint64_t)result.tv_nsec / 1000000;
 }
+
 static void wait_counts(unsigned minimum_callbacks, unsigned minimum_inspections) {
     struct timespec until = deadline();
     pthread_mutex_lock(&fixture_lock);
@@ -241,6 +257,7 @@ static void wait_counts(unsigned minimum_callbacks, unsigned minimum_inspections
         CHECK(pthread_cond_timedwait(&fixture_changed, &fixture_lock, &until) == 0);
     pthread_mutex_unlock(&fixture_lock);
 }
+
 static void *destroy_worker(void *context) {
     pthread_mutex_lock(&fixture_lock);
     destroy_entered = true;
@@ -253,6 +270,7 @@ static void *destroy_worker(void *context) {
     pthread_mutex_unlock(&fixture_lock);
     return NULL;
 }
+
 static void test_init_failure_and_worker_shutdown(void) {
     const mybot_wifi_ops_t *ops = rv1126b_network_ops();
     void *context = NULL;
@@ -327,6 +345,7 @@ static void test_init_failure_and_worker_shutdown(void) {
         check_released();
     }
 }
+
 int main(void) {
     test_ready_requires_usable_address_and_default_route();
     test_init_failure_and_worker_shutdown();

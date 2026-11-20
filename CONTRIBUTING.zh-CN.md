@@ -32,7 +32,7 @@
 [optional footer]
 ```
 
-允许的 type 为 `feat`、`fix`、`docs`、`style`、`refactor`、`perf`、`test`、`build`、`ci`、`chore` 和 `revert`。subject 不超过 72 个字符，使用祈使表达，例如 `refactor(platform): isolate display ownership`。可选正文和 footer 之间留空行。不兼容变更同时使用 `!` 标记和 `BREAKING CHANGE:` footer 说明。
+允许的 type 为 `feat`、`fix`、`docs`、`style`、`refactor`、`perf`、`test`、`build`、`ci`、`chore` 和 `revert`。首行最多 72 个 Unicode 码点，包含类型、作用域以及正文前的标点和空格。主题使用祈使表达，例如 `refactor(platform): isolate display ownership`。可选正文和 footer 之间留空行。不兼容变更同时使用 `!` 标记和 `BREAKING CHANGE:` footer 说明。
 
 提交前安装仓库 hooks：
 

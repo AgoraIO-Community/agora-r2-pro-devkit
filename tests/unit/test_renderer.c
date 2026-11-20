@@ -100,12 +100,14 @@ static void check_native_text(lv_obj_t *label) {
     printf("Native text maximum uniform 2x2 block ratio: %.3f\n", worst);
     CHECK(worst < 0.9);
 }
+
 static void check_no_unimplemented_portal(lv_obj_t *object) {
     if (lv_obj_check_type(object, &lv_label_class))
         CHECK(!strstr(lv_label_get_text(object), "192.168.4.1"));
     for (unsigned i = 0; i < lv_obj_get_child_count(object); ++i)
         check_no_unimplemented_portal(lv_obj_get_child(object, i));
 }
+
 static int present(const uint32_t *canvas, const rv1126b_rect_t *area, void *user) {
     CHECK(canvas && area && user == &s_fail);
     return s_fail ? -1
@@ -114,6 +116,7 @@ static int present(const uint32_t *canvas, const rv1126b_rect_t *area, void *use
                                         RV1126B_UI_WIDTH * sizeof(uint32_t), RV1126B_UI_WIDTH,
                                         RV1126B_UI_HEIGHT, 0, area);
 }
+
 static uint64_t hash(const uint32_t *pixels) {
     uint64_t value = UINT64_C(1469598103934665603);
     for (unsigned i = 0; i < RV1126B_UI_WIDTH * RV1126B_UI_HEIGHT; ++i)

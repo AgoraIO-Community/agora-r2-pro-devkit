@@ -32,7 +32,7 @@ Use Conventional Commits:
 [optional footer]
 ```
 
-Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert`. Keep the subject within 72 characters and use the imperative mood, for example `refactor(platform): isolate display ownership`. Separate the optional body and footer with blank lines. Mark an incompatible change with `!` and explain it in a `BREAKING CHANGE:` footer.
+Allowed types are `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` and `revert`. Use at most 72 Unicode code points in the full subject line, including the type and scope. Use the imperative mood, for example `refactor(platform): isolate display ownership`. Separate the optional body and footer with blank lines. Mark an incompatible change with `!` and explain it in a `BREAKING CHANGE:` footer.
 
 Install the repository hooks before committing:
 

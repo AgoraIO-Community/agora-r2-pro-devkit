@@ -2,7 +2,7 @@
   "schema_version": 2,
   "document_date": "2026-11-20",
   "application_version": "0.6.1",
-  "ui_source_sha256": "6531ed39874f8a23fcba94cb40b5a8f73b380b5267abc6d6e0760d20f93cac8c",
+  "ui_source_sha256": "beea72d5e1e41da2f1c9506e4b4d1b18aee13df8e2010f3d644c5880d5aad608",
   "scene_sha256": {
     "zh-CN": "26d5e63c3a9830bc324a7689734b5d0da53313c186a93a12d71c0ae8cbfad227",
     "en-US": "894c04f9b95f3a494961b048d45749fc74995b427b2891c3571bf1ead4fd7378"
@@ -33,7 +33,7 @@
     "src/ui/include/mybot_ui/settings.h": "04424df836c0f4ad02704afb2a3e44676173b421a35bb338fded62a2769bd20d",
     "src/ui/lv_conf.h": "143fc8cb3ac3554f600c5d3c4d959d3cddd0a813392a4a0e29ec97dffecdefa5",
     "src/ui/src/expression_policy.h": "f2bc1231884616f16611e757ff78106f79612b0ce50529d23ed305ddbd4ad831",
-    "src/ui/src/lv_mem_clib.c": "5d54342911bf4adfcca24551e728af1f37e3bd242cf3ba5ea06b5a302cbf8480",
+    "src/ui/src/lv_mem_clib.c": "b02f0aff0baa529f7b91219dd2d00d04150c43f58c3b29eff3c522003beaa5f6",
     "src/ui/src/renderer.c": "de11c38b19c6d6bb07bbe83f918df0087e68e873f3351af2ec696251fd0e1a63",
     "src/ui/src/ui_config.h": "ea239d4419280b9c56a9fb9508472e54b001bfcdfa07abeb96fd6dd9ae8ad89e",
     "src/ui/views/pixel_glasses/lvgl_view.h": "d3226a336f30c2cfa9c387c0b84ad2aec2cf712f38845399f362b8c13cc02a10",
