@@ -14,7 +14,7 @@ typedef struct {
     pthread_mutex_t mutex;
     unsigned initialized, ap_starts, ap_stops, connections, saves, portal_starts, portal_stops,
         scans;
-    unsigned ready_calls, probe_spacing;
+    unsigned ready_calls, probe_spacing, loads, invalid_profiles;
     uint64_t last_probe;
     wifi_service_t *probe_status;
     unsigned committed_checks, ap, init_result, route_on_init, ap_ok, portal_ok, connection_ok,
@@ -104,8 +104,11 @@ static bool fake_scan(void *context, wifi_scan_t *scan, char *error) {
 }
 static bool fake_load(void *context, wifi_credentials_t *profiles, char *error) {
     fake_state_t *s = context;
-    (void)error;
-    owned(s);
+    INCREMENT(s, loads);
+    if (GET(s, invalid_profiles)) {
+        wifi_error(error, "Malformed system Wi-Fi configuration");
+        return false;
+    }
     pthread_mutex_lock(&s->mutex);
     *profiles = s->disk;
     pthread_mutex_unlock(&s->mutex);
@@ -341,6 +344,7 @@ static void test_boot_uses_route_acquired_during_initialization(void) {
         wifi_service_t *service = make_service(s, true, false, true, NULL);
         CHECK(wifi_service_start(service));
         AWAIT(GET(s, initialized) >= 2);
+        CHECK(!GET(s, loads));
         const rv1126b_wifi_status_t waiting = snapshot(service);
         CHECK(waiting.state == RV1126B_WIFI_WAITING && !waiting.error[0] && !waiting.ap_active);
         if (route_on_init)
@@ -348,6 +352,7 @@ static void test_boot_uses_route_acquired_during_initialization(void) {
         else
             SET(s, routed, 1);
         AWAIT(snapshot(service).state == RV1126B_WIFI_ONLINE);
+        CHECK(GET(s, loads) == route_on_init);
         CHECK(!GET(s, scans) && !GET(s, connections) && !GET(s, ap_starts) && !GET(s, saves));
         SET(s, routed, 0);
         AWAIT(snapshot(service).state == RV1126B_WIFI_RECOVERY_REQUIRED);
@@ -498,6 +503,15 @@ static void test_ap_and_portal_rollback(void) {
     AWAIT(snapshot(service).state == RV1126B_WIFI_ERROR);
     CHECK(!snapshot(service).ap_active);
     CHECK(GET(s, initialized) == 1 && !strcmp(snapshot(service).error, "Missing AP tools"));
+    close_service(service, s);
+
+    s = new_state();
+    SET(s, invalid_profiles, 1);
+    service = make_service(s, true, false, false, NULL);
+    CHECK(wifi_service_start(service));
+    AWAIT(snapshot(service).state == RV1126B_WIFI_ERROR);
+    CHECK(GET(s, loads) == 1 &&
+          !strcmp(snapshot(service).error, "Malformed system Wi-Fi configuration"));
     close_service(service, s);
 }
 
