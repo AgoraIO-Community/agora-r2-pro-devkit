@@ -11,6 +11,7 @@ from pathlib import Path
 import re
 import shlex
 import shutil
+import struct
 import subprocess
 import sys
 import tarfile
@@ -46,8 +47,10 @@ class PackagingTests(unittest.TestCase):
         self.write(self.root / ".gitignore", "/build*/\n/local/\n/dist/\n")
         self.write(self.root / "packaging/run.sh", 'case "${RV1126B_VIDEO:-0}" in\n0) :;;\n1) :;;\nesac\n')
         self.write(self.root / "packaging/example.env", (ROOT / "packaging/example.env").read_text())
-        self.write(self.root / "packaging/README.zh-CN.md", "fixture guide\n")
-        self.write(self.root / "packaging/README.en.md", "English fixture guide\n")
+        for language in ("zh-CN", "en"):
+            readme = "packaging/README." + language + ".md"
+            self.write(self.root / readme, (ROOT / readme).read_text())
+            self.write(self.root / ("docs/device-operations." + language + ".pdf"), "fixture PDF " + language)
         for source in packager.EXECUTABLE_ASSETS.values():
             self.write(self.root / source, "#!/bin/sh\nexit 0\n")
         for source in packager.DATA_ASSETS.values():
@@ -310,15 +313,21 @@ class PackagingTests(unittest.TestCase):
                     self.args.voice_build = self.create_build("voice-en", False, language)
                     self.args.video_build = self.create_build("video-en", True, language)
                 destination, archive, _ = packager.package(self.root, self.args)
-                expected = (self.root / "packaging" / readme).read_bytes()
-                self.assertEqual((destination / readme).read_bytes(), expected)
+                packaged = (destination / readme).read_text()
+                revision = metadata.read_json(destination / "package-manifest.json")["source"]["revision"]
+                self.assertIn(f"/blob/{revision}/docs/user/deployment.zh-CN.md", packaged)
+                self.assertNotIn("/blob/dev/", packaged)
+                manual = "docs/device-operations." + ("en" if language == "en-US" else language) + ".pdf"
+                self.assertIn("](" + manual + ")", packaged)
+                self.assertEqual((destination / manual).read_bytes(), (self.root / manual).read_bytes())
                 self.assertFalse((destination / other).exists())
                 checksums = dict((name, checksum) for checksum, name in
                                  (line.split("  ", 1) for line in
                                   (destination / "SHA256SUMS").read_text().splitlines()))
                 self.assertEqual(checksums[readme], metadata.digest(destination / readme))
+                self.assertEqual(checksums[manual], metadata.digest(destination / manual))
                 with tarfile.open(archive) as stream:
-                    self.assertEqual(stream.extractfile(destination.name + "/" + readme).read(), expected)
+                    self.assertEqual(stream.extractfile(destination.name + "/" + readme).read(), packaged.encode())
 
     def test_packaged_authorization_preserves_text_and_resolves_source_links(self):
         statement = ('Official statement. [Project](../../LICENSE) and [AOSL](../../vendor/aosl/LICENSE).\n'
@@ -339,7 +348,8 @@ class PackagingTests(unittest.TestCase):
         strip_targets = lambda text: re.sub(r'\]\([^)]+\)', ']()', text)
         self.assertEqual(strip_targets(statement), strip_targets(actual))
         self.assertIn('https://www.shengwang.cn/contact-sales/', actual)
-        self.assertIn('https://github.com/junlon2006/mybot-rv1126b/blob/dev/VENDORED_SOURCES.md', actual)
+        revision = metadata.read_json(destination / "package-manifest.json")["source"]["revision"]
+        self.assertIn(f"https://github.com/junlon2006/mybot-rv1126b/blob/{revision}/VENDORED_SOURCES.md", actual)
         packaged_root_notice = (destination / 'licenses/THIRD_PARTY_NOTICES.md').read_text()
         self.assertEqual(strip_targets(root_notice), strip_targets(packaged_root_notice))
         self.assertEqual((destination / 'licenses/mybot-THIRD_PARTY_NOTICES.md').read_text(), original_vendor_notice)
@@ -496,6 +506,53 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Stale build manifest"):
             packager.package(self.root, self.args)
 
+    def test_documentation_commit_and_runtime_resources_reuse_verified_binaries(self):
+        original = metadata.read_json(self.voice / "build-manifest.json")
+        compiled = original["inputs"]["source"]
+        readme = "packaging/README.zh-CN.md"
+        pcm = "vendor/mybot/assets/locales/zh-CN/0.pcm"
+        for name in ("docs/validation/README.md", "src/ui/views/pixel_glasses/PIXEL_GLASSES_SOURCES.md",
+                     readme, pcm, "LICENSE"):
+            self.write(self.root / name, "Updated material for " + name)
+            current = metadata.source_snapshot(self.root)
+            self.assertEqual(compiled["sha256"], current["sha256"], name)
+        subprocess.run(["git", "-C", str(self.root), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(self.root), "-c", "user.name=Fixture",
+                        "-c", "user.email=fixture@example.invalid", "commit", "-qm", "materials"], check=True)
+        packaged_at = metadata.checkout_origin(self.root)
+        self.assertNotEqual(compiled["revision"], packaged_at["revision"])
+        destination, _, _ = packager.package(self.root, self.args)
+        self.assertEqual(metadata.read_json(destination / "package-manifest.json")["source"], packaged_at)
+        public = metadata.read_json(destination / "build-manifest-voice.json")
+        self.assertEqual(public["inputs"]["source"], compiled)
+        self.assertEqual(metadata.digest(destination / "bin/mybot-rv1126b"), original["binary_sha256"])
+        for source, installed in ((readme, "README.zh-CN.md"), (pcm, "assets/locales/zh-CN/0.pcm"),
+                                  ("LICENSE", "licenses/project-APACHE-2.0.txt")):
+            self.assertEqual((destination / installed).read_bytes(), (self.root / source).read_bytes())
+        self.assertIn("  package-manifest.json\n", (destination / "SHA256SUMS").read_text())
+
+    def test_compiled_ui_portal_and_shared_state_mapping_invalidate_binary(self):
+        for name in ("src/ui/src/renderer.c", "src/platform/src/services/wifi/portal.html",
+                     "src/platform/include/mybot_platform/sdk_states.def", "scripts/embed-wifi-portal.py"):
+            with self.subTest(name=name):
+                path = self.root / name
+                self.write(path, "changed build input")
+                with self.assertRaisesRegex(ValueError, "Stale build manifest"):
+                    metadata.verify_manifest(self.root, self.voice, "zh-CN", False)
+                path.unlink()
+
+    def test_committing_dirty_build_does_not_upgrade_its_release_provenance(self):
+        self.write(self.root / "src/application/production.c", "changed source")
+        for build in (self.voice, self.video):
+            self.refresh_source_marker(build)
+            self.seal(build)
+        subprocess.run(["git", "-C", str(self.root), "add", "src"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "-c", "user.name=Fixture",
+                        "-c", "user.email=fixture@example.invalid", "commit", "-qm", "code"], check=True)
+        self.args.release = True
+        with self.assertRaisesRegex(ValueError, "binaries built from clean, committed source"):
+            packager.package(self.root, self.args)
+
     def test_build_configuration_changes_require_rebuild(self):
         config = metadata.read_json(self.voice / "build-config.json")
         config["language"] = "en-US"
@@ -512,6 +569,54 @@ class PackagingTests(unittest.TestCase):
         self.args.release = True
         with self.assertRaisesRegex(ValueError, "clean, committed"):
             packager.package(self.root, self.args)
+
+    def test_clean_release_requires_a_firmware_manifest(self):
+        self.args.release = True
+        with self.assertRaisesRegex(ValueError, "runtime manifest"):
+            packager.package(self.root, self.args)
+        self.assertFalse(self.args.output_dir.exists())
+
+    def test_release_checks_staged_firmware_and_actual_elf_dependencies(self):
+        # Minimal AArch64 ELF sections consumed by the real dependency reader.
+        def elf(name="", needed=(), interpreter=""):
+            strings = b"\0"
+            dynamic = b""
+            for tag, item in [(1, dep) for dep in needed] + ([(14, name)] if name else []):
+                dynamic += struct.pack("<qQ", tag, len(strings))
+                strings += item.encode() + b"\0"
+            names = b"\0.shstrtab\0.interp\0.dynstr\0.dynamic\0"
+            offset = 64
+            table = bytes(64)
+            contents = b""
+            for section, data in ((".shstrtab", names), (".interp", interpreter.encode() + b"\0"),
+                                  (".dynstr", strings), (".dynamic", dynamic)):
+                table += struct.pack("<IIQQQQIIQQ", names.index(section.encode()), 0, 0, 0,
+                                     offset, len(data), 0, 0, 0, 0)
+                contents += data
+                offset += len(data)
+            header = struct.pack("<16sHHIQQQIHHHHHH", b"\x7fELF\x02\x01", 3, 183, 1, 0, 0,
+                                 offset, 0, 64, 0, 0, 64, 5, 1)
+            return header + contents + table
+
+        loader = self.staging / "lib/ld-linux-aarch64.so.1"
+        loader.parent.mkdir()
+        loader.write_bytes(elf(name=loader.name))
+        loader_hash = metadata.digest(loader)
+        lock = {"external": {"runtime": {"libraries": {"lib/" + loader.name: loader_hash}}}}
+        metadata.write_json(self.root / "dependencies.lock.json", lock)
+        manifest = self.base / "runtime.json"
+        metadata.write_json(manifest, {"libraries": [{"path": "/lib/" + loader.name, "sha256": loader_hash}]})
+        sdk = {"staging_dir": str(self.staging), "runtime_manifest": str(manifest), "rtsa_library": str(self.rtsa)}
+        binary = self.base / "payload"
+        binary.write_bytes(elf(interpreter="/lib/" + loader.name))
+        reports = [(binary, {"checked": [{"path": str(binary)}, {"path": str(loader)}]})]
+        packager.verify_release_runtime(self.root, sdk, reports)
+        binary.write_bytes(elf(needed=("libanother.so",), interpreter="/lib/" + loader.name))
+        with self.assertRaisesRegex(ValueError, "Missing firmware ABI closure: libanother.so"):
+            packager.verify_release_runtime(self.root, sdk, reports)
+        loader.write_bytes(loader.read_bytes() + b"changed")
+        with self.assertRaisesRegex(ValueError, "staged runtime SHA256 mismatch"):
+            packager.verify_release_runtime(self.root, sdk, reports)
 
     def test_existing_bundle_is_never_overwritten(self):
         destination, _, _ = packager.package(self.root, self.args)

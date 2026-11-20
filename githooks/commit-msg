@@ -40,8 +40,16 @@ case "$subject" in
     Revert\ \"*) exit 0 ;;
 esac
 
-[ "$(printf '%s' "$subject" | wc -c)" -le 72 ] || {
-    echo "commit-msg: subject is longer than 72 characters" >&2
+max_subject_chars=72
+subject_chars=$(printf '%s' "$subject" | python3 -c '
+import sys
+try:
+    print(len(sys.stdin.buffer.read().decode("utf-8")))
+except UnicodeDecodeError:
+    sys.exit("commit-msg: subject must be valid UTF-8")
+') || exit 1
+[ "$subject_chars" -le "$max_subject_chars" ] || {
+    echo "commit-msg: subject is longer than $max_subject_chars characters" >&2
     exit 1
 }
 

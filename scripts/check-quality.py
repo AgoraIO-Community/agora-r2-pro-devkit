@@ -13,6 +13,22 @@ GENERATED = ('src/ui/fonts/generated/',)
 DATA_FILES = {'pixel_expression_masks.h', 'pixel_expression_shapes.h'}
 
 
+# Configuration files sourced by the launcher and its operator examples.
+SOURCED_SHELL = {'packaging/example.env', 'packaging/service/mybot-rv1126b.conf',
+                 'packaging/network/99-mybot-lease'}
+
+
+def shell_interpreter(path, name):
+    if name in SOURCED_SHELL:
+        return 'sh'
+    with path.open('rb') as stream:
+        first_line = stream.readline(256).rstrip()
+    match = re.fullmatch(rb'#!\s*(?:/[^\s]*/)?(?:env\s+(?:-S\s+)?)?(sh|bash)(?:\s+[^\r\n]*)?', first_line)
+    if match:
+        return match[1].decode('ascii')
+    return 'sh' if path.suffix in ('.sh', '.script') else None
+
+
 def checked_formatter(requested, root=ROOT):
     """Select the project formatter and reject a different formatting baseline."""
     requirements = (root / 'requirements-dev.txt').read_text()
@@ -48,6 +64,18 @@ def maintained_files():
                    and not name.startswith(('vendor/', 'build', 'local/', 'dist/'))})
 
 
+def missing_function_spacing(source):
+    """Find adjacent definitions in clang-formatted C, including leading documentation."""
+    tokens = re.compile(r"""/\*.*?\*/|//[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'""", re.S)
+    # Keep offsets and line breaks while ignoring braces and parentheses inside comments or strings.
+    masked = tokens.sub(lambda match: re.sub(r'[^\n]', ' ', match[0]), source)
+    # A top-level closing brace is at column zero. Declarations, initializers and directives
+    # terminate the lookahead before the next function body.
+    boundaries = re.finditer(r'^}[ \t]*\n(?=\s*[A-Za-z_][^#;{}=]*\([^#;{}=]*\)\s*\{)', masked, re.M)
+    return [source.count('\n', 0, match.end()) + 1 for match in boundaries
+            if source[match.end():].partition('\n')[0].strip()]
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--clang-format', metavar='PATH',
@@ -69,6 +97,9 @@ def main():
         name = path.relative_to(ROOT).as_posix()
         if path.suffix in ('.c', '.h', '.cc', '.cpp') and not name.startswith(GENERATED) and path.name not in DATA_FILES:
             formatted.append(path)
+            if path.suffix in ('.c', '.h') and path.relative_to(ROOT).parts[0] in ('src', 'tests', 'tools'):
+                for number in missing_function_spacing(path.read_text()):
+                    errors.append(f'{name}:{number}: separate top-level C functions with a blank line')
             if 'SPDX-License-Identifier:' not in '\n'.join(path.read_text().splitlines()[:5]):
                 errors.append(name + ': missing SPDX')
         if path.suffix == '.py':
@@ -76,8 +107,9 @@ def main():
                 ast.parse(path.read_text(), filename=name)
             except SyntaxError as error:
                 errors.append(str(error))
-        if path.suffix in ('.sh', '.script'):
-            result = subprocess.run(['sh', '-n', str(path)], capture_output=True, text=True)
+        shell = shell_interpreter(path, name)
+        if shell:
+            result = subprocess.run([shell, '-n', str(path)], capture_output=True, text=True)
             if result.returncode:
                 errors.append(result.stderr.strip())
         if path.suffix in ('.md', '.py', '.sh', '.script', '.cmake', '.json', '.yml', '.yaml') or path.name == 'CMakeLists.txt':

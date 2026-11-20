@@ -60,26 +60,31 @@ int test_open(const char *path, int flags, ...) {
     ++fds;
     return 42;
 }
+
 int test_close(int fd) {
     CHECK(fd == 42 && fds == 1);
     --fds;
     return 0;
 }
+
 int test_master(int fd) {
     CHECK(fd == 42);
     return fault == MASTER ? -1 : 0;
 }
+
 static void *object(size_t size) {
     void *p = calloc(1, size);
     CHECK(p);
     ++objects;
     return p;
 }
+
 static void release(void *p) {
     CHECK(p && objects > 0);
     --objects;
     free(p);
 }
+
 drmModeResPtr test_resources(int fd) {
     CHECK(fd == 42);
     if (fault == RESOURCES)
@@ -91,9 +96,11 @@ drmModeResPtr test_resources(int fd) {
     p->crtcs = crtcs;
     return p;
 }
+
 void test_free_resources(drmModeResPtr p) {
     release(p);
 }
+
 drmModeConnectorPtr test_connector(int fd, uint32_t id) {
     CHECK(fd == 42);
     if (fault == CONNECTOR)
@@ -109,9 +116,11 @@ drmModeConnectorPtr test_connector(int fd, uint32_t id) {
     p->encoder_id = outputs && (id == 10 || outputs == 2) ? 20 : 0;
     return p;
 }
+
 void test_free_connector(drmModeConnectorPtr p) {
     release(p);
 }
+
 drmModeEncoderPtr test_encoder(int fd, uint32_t id) {
     CHECK(fd == 42 && id == 20);
     if (fault == ENCODER)
@@ -121,9 +130,11 @@ drmModeEncoderPtr test_encoder(int fd, uint32_t id) {
     p->possible_crtcs = 1;
     return p;
 }
+
 void test_free_encoder(drmModeEncoderPtr p) {
     release(p);
 }
+
 drmModeCrtcPtr test_crtc(int fd, uint32_t id) {
     CHECK(fd == 42 && id == 20);
     if (fault == CRTC)
@@ -134,9 +145,11 @@ drmModeCrtcPtr test_crtc(int fd, uint32_t id) {
     p->mode_valid = outputs != 0;
     return p;
 }
+
 void test_free_crtc(drmModeCrtcPtr p) {
     release(p);
 }
+
 int test_ioctl(int fd, unsigned long request, void *arg) {
     CHECK(fd == 42);
     if (request == DRM_IOCTL_MODE_CREATE_DUMB) {
@@ -158,6 +171,7 @@ int test_ioctl(int fd, unsigned long request, void *arg) {
         CHECK(0);
     return 0;
 }
+
 int test_add_fb(int fd, uint32_t width, uint32_t height, uint32_t format, const uint32_t h[4],
                 const uint32_t pitches[4], const uint32_t offsets[4], uint32_t *id,
                 uint32_t flags) {
@@ -171,11 +185,13 @@ int test_add_fb(int fd, uint32_t width, uint32_t height, uint32_t format, const 
     ++buffers;
     return 0;
 }
+
 int test_rm_fb(int fd, uint32_t id) {
     CHECK(fd == 42 && id == 123 && buffers == 1);
     --buffers;
     return 0;
 }
+
 void *test_mmap(void *address, size_t size, int prot, int flags, int fd, off_t offset) {
     (void)address;
     (void)prot;
@@ -187,12 +203,14 @@ void *test_mmap(void *address, size_t size, int prot, int flags, int fd, off_t o
     ++maps;
     return malloc(size);
 }
+
 int test_munmap(void *address, size_t size) {
     CHECK(maps == 1 && size == SIZE);
     --maps;
     free(address);
     return 0;
 }
+
 int test_set_crtc(int fd, uint32_t crtc, uint32_t fb, uint32_t x, uint32_t y, uint32_t *ids,
                   int count, drmModeModeInfoPtr selected) {
     (void)x;
@@ -221,9 +239,11 @@ int test_set_crtc(int fd, uint32_t crtc, uint32_t fb, uint32_t x, uint32_t y, ui
     }
     return 0;
 }
+
 static void released(void) {
     CHECK(!fds && !objects && !handles && !buffers && !maps && s_drm.fd == -1);
 }
+
 int main(void) {
     for (fault = OPEN; fault <= MODESET; ++fault) {
         outputs = 2;

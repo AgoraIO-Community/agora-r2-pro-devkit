@@ -576,6 +576,31 @@ static void select_network(wifi_service_t *s, network_mode_t mode) {
         enter_ap(s, "", WIFI_PORTAL_ERROR_NONE);
 }
 
+static void observe_route(wifi_service_t *s) {
+    /* Interface and route enumeration can block. Keep status and control requests responsive. */
+    bool routed = ready(s);
+    if (s->monitor_startup_route && routed) {
+        s->monitor_startup_route = false;
+        set_state(s, RV1126B_WIFI_ONLINE, "connected", "", WIFI_PORTAL_ERROR_NONE);
+        return;
+    }
+    pthread_mutex_lock(&s->mutex);
+    if (!s->stop && !s->manual && s->public_status.state == RV1126B_WIFI_ONLINE) {
+        uint64_t now = wifi_now_ms();
+        if (routed)
+            s->offline_since = 0;
+        else if (!s->offline_since)
+            s->offline_since = now;
+        else if (now - s->offline_since >= s->timing.offline_grace_ms) {
+            s->public_status.state = RV1126B_WIFI_RECOVERY_REQUIRED;
+            copy_text(s->public_status.error, sizeof(s->public_status.error),
+                      "Network lost; waiting for SDK shutdown");
+            copy_text(s->portal_status.state, sizeof(s->portal_status.state), "connecting");
+        }
+    }
+    pthread_mutex_unlock(&s->mutex);
+}
+
 static void control(wifi_service_t *s) {
     if (!s->config.enabled) {
         while (!stopping(s)) {
@@ -588,6 +613,7 @@ static void control(wifi_service_t *s) {
         }
         return;
     }
+    uint64_t next_route = 0;
     select_network(s, s->config.force_ap ? NETWORK_OPEN_AP : NETWORK_STARTUP);
     while (!stopping(s)) {
         action_t action = {0};
@@ -627,26 +653,16 @@ static void control(wifi_service_t *s) {
         } else if (s->portal_started && !s->connected && !s->busy && now >= s->next_scan) {
             scan = true;
         } else {
-            if (s->monitor_startup_route && ready(s)) {
-                s->monitor_startup_route = false;
+            bool monitor = s->monitor_startup_route ||
+                           (s->public_status.state == RV1126B_WIFI_ONLINE && !s->portal_started);
+            if (monitor && now >= next_route) {
                 pthread_mutex_unlock(&s->mutex);
-                set_state(s, RV1126B_WIFI_ONLINE, "connected", "", WIFI_PORTAL_ERROR_NONE);
+                observe_route(s);
+                next_route = wifi_now_ms() + s->timing.route_interval_ms;
                 continue;
             }
-            if (s->public_status.state == RV1126B_WIFI_ONLINE && !s->portal_started) {
-                if (ready(s))
-                    s->offline_since = 0;
-                else if (!s->offline_since)
-                    s->offline_since = now;
-                else if (now - s->offline_since >= s->timing.offline_grace_ms) {
-                    s->public_status.state = RV1126B_WIFI_RECOVERY_REQUIRED;
-                    copy_text(s->public_status.error, sizeof(s->public_status.error),
-                              "Network lost; waiting for SDK shutdown");
-                    copy_text(s->portal_status.state, sizeof(s->portal_status.state), "connecting");
-                }
-            }
             if (!s->stop)
-                wait_until(s, now + 50);
+                wait_until(s, monitor ? next_route : now + 50);
             pthread_mutex_unlock(&s->mutex);
             continue;
         }
@@ -720,6 +736,7 @@ wifi_service_t *wifi_service_create(const wifi_service_config_t *config, wifi_ba
         .success_hold_ms = 5000,
         .scan_interval_ms = 15000,
         .offline_grace_ms = 3000,
+        .route_interval_ms = 1000,
         .init_budget_ms = 15000,
         .init_retry_ms = 250,
         .station_grace_ms = 5000,
@@ -727,6 +744,8 @@ wifi_service_t *wifi_service_create(const wifi_service_config_t *config, wifi_ba
     s->timing = timing ? *timing : default_timing;
     if (!s->timing.init_retry_ms)
         s->timing.init_retry_ms = default_timing.init_retry_ms;
+    if (!s->timing.route_interval_ms)
+        s->timing.route_interval_ms = default_timing.route_interval_ms;
     s->ready = is_ready;
     s->ready_context = ready_context;
     s->public_status.state = RV1126B_WIFI_WAITING;

@@ -22,7 +22,6 @@
 | [架构](development/architecture.zh-CN.md) | 模块边界、依赖方向和资源所有权 |
 | [测试](development/testing.zh-CN.md) | 本地检查、CI、预览和真机回归 |
 | [依赖与字体](development/dependencies.zh-CN.md) | 锁文件、快照、补丁、生成资源和 SDK 输入 |
-| [第三方目录规则](development/third-party-layout.zh-CN.md) | 平级源码快照、唯一归属、迁移和显式裁剪 |
 | [发布](development/releasing.zh-CN.md) | 制品身份、打包、验证及版本发布 |
 | [手册生成](development/manual.zh-CN.md) | 图文源稿、UI 配图、中英文 PDF 生成与检查 |
 
@@ -30,12 +29,4 @@
 
 依赖集成记录：[LVGL](dependencies/lvgl.md)、[RTSA 来源与配置](dependencies/RTSA_SOURCE.txt)、[授权与商业合作](dependencies/licensing.md)、[原始导入清单](dependencies/imported-sources.json)。
 
-`history/` 保留实施当时的判断与命令，供追溯使用。历史方案不代表当前支持状态：
-
-- [最初移植评估](history/rv1126b-feasibility.zh-CN.md)
-- [0.1 首版测试步骤](history/first-validation.zh-CN.md)
-- [0.1.1 原生文字渲染](history/ui-native-fonts.zh-CN.md)
-- [0.1 构建与验收记录](history/validation-0.1.zh-CN.md)
-- [工程治理方案与实施对应](history/governance-plan.zh-CN.md)
-
-支持与私密漏洞报告见[支持](../SUPPORT.zh-CN.md)及[安全政策](../SECURITY.zh-CN.md)。历史入口：[0.5.3 之前各轮验证](history/validation-before-0.5.3.zh-CN.md)、[0.5.2 全面审查](history/review-0.5.2.zh-CN.md)。
+依赖锁的历史快照见[原始 schema 1 清单](history/dependencies-lock-v1.json)。支持和私密漏洞报告分别见[支持](../SUPPORT.zh-CN.md)及[安全政策](../SECURITY.zh-CN.md)。

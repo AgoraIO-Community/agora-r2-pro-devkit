@@ -149,6 +149,11 @@ static void test_os_wait_deadline_and_recovery(void) {
     CHECK(rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_TIMEOUT);
     CHECK(strstr(rv1126b_time_sync_error(sync), "NTP"));
     CHECK(fake.service_calls == 0 && fake.spawn_calls == 0 && fake.cancel_calls == 0);
+    int initial_reads = fake.realtime_calls;
+    fake.monotonic += 999;
+    CHECK(rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_TIMEOUT);
+    CHECK(fake.realtime_calls == initial_reads);
+    ++fake.monotonic;
     fake.realtime = VALID_TIME;
     CHECK(rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_READY);
     CHECK(!*rv1126b_time_sync_error(sync));
@@ -165,6 +170,8 @@ static void test_os_wait_deadline_and_recovery(void) {
     CHECK(rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_WAIT_CLOCK);
     ++fake.monotonic;
     CHECK(rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_TIMEOUT);
+    CHECK(rv1126b_time_sync_poll(sync, false) == RV1126B_TIME_WAIT_NETWORK);
+    CHECK(rv1126b_time_sync_poll(sync, true) == RV1126B_TIME_WAIT_CLOCK);
     rv1126b_time_sync_destroy(sync);
 }
 

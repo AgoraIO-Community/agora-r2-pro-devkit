@@ -21,7 +21,7 @@ int main(int argc, char **argv) {
         .data = "/userdata/mybot-rv1126b",
         .leases = "/run/mybot-network/leases",
         .config = "/etc/wpa_supplicant.conf",
-        .remote_socket = "/run/wpa_supplicant/wlan0",
+        .remote_socket = "/run/wpa_supplicant/" FACTORY_STATION,
         .local_socket = "/run/mybot-rv1126b-service/reset-wpa",
         .app_lock = "/run/mybot-rv1126b.lock",
     };

@@ -31,6 +31,7 @@ rv1126b_time_sync_t *rv1126b_time_sync_create(const rv1126b_time_sync_config_t *
 /* Call from one product thread about every 100 ms. Offline time does not consume
  * the monotonic deadline. An explicit absolute helper runs without arguments,
  * once per online window, only when no existing time service is found. Polling
+ * retries system time once per second after TIME_TIMEOUT and
  * never waits for helper execution; cancelled ownership is reaped on later polls. */
 rv1126b_time_sync_state_t rv1126b_time_sync_poll(rv1126b_time_sync_t *sync, bool network_ready);
 

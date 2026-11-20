@@ -354,11 +354,6 @@ static wifi_backend_init_result_t initialize(void *context, char *error) {
         return WIFI_BACKEND_FAILED;
     }
     if (*backend->config[CONFIG_SYSTEM]) {
-        wifi_credentials_t profiles;
-        if (!wifi_read_system_profiles(backend->config[CONFIG_SYSTEM], &profiles, error)) {
-            discard_initialization(backend);
-            return WIFI_BACKEND_FAILED;
-        }
         wifi_backend_init_result_t supplicant = probe_supplicant(backend);
         if (supplicant != WIFI_BACKEND_READY) {
             wifi_error(error, "System Wi-Fi mode requires the existing supplicant control socket");
