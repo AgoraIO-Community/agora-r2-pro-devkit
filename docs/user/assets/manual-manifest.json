@@ -2,7 +2,7 @@
   "schema_version": 2,
   "document_date": "2026-11-20",
   "application_version": "0.6.1",
-  "ui_source_sha256": "79ccb6bf896c34b92ea41922af8a74dc6ae0e4b60bd075b66f137a6ec86e5a55",
+  "ui_source_sha256": "6531ed39874f8a23fcba94cb40b5a8f73b380b5267abc6d6e0760d20f93cac8c",
   "scene_sha256": {
     "zh-CN": "26d5e63c3a9830bc324a7689734b5d0da53313c186a93a12d71c0ae8cbfad227",
     "en-US": "894c04f9b95f3a494961b048d45749fc74995b427b2891c3571bf1ead4fd7378"
@@ -28,7 +28,7 @@
     "src/ui/fonts/generated/pixel_fonts.c": "20122d9384ffebde5f0e412adc2ecc97e33fe56fb932dc39b6de4164b6ba9d35",
     "src/ui/include/mybot_ui/canvas.h": "3d68c1a9dc211ef9f4818f1b46eada5e37bc2cce29a12970d3384e8c7160fff5",
     "src/ui/include/mybot_ui/display_status.h": "a89899ae16da20d1957d4613b876e895e1e1c102432b3de47dabcf78463dd924",
-    "src/ui/include/mybot_ui/expression.h": "e4a09ff2fcaed753c7ae3b5936fac26217613529d2a06f7818cfdebdadfc6852",
+    "src/ui/include/mybot_ui/expression.h": "bec288d3c0073b6814606cb151d4c99b46c2c6cfac5277324c17261f228908e6",
     "src/ui/include/mybot_ui/renderer.h": "11031c2fde9e70d80ee881b6e43409324d9e1f39bcae354403b2639b5c6149eb",
     "src/ui/include/mybot_ui/settings.h": "04424df836c0f4ad02704afb2a3e44676173b421a35bb338fded62a2769bd20d",
     "src/ui/lv_conf.h": "143fc8cb3ac3554f600c5d3c4d959d3cddd0a813392a4a0e29ec97dffecdefa5",
@@ -38,7 +38,7 @@
     "src/ui/src/ui_config.h": "ea239d4419280b9c56a9fb9508472e54b001bfcdfa07abeb96fd6dd9ae8ad89e",
     "src/ui/views/pixel_glasses/lvgl_view.h": "d3226a336f30c2cfa9c387c0b84ad2aec2cf712f38845399f362b8c13cc02a10",
     "src/ui/views/pixel_glasses/pixel_expression_masks.h": "3f0adcc7a7f7e04681a682023574f4cfa7b1cab5548d6b82f8ac6240c0b05a05",
-    "src/ui/views/pixel_glasses/pixel_expression_shapes.h": "53e5ba308227615afd759567d55075ac22e81bbac1947e9f74982d4c5e155004",
+    "src/ui/views/pixel_glasses/pixel_expression_shapes.h": "0a863a70302808e23fad14712745d92d99f70b2bb570a521d152cf50fffc6db1",
     "src/ui/views/pixel_glasses/pixel_expressions.c": "edaa31dafdee7a6e801b558b9a311bafea3a1d32eea75a0d81ee9a1933fa8b5e",
     "src/ui/views/pixel_glasses/pixel_glasses.h": "bd9c4f4ba9ad75c5107fd1976e2ef9f3098ee75de46777f941e88cc61a35bfe1",
     "src/ui/views/pixel_glasses/pixel_glasses_view.cc": "97e60628b2687beda2f0a4b6e61df0ab49302f5157fcb8601bdac81cffb5c248",
