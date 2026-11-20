@@ -14,6 +14,9 @@ static mybot_settings_page_t last_settings;
 static int settings_updates;
 static char last_code[16];
 static char last_ssid[33];
+static char last_state[MYBOT_DISPLAY_STATE_CAPACITY];
+static bool last_in_conversation;
+
 int rv1126b_drm_start(const char *path, unsigned rotation) {
     CHECK(!strcmp(path, "mock") && rotation == 270);
     ++started;
@@ -49,6 +52,8 @@ void rv1126b_renderer_update(const mybot_lcd_content_t *content,
     pthread_mutex_lock(&test_lock);
     memcpy(last_code, content->pair_code, sizeof(last_code));
     memcpy(last_ssid, status->provisioning_ssid, sizeof(last_ssid));
+    memcpy(last_state, status->state, sizeof(last_state));
+    last_in_conversation = status->in_conversation;
     last_clock_state = status->clock_state;
     last_wifi_failed = status->wifi_failed;
     ++renders;
@@ -103,6 +108,20 @@ static int rendered(void) {
     int count = renders;
     pthread_mutex_unlock(&test_lock);
     return count;
+}
+
+static void check_sdk_state(mybot_state_t state, const char *label, bool in_conversation) {
+    const struct timespec pause = {.tv_nsec = 1000000};
+    rv1126b_ui_set_state(state);
+    for (int attempt = 0; attempt < 1000; ++attempt) {
+        pthread_mutex_lock(&test_lock);
+        bool observed = !strcmp(last_state, label) && last_in_conversation == in_conversation;
+        pthread_mutex_unlock(&test_lock);
+        if (observed)
+            return;
+        nanosleep(&pause, NULL);
+    }
+    CHECK(false);
 }
 
 static void wait_for_wifi_failure(bool expected, int previous_renders) {
@@ -193,6 +212,11 @@ int main(void) {
     }
     CHECK(poweroff_stops == 0);
     CHECK(rv1126b_ui_start("mock", 270) == 0);
+    check_sdk_state(MYBOT_STATE_WIFI_PROVISIONING, "waiting_network", false);
+    check_sdk_state(MYBOT_STATE_IN_CONVERSATION, "in_conversation", true);
+    check_sdk_state(MYBOT_STATE_STOPPING, "stopping", false);
+    check_sdk_state(MYBOT_STATE_STOPPED, "stopped", false);
+    check_sdk_state((mybot_state_t)-1, "unknown", false);
     CHECK(rv1126b_ui_stop_for_poweroff() == 0);
     CHECK(poweroff_stops == 1);
     CHECK(rv1126b_ui_stop_for_poweroff() == 0);

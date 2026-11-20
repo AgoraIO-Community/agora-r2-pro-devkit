@@ -514,6 +514,10 @@ int main(void) {
     CHECK(sdk_status(MYBOT_STATE_PAIRING) == RV1126B_APP_PAIRING);
     CHECK(sdk_status(MYBOT_STATE_IN_CONVERSATION) == RV1126B_APP_CONVERSATION);
     CHECK(sdk_status(MYBOT_STATE_WIFI_DISCONNECTED) == RV1126B_APP_OFFLINE);
+    CHECK(sdk_status(MYBOT_STATE_WIFI_PROVISIONING) == RV1126B_APP_STARTING_SERVICES);
+    CHECK(sdk_status(MYBOT_STATE_STOPPED) == RV1126B_APP_STARTING_SERVICES);
+    CHECK(sdk_status(MYBOT_STATE_STOPPING) == RV1126B_APP_STARTING_SERVICES);
+    CHECK(sdk_status((mybot_state_t)-1) == RV1126B_APP_STARTING_SERVICES);
     puts("Product lifecycle ordering, setup retry/recovery, failure cleanup and demo: PASS");
     return 0;
 }

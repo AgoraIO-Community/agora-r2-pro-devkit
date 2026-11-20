@@ -64,7 +64,6 @@ static struct {
     int override_expression;
     bool failed;
     bool initialized;
-    lv_obj_t *settings_gear;
     lv_obj_t *settings_panel;
     lv_obj_t *settings_title;
     lv_obj_t *settings_detail;
@@ -127,25 +126,26 @@ static bool settings_button(mybot_settings_control_t control, const char *text, 
 static bool settings_create(void) {
     lv_obj_t *screen = lv_display_get_screen_active(s_renderer.display);
     const mybot_settings_rect_t bounds = mybot_settings_bounds(MYBOT_SETTINGS_GEAR);
-    s_renderer.settings_gear =
+    lv_obj_t *gear =
         settings_panel(screen, bounds.x, bounds.y, bounds.width, bounds.height, 0x0d1619);
-    if (!s_renderer.settings_gear)
+    s_renderer.settings_controls[MYBOT_SETTINGS_GEAR] = gear;
+    if (!gear)
         return false;
-    lv_obj_set_style_border_width(s_renderer.settings_gear, 1, 0);
-    lv_obj_set_style_border_color(s_renderer.settings_gear, lv_color_hex(0x37565b), 0);
-    lv_obj_set_style_radius(s_renderer.settings_gear, 10, 0);
+    lv_obj_set_style_border_width(gear, 1, 0);
+    lv_obj_set_style_border_color(gear, lv_color_hex(0x37565b), 0);
+    lv_obj_set_style_radius(gear, 10, 0);
     static const lv_point_precise_t outline[] = {
         {23, 8},  {31, 8},  {32, 14}, {36, 16}, {41, 13}, {46, 19}, {42, 24}, {42, 30}, {46, 35},
         {41, 41}, {36, 38}, {32, 40}, {31, 46}, {23, 46}, {22, 40}, {18, 38}, {13, 41}, {8, 35},
         {12, 30}, {12, 24}, {8, 19},  {13, 13}, {18, 16}, {22, 14}, {23, 8}};
-    lv_obj_t *line = lv_line_create(s_renderer.settings_gear);
+    lv_obj_t *line = lv_line_create(gear);
     if (!line)
         return false;
     lv_line_set_points(line, outline, sizeof(outline) / sizeof(outline[0]));
     lv_obj_set_style_line_width(line, 3, 0);
     lv_obj_set_style_line_color(line, lv_color_hex(0x91e7d0), 0);
     lv_obj_set_style_line_rounded(line, true, 0);
-    lv_obj_t *hub = settings_panel(s_renderer.settings_gear, 19, 19, 16, 16, 0x0d1619);
+    lv_obj_t *hub = settings_panel(gear, 19, 19, 16, 16, 0x0d1619);
     if (!hub)
         return false;
     lv_obj_set_style_radius(hub, LV_RADIUS_CIRCLE, 0);
@@ -177,51 +177,38 @@ static bool settings_create(void) {
 void rv1126b_renderer_settings(mybot_settings_page_t page) {
     if (!s_renderer.initialized || !s_renderer.settings_panel)
         return;
-    if (page < MYBOT_SETTINGS_CLOSED || page > MYBOT_SETTINGS_RESET_ERROR)
+    const mybot_settings_controls_t *controls = mybot_settings_controls(page);
+    if (!controls) {
         page = MYBOT_SETTINGS_CLOSED;
+        controls = mybot_settings_controls(page);
+    }
     if (page == s_renderer.settings_page)
         return;
     s_renderer.settings_page = page;
-    if (page == MYBOT_SETTINGS_CLOSED) {
-        lv_obj_add_flag(s_renderer.settings_panel, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(s_renderer.settings_gear, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-    lv_obj_add_flag(s_renderer.settings_gear, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_remove_flag(s_renderer.settings_panel, LV_OBJ_FLAG_HIDDEN);
-    for (int control = MYBOT_SETTINGS_WIFI; control < MYBOT_SETTINGS_CONTROL_COUNT; ++control)
+    for (int control = 0; control < MYBOT_SETTINGS_CONTROL_COUNT; ++control)
         lv_obj_add_flag(s_renderer.settings_controls[control], LV_OBJ_FLAG_HIDDEN);
+    for (unsigned int i = 0; i < controls->count; ++i)
+        lv_obj_remove_flag(s_renderer.settings_controls[controls->controls[i]], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_flag(s_renderer.settings_panel, LV_OBJ_FLAG_HIDDEN, page == MYBOT_SETTINGS_CLOSED);
+    if (page == MYBOT_SETTINGS_CLOSED)
+        return;
     const char *title = SETTINGS_TITLE;
     const char *detail = "";
-    if (page == MYBOT_SETTINGS_MENU) {
-        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_WIFI], LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_POWEROFF],
-                           LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_FACTORY_RESET],
-                           LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_BACK], LV_OBJ_FLAG_HIDDEN);
-    } else if (page == MYBOT_SETTINGS_CONFIRM_POWEROFF) {
+    if (page == MYBOT_SETTINGS_CONFIRM_POWEROFF) {
         title = SETTINGS_QUESTION;
         detail = SETTINGS_WARNING;
-        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_CANCEL], LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_CONFIRM],
-                           LV_OBJ_FLAG_HIDDEN);
     } else if (page == MYBOT_SETTINGS_POWERING_OFF) {
         title = SETTINGS_PROGRESS;
         detail = SETTINGS_WAIT;
     } else if (page == MYBOT_SETTINGS_CONFIRM_RESET) {
         title = RESET_QUESTION;
         detail = RESET_WARNING;
-        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_BACK], LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_RESET_CONFIRM],
-                           LV_OBJ_FLAG_HIDDEN);
     } else if (page == MYBOT_SETTINGS_RESETTING) {
         title = RESET_PROGRESS;
         detail = SETTINGS_WAIT;
-    } else {
+    } else if (page == MYBOT_SETTINGS_RESET_ERROR || page == MYBOT_SETTINGS_POWEROFF_ERROR) {
         title = page == MYBOT_SETTINGS_RESET_ERROR ? RESET_FAILURE : SETTINGS_FAILURE;
         detail = page == MYBOT_SETTINGS_RESET_ERROR ? RESET_RETRY : SETTINGS_RETRY;
-        lv_obj_remove_flag(s_renderer.settings_controls[MYBOT_SETTINGS_BACK], LV_OBJ_FLAG_HIDDEN);
     }
     lv_label_set_text_static(s_renderer.settings_title, title);
     lv_label_set_text_static(s_renderer.settings_detail, detail);

@@ -86,31 +86,14 @@ void rv1126b_touch_settings_page(rv1126b_touch_t *touch, mybot_settings_page_t p
 }
 
 static int hit_control(mybot_settings_page_t page, int x, int y) {
-    static const mybot_settings_control_t menu[] = {MYBOT_SETTINGS_WIFI, MYBOT_SETTINGS_POWEROFF,
-                                                    MYBOT_SETTINGS_FACTORY_RESET,
-                                                    MYBOT_SETTINGS_BACK};
-    static const mybot_settings_control_t confirm[] = {MYBOT_SETTINGS_CANCEL,
-                                                       MYBOT_SETTINGS_CONFIRM};
-    static const mybot_settings_control_t reset[] = {MYBOT_SETTINGS_BACK,
-                                                     MYBOT_SETTINGS_RESET_CONFIRM};
-    if (page == MYBOT_SETTINGS_CLOSED)
-        return mybot_settings_contains(MYBOT_SETTINGS_GEAR, x, y) ? MYBOT_SETTINGS_GEAR : -1;
-    const mybot_settings_control_t *controls = menu;
-    size_t count = sizeof(menu) / sizeof(menu[0]);
-    if (page == MYBOT_SETTINGS_CONFIRM_POWEROFF) {
-        controls = confirm;
-        count = sizeof(confirm) / sizeof(confirm[0]);
-    } else if (page == MYBOT_SETTINGS_CONFIRM_RESET) {
-        controls = reset;
-        count = sizeof(reset) / sizeof(reset[0]);
-    } else if (page == MYBOT_SETTINGS_POWEROFF_ERROR || page == MYBOT_SETTINGS_RESET_ERROR) {
-        return mybot_settings_contains(MYBOT_SETTINGS_BACK, x, y) ? MYBOT_SETTINGS_BACK : -1;
-    } else if (page != MYBOT_SETTINGS_MENU) {
-        return -1;
+    const mybot_settings_controls_t *controls = mybot_settings_controls(page);
+    if (controls) {
+        for (unsigned int i = 0; i < controls->count; ++i) {
+            mybot_settings_control_t control = controls->controls[i];
+            if (mybot_settings_contains(control, x, y))
+                return control;
+        }
     }
-    for (size_t i = 0; i < count; ++i)
-        if (mybot_settings_contains(controls[i], x, y))
-            return controls[i];
     return -1;
 }
 

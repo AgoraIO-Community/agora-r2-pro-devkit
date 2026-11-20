@@ -146,39 +146,20 @@ void rv1126b_ui_show(const mybot_lcd_content_t *content) {
     pthread_mutex_unlock(&s_ui.lock);
 }
 
-void rv1126b_ui_set_state(mybot_state_t state) {
-    const char *name = "unknown";
+static const char *sdk_display_name(mybot_state_t state) {
     switch (state) {
-    case MYBOT_STATE_STOPPED:
-        name = "stopped";
-        break;
-    case MYBOT_STATE_WIFI_PROVISIONING:
-        name = "waiting_network";
-        break;
-    case MYBOT_STATE_STARTING_SERVICES:
-        name = "starting_services";
-        break;
-    case MYBOT_STATE_READY:
-        name = "ready";
-        break;
-    case MYBOT_STATE_WIFI_DISCONNECTED:
-        name = "offline";
-        break;
-    case MYBOT_STATE_FAILED:
-        name = "failed";
-        break;
-    case MYBOT_STATE_STOPPING:
-        name = "stopping";
-        break;
-    case MYBOT_STATE_IN_CONVERSATION:
-        name = "in_conversation";
-        break;
-    case MYBOT_STATE_PAIRING:
-        name = "pairing";
-        break;
+#define RV1126B_SDK_STATE(sdk, service, label)                                                     \
+    case sdk:                                                                                      \
+        return label;
+#include "mybot_platform/sdk_states.def"
+#undef RV1126B_SDK_STATE
     }
+    return "unknown";
+}
+
+void rv1126b_ui_set_state(mybot_state_t state) {
     pthread_mutex_lock(&s_ui.lock);
-    snprintf(s_ui.status.state, sizeof(s_ui.status.state), "%s", name);
+    snprintf(s_ui.status.state, sizeof(s_ui.status.state), "%s", sdk_display_name(state));
     s_ui.status.in_conversation = state == MYBOT_STATE_IN_CONVERSATION;
     s_ui.pending = true;
     pthread_mutex_unlock(&s_ui.lock);

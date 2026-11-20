@@ -31,6 +31,29 @@ typedef enum {
     MYBOT_SETTINGS_CONTROL_COUNT
 } mybot_settings_control_t;
 
+/* Controls visible to the renderer and available for touch on each page. */
+typedef struct {
+    unsigned int count;
+    mybot_settings_control_t controls[4];
+} mybot_settings_controls_t;
+
+static inline const mybot_settings_controls_t *mybot_settings_controls(mybot_settings_page_t page) {
+    /* Indexed by mybot_settings_page_t. Progress pages accept no input. */
+    static const mybot_settings_controls_t pages[] = {
+        {1, {MYBOT_SETTINGS_GEAR}},
+        {4,
+         {MYBOT_SETTINGS_WIFI, MYBOT_SETTINGS_POWEROFF, MYBOT_SETTINGS_FACTORY_RESET,
+          MYBOT_SETTINGS_BACK}},
+        {2, {MYBOT_SETTINGS_CANCEL, MYBOT_SETTINGS_CONFIRM}},
+        {0, {MYBOT_SETTINGS_CONTROL_COUNT}},
+        {1, {MYBOT_SETTINGS_BACK}},
+        {2, {MYBOT_SETTINGS_BACK, MYBOT_SETTINGS_RESET_CONFIRM}},
+        {0, {MYBOT_SETTINGS_CONTROL_COUNT}},
+        {1, {MYBOT_SETTINGS_BACK}},
+    };
+    return (unsigned)page < sizeof(pages) / sizeof(pages[0]) ? &pages[page] : 0;
+}
+
 typedef struct {
     int x, y, width, height;
 } mybot_settings_rect_t;

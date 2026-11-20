@@ -2,7 +2,7 @@
   "schema_version": 1,
   "document_date": "2026-11-20",
   "application_version": "0.6.1",
-  "ui_source_sha256": "39d9dfbcbef873475d01f46084bb68f70629278a5c21b4835a7e5631c8adfaf2",
+  "ui_source_sha256": "5c0953a3c353cda5135f96d272052f5518b0488508bbf7a56b288683e7bec240",
   "inputs": {
     "CMakeLists.txt": "7760f03293a4c820e429a08b75618df8eb1e7922057e7c822c635de2a256cff5",
     "CMakePresets.json": "cef80a4be8ebdf0d48c4240418d828a9bbe9a163f92a9ae0cdf6896e1d011c13",
@@ -33,11 +33,11 @@
     "src/ui/include/mybot_ui/display_status.h": "a89899ae16da20d1957d4613b876e895e1e1c102432b3de47dabcf78463dd924",
     "src/ui/include/mybot_ui/expression.h": "e4a09ff2fcaed753c7ae3b5936fac26217613529d2a06f7818cfdebdadfc6852",
     "src/ui/include/mybot_ui/renderer.h": "11031c2fde9e70d80ee881b6e43409324d9e1f39bcae354403b2639b5c6149eb",
-    "src/ui/include/mybot_ui/settings.h": "82b6c66d10c3be467d686ad4c723505e4c6f99c959dec8e599d55d65c6cda94b",
+    "src/ui/include/mybot_ui/settings.h": "04424df836c0f4ad02704afb2a3e44676173b421a35bb338fded62a2769bd20d",
     "src/ui/lv_conf.h": "143fc8cb3ac3554f600c5d3c4d959d3cddd0a813392a4a0e29ec97dffecdefa5",
     "src/ui/src/expression_policy.h": "f2bc1231884616f16611e757ff78106f79612b0ce50529d23ed305ddbd4ad831",
     "src/ui/src/lv_mem_clib.c": "5d54342911bf4adfcca24551e728af1f37e3bd242cf3ba5ea06b5a302cbf8480",
-    "src/ui/src/renderer.c": "34b06822313d0590dcf3e591f8451708214474631b099e447341764385a61e81",
+    "src/ui/src/renderer.c": "de11c38b19c6d6bb07bbe83f918df0087e68e873f3351af2ec696251fd0e1a63",
     "src/ui/src/ui_config.h": "ea239d4419280b9c56a9fb9508472e54b001bfcdfa07abeb96fd6dd9ae8ad89e",
     "src/ui/views/pixel_glasses/LICENSE.MIT.txt": "2ca6f4729fee065d98db37056df2740f813db7aa9a5ff94d6fd58e33232f2cd7",
     "src/ui/views/pixel_glasses/PIXEL_GLASSES_SOURCES.md": "0a1b8e80491fd15a1227cc90adc6aa9ae85786e74881182a16fc67741b46083b",
@@ -51,8 +51,8 @@
     "tools/ui_preview/main.c": "e995679cd02c8a2b0068c167d96c138ed19f6ef04ea17145a6f1c3adefa58c82"
   },
   "outputs": {
-    "docs/device-operations.en.pdf": "6095a2e5650d6389ff13612d60052a30f13f3f6eb44f05fbe4097c6b14319131",
-    "docs/device-operations.zh-CN.pdf": "475c41d0d9943a7a98d230037cdf6d80bf69e8d3ae3a641cfb53860403d68d56",
+    "docs/device-operations.en.pdf": "f9fbd420fad21a5b402955f3e5e2a8967d0f2f75dfd00b2838983c2fa2a83825",
+    "docs/device-operations.zh-CN.pdf": "ba9db05ef611e6bf17a32ad4a9c3478a2f7dc2676ee1297f0be1d7dc75b8caf0",
     "docs/user/assets/device-manual-en/ap-hotspot.png": "3a9d00c525c0f020467cb3ce493d98d830aa53b4dc2c74531f4f419d36eddf96",
     "docs/user/assets/device-manual-en/clock-error.png": "3c32599d878c90480ffa818c582f1e196f403067e2be89f602f47576cd0b1164",
     "docs/user/assets/device-manual-en/connecting-services.png": "6fc4d359553a43f82af641843863ca46784b8f547c1759175ac343fe03dcbce7",
