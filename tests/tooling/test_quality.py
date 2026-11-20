@@ -51,6 +51,17 @@ class FormatterTests(unittest.TestCase):
     def calls(self):
         return [json.loads(line) for line in self.log.read_text().splitlines()]
 
+    def test_shell_uses_actual_entrypoints_and_the_declared_interpreter(self):
+        for name in ('githooks/commit-msg', 'packaging/service/S99mybot', 'packaging/network/99-mybot-lease',
+                     'packaging/example.env', 'packaging/service/mybot-rv1126b.conf'):
+            with self.subTest(name=name):
+                self.assertEqual(quality.shell_interpreter(ROOT / name, name), 'sh')
+        path = self.root / 'entry'
+        for header, expected in [('#!/bin/sh', 'sh'), ('#!/usr/bin/env -S bash -e', 'bash'),
+                                 ('#!/usr/bin/env python3', None), ('no shebang', None)]:
+            path.write_text(header + '\n')
+            self.assertEqual(quality.shell_interpreter(path, 'entry'), expected)
+
     def test_spacing_checks_multiline_definitions_and_leading_comments(self):
         function = 'void first(void) {\n    puts("/* } */");\n}\n'
         next_function = '/* documentation, including (); */\nstatic char *\nsecond(\n    int value) {\n}\n'

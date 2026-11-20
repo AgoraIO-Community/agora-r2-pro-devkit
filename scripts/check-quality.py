@@ -13,6 +13,22 @@ GENERATED = ('src/ui/fonts/generated/',)
 DATA_FILES = {'pixel_expression_masks.h', 'pixel_expression_shapes.h'}
 
 
+# Configuration files sourced by the launcher and its operator examples.
+SOURCED_SHELL = {'packaging/example.env', 'packaging/service/mybot-rv1126b.conf',
+                 'packaging/network/99-mybot-lease'}
+
+
+def shell_interpreter(path, name):
+    if name in SOURCED_SHELL:
+        return 'sh'
+    with path.open('rb') as stream:
+        first_line = stream.readline(256).rstrip()
+    match = re.fullmatch(rb'#!\s*(?:/[^\s]*/)?(?:env\s+(?:-S\s+)?)?(sh|bash)(?:\s+[^\r\n]*)?', first_line)
+    if match:
+        return match[1].decode('ascii')
+    return 'sh' if path.suffix in ('.sh', '.script') else None
+
+
 def checked_formatter(requested, root=ROOT):
     """Select the project formatter and reject a different formatting baseline."""
     requirements = (root / 'requirements-dev.txt').read_text()
@@ -91,8 +107,9 @@ def main():
                 ast.parse(path.read_text(), filename=name)
             except SyntaxError as error:
                 errors.append(str(error))
-        if path.suffix in ('.sh', '.script'):
-            result = subprocess.run(['sh', '-n', str(path)], capture_output=True, text=True)
+        shell = shell_interpreter(path, name)
+        if shell:
+            result = subprocess.run([shell, '-n', str(path)], capture_output=True, text=True)
             if result.returncode:
                 errors.append(result.stderr.strip())
         if path.suffix in ('.md', '.py', '.sh', '.script', '.cmake', '.json', '.yml', '.yaml') or path.name == 'CMakeLists.txt':
