@@ -76,7 +76,7 @@ python3 scripts/deploy-rv1126b.py deploy --serial SERIAL \
   --sha256 ARCHIVE_SHA256 --dry-run
 ```
 
-预览只输出脱敏计划；不会执行 ADB。确认包和计划后，将 `--dry-run` 改为 `--execute`。首次导入回退包时再提供 `--rollback-package PATH` 与 `--rollback-sha256 SHA256`。默认安装完成后保持服务停止，由操作者检查配置与网络策略后启动；只有显式加 `--start` 才在版本切换后启动，不自动重启设备。
+预览输出脱敏计划。`start_requested` 表示切换后立即启动。`install_boot_service` 和 `apply_network_policy` 表示安装开机服务和应用网络策略，仅 `deploy` 执行这两项。预览在本地完成，不创建部署回执。确认包和计划后，将 `--dry-run` 改为 `--execute`。首次导入回退包时再提供 `--rollback-package PATH` 与 `--rollback-sha256 SHA256`。默认安装完成后保持服务停止，由操作者检查配置与网络策略后启动；只有显式加 `--start` 才在版本切换后启动，不自动重启设备。
 
 `--start` 最多等待 30 秒核对应用版本、PID 存活、实际可执行路径和装配后的状态，单次 ADB 健康查询最多 5 秒。`ready` 表示可对话，`started` 表示已进入 SDK 启动流程，`degraded` 表示本地应用已启动但仍处于配网、等待网络/时钟、绑定、离线或 `wifi_error` 等状态；后者会如实显示，不强制等待云端 ready。首次设备写入前原子预留本机回执目录，默认标签带随机 UUID。同一标签只能执行一次。回执的 `phase` 记录最后确认的步骤：`reserved`、`backed_up`、`switched`、指定立即启动时的 `verified`、释放锁后的 `completed`。命令中断时请结合回执与设备现状检查；健康检查失败会保留部署锁。
 

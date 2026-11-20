@@ -738,7 +738,8 @@ def main(argv=None):
         settings = read_settings(args.settings) if args.settings else None
         if args.action in ("deploy", "rollback") and settings is None:
             raise ValueError("A private --settings file is required before changing installed versions")
-        if args.action == "deploy" and not package:
+        deploying = args.action == "deploy"
+        if deploying and not package:
             raise ValueError("deploy requires --package and --sha256")
         if package and settings:
             selected = "video" if settings["video"] else "voice"
@@ -751,13 +752,13 @@ def main(argv=None):
             raise ValueError("Invalid deployment tag")
         if args.action in ("deploy", "rollback") and not args.execute:
             print(json.dumps({"action": args.action, "dry_run": True, "tag": tag,
-                              "release": package["name"] if package else args.release or "previous",
+                              "release": package["name"] if deploying else args.release or "previous",
                               "profile": "video" if settings["video"] else "voice",
                               "backup": DEVICE_ROOT + "/backups/" + tag,
                               "data": "preserve existing private store; never import stock auth",
                               "identity": "compare server/id on device; token is never read",
-                              "network": "usb0 dnsmasq bind-dynamic + dhcpcd deny mbap*; operator reload required",
-                              "autostart": args.start, "reboot": False}, indent=2))
+                              "install_boot_service": deploying, "apply_network_policy": deploying,
+                              "start_requested": args.start, "reboot": False}, indent=2))
             return 0
         adb = Adb(args.adb, args.serial)
         adb.select()
@@ -776,7 +777,7 @@ def main(argv=None):
                     raise ValueError("No checked previous release is available")
                 rollback_target = value[9:]
             adb.shell(rollback_release_check(rollback_target, settings))
-        selected = package["name"] if args.action == "deploy" else rollback_target
+        selected = package["name"] if deploying else rollback_target
         receipt_path = reserve_receipt(tag)
         values = {"schema": 2, "action": args.action, "tag": tag, "release": selected,
                   "backup": DEVICE_ROOT + "/backups/" + tag,
@@ -788,7 +789,7 @@ def main(argv=None):
             if line.startswith("backup_sha256=") and SHA256.fullmatch(line.split("=", 1)[1]):
                 values["backup_sha256"] = line.split("=", 1)[1]
         record_phase(receipt_path, values, "backed_up")
-        if args.action == "deploy":
+        if deploying:
             staging_script = f"base={DEVICE_ROOT}\ntag={shlex.quote(tag)}\n"
             if rollback:
                 staging_script += install_release(adb, rollback, tag)
@@ -836,7 +837,7 @@ install_file "$backup/service.conf.new" /etc/mybot-rv1126b.conf 600
         values["data_preserved"] = True
         record_phase(receipt_path, values, "completed")
         print("Receipt:", receipt_path)
-        print("Deployment completed; network policy reload remains an operator step. No reboot requested.")
+        print("Deployment completed; reload the network policy." if deploying else "Rollback completed.")
         return 0
     except (OSError, ValueError, KeyError, tarfile.TarError, UnicodeError, struct.error,
             RuntimeError, subprocess.SubprocessError) as error:

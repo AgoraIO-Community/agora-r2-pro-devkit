@@ -398,16 +398,28 @@ class DeploymentTests(unittest.TestCase):
         settings = self.base / "settings.json"
         settings.write_text(json.dumps(self.settings))
         settings.chmod(0o600)
-        output = io.StringIO()
-        with patch.object(deployment, "Adb") as adb, redirect_stdout(output):
-            self.assertEqual(deployment.main(["deploy", "--package", str(path), "--sha256", checksum,
-                                              "--settings", str(settings)]), 0)
-        adb.assert_not_called()
-        plan = json.loads(output.getvalue())
-        self.assertTrue(plan["dry_run"])
-        self.assertEqual(plan["profile"], "voice")
-        self.assertNotIn(self.settings["device_id"], output.getvalue())
-        self.assertNotIn(self.settings["server"], output.getvalue())
+        for action in ("deploy", "rollback"):
+            for start in (False, True):
+                arguments = [action, "--settings", str(settings)]
+                if action == "deploy":
+                    arguments += ["--package", str(path), "--sha256", checksum]
+                if start:
+                    arguments += ["--start", "--dry-run"]
+                with self.subTest(action=action, start=start), patch.object(deployment, "Adb") as adb, \
+                        patch.object(deployment, "reserve_receipt") as reserve, redirect_stdout(io.StringIO()) as output:
+                    self.assertEqual(deployment.main(arguments), 0)
+                    adb.assert_not_called()
+                    reserve.assert_not_called()
+                    plan = json.loads(output.getvalue())
+                    self.assertTrue(plan["dry_run"])
+                    self.assertEqual(plan["profile"], "voice")
+                    self.assertEqual(plan["start_requested"], start)
+                    self.assertEqual(plan["install_boot_service"], action == "deploy")
+                    self.assertEqual(plan["apply_network_policy"], action == "deploy")
+                    self.assertEqual(plan["release"], self.name if action == "deploy" else "previous")
+                    self.assertFalse(plan["reboot"])
+                    self.assertNotIn(self.settings["device_id"], output.getvalue())
+                    self.assertNotIn(self.settings["server"], output.getvalue())
 
     def test_adb_selection_requires_an_unambiguous_authorized_device(self):
         result = subprocess.CompletedProcess([], 0, "List of devices attached\na\tdevice\nb\tdevice\n", "")
