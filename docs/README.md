@@ -30,12 +30,4 @@
 
 依赖集成记录：[LVGL](dependencies/lvgl.md)、[RTSA 来源与配置](dependencies/RTSA_SOURCE.txt)、[授权与商业合作](dependencies/licensing.md)、[原始导入清单](dependencies/imported-sources.json)。
 
-`history/` 保留实施当时的判断与命令，供追溯使用。历史方案不代表当前支持状态：
-
-- [最初移植评估](history/rv1126b-feasibility.zh-CN.md)
-- [0.1 首版测试步骤](history/first-validation.zh-CN.md)
-- [0.1.1 原生文字渲染](history/ui-native-fonts.zh-CN.md)
-- [0.1 构建与验收记录](history/validation-0.1.zh-CN.md)
-- [工程治理方案与实施对应](history/governance-plan.zh-CN.md)
-
-支持与私密漏洞报告见[支持](../SUPPORT.zh-CN.md)及[安全政策](../SECURITY.zh-CN.md)。历史入口：[0.5.3 之前各轮验证](history/validation-before-0.5.3.zh-CN.md)、[0.5.2 全面审查](history/review-0.5.2.zh-CN.md)。
+依赖锁的历史快照见[原始 schema 1 清单](history/dependencies-lock-v1.json)。支持和私密漏洞报告分别见[支持](../SUPPORT.zh-CN.md)及[安全政策](../SECURITY.zh-CN.md)。
