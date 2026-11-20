@@ -8,7 +8,7 @@
     "CMakePresets.json": "cef80a4be8ebdf0d48c4240418d828a9bbe9a163f92a9ae0cdf6896e1d011c13",
     "cmake/dependencies/lvgl-sources.cmake": "a03c4f8b0a756ed7b474954500f993fdfb00c607d6b04c24705ebf240791e594",
     "cmake/dependencies/lvgl.cmake": "6a05db13538d7c1a38a966fb6db52ab335caec77bc9f5d3cb622197bd48acb1a",
-    "dependencies.lock.json": "500268cf2c6c9272b847b8cc40ca636700377d11f9ea22fb150f19f30d1c7b25",
+    "dependencies.lock.json": "178fc0d3194fc2eab57c6a0b2a72b9492082587ef5f9cc6df8481e6ce424ce07",
     "docs/user/assets/fonts/DejaVuSansMono-Bold.ttf": "baada9a5172fe20886251aff0433fc38461912d5daf07287e7bee56620a8da96",
     "docs/user/assets/fonts/DejaVuSansMono-LICENSE.txt": "22308e512b54800ba9fe6f9aecd6bea42b71f68f77dbc83196715aac50e631d6",
     "docs/user/assets/fonts/MyBotManualSans-OFL.txt": "f55c2d43dd905011515f5e46ba78d180027e314ef8ccaaf53a9e88fe316767cd",

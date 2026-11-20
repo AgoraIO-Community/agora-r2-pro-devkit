@@ -36,7 +36,7 @@ case "${1:-}" in
         "$service_dir/audio-prepare.sh"
         exec "$release/run.sh"
         ;;
-    supervise|prepare)
+    supervise)
         [ "$#" -eq 1 ] || fail 'invalid supervisor invocation'
         ;;
     *) fail 'expected supervise or exec' ;;
@@ -75,9 +75,19 @@ mkdir -p /run/mybot-rv1126b
 chmod 0700 /run/mybot-rv1126b
 mkdir -p /userdata/mybot/logs
 chmod 0700 /userdata/mybot/logs
-[ "$1" != prepare ] || exit 0
 [ -x /sbin/poweroff ] || fail 'normal system poweroff command is missing'
 [ -x "$service_dir/poweroff.sh" ] || fail 'backlight poweroff helper is missing'
-exec "$service_dir/mybot-supervisor" supervise --runtime "$runtime" \
+"$service_dir/mybot-supervisor" supervise --runtime "$runtime" \
     --log-dir /userdata/mybot/logs --factory-reset --poweroff-command "$service_dir/poweroff.sh" \
-    -- "$service_dir/run-service.sh" exec "$release" </dev/null
+    -- "$service_dir/run-service.sh" exec "$release" </dev/null >/dev/null 2>&1 &
+launcher=$!
+attempt=0
+while [ "$attempt" -lt 200 ]; do
+    if "$service_dir/mybot-supervisor" status --runtime "$runtime" >/dev/null 2>&1; then
+        exit 0
+    fi
+    kill -0 "$launcher" 2>/dev/null || fail 'supervisor exited during startup; inspect the service log'
+    attempt=$((attempt + 1))
+    sleep 0.1
+done
+fail 'supervisor did not become available; inspect the service log'
