@@ -765,8 +765,9 @@ int rv1126b_supervisor_run(const rv1126b_supervisor_config_t *config) {
             } else if (information.si_pid == service.child) {
                 service.child_result =
                     information.si_code == CLD_EXITED ? information.si_status : 1;
-                if (information.si_code != CLD_EXITED &&
-                    (!service.stopping || service.transition != TRANSITION_NONE))
+                if (service.child_result == RV1126B_EXIT_UNCLEAN ||
+                    (information.si_code != CLD_EXITED &&
+                     (!service.stopping || service.transition != TRANSITION_NONE)))
                     mark_unclean(&service);
                 if (service.transition != TRANSITION_NONE && service.child_result != 0) {
                     service.failed = true;

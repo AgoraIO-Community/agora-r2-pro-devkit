@@ -204,6 +204,10 @@ static int child_payload(const char *mode, const char *marker) {
         close(fd);
         return 0;
     }
+    if (!strcmp(mode, "unclean")) {
+        close(fd);
+        return RV1126B_EXIT_UNCLEAN;
+    }
     if (!strcmp(mode, "crash")) {
         close(fd);
         CHECK(kill(getpid(), SIGKILL) == 0);
@@ -441,9 +445,9 @@ static void test_descendant_cleanup(void) {
 #endif
 }
 
-static void test_unclean_crash_blocks_restart(void) {
+static void test_unclean_blocks_restart(const char *mode) {
     prepare();
-    pid_t supervisor = start_supervisor("crash", 512 * 1024);
+    pid_t supervisor = start_supervisor(mode, 512 * 1024);
     await_state("failed\n");
     CHECK(rv1126b_supervisor_control(runtime_path, 0) == 1);
     CHECK(rv1126b_supervisor_control(runtime_path, 1) == 1);
@@ -634,7 +638,8 @@ int main(int argc, char **argv) {
     test_restart_budget();
     test_normal_exit_and_logs();
     test_descendant_cleanup();
-    test_unclean_crash_blocks_restart();
+    test_unclean_blocks_restart("crash");
+    test_unclean_blocks_restart("unclean");
     test_unsafe_inputs();
     test_planned_poweroff();
     test_poweroff_peer_and_commit();

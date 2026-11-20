@@ -6,6 +6,8 @@
 #include <errno.h>
 #include <string.h>
 #include <time.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 static uint64_t fixture_now;
 
@@ -48,7 +50,8 @@ typedef enum {
     FIRST_SETUP,
     FIRST_SETUP_ERROR,
     DEMO,
-    OFFLINE_DEADLINE
+    OFFLINE_DEADLINE,
+    SDK_STOP_UNCONFIRMED
 } scenario_t;
 
 enum {
@@ -369,7 +372,7 @@ int mybot_start(const mybot_config_t *config) {
 void mybot_stop(void) {
     /* The public SDK permits stop after an already-cleaned failed start. */
     CHECK(fixture.starts > 0);
-    fixture.sdk_active = false;
+    fixture.sdk_active = fixture.scenario == SDK_STOP_UNCONFIRMED;
     ++fixture.stops;
     record(SDK_STOP);
 }
@@ -487,6 +490,15 @@ int main(void) {
                           scenario == INPUT_FAILURE || scenario == SDK_START_FAILURE ||
                           scenario == SDK_START_FAILURE_CLEAN ||
                           scenario == POWEROFF_DISPLAY_FAILURE);
+    pid_t child = fork();
+    CHECK(child >= 0);
+    if (!child) {
+        run(SDK_STOP_UNCONFIRMED, 0);
+        _Exit(0);
+    }
+    int status;
+    CHECK(waitpid(child, &status, 0) == child);
+    CHECK(WIFEXITED(status) && WEXITSTATUS(status) == RV1126B_EXIT_UNCLEAN);
     CHECK(sdk_status(MYBOT_STATE_PAIRING) == RV1126B_APP_PAIRING);
     CHECK(sdk_status(MYBOT_STATE_IN_CONVERSATION) == RV1126B_APP_CONVERSATION);
     CHECK(sdk_status(MYBOT_STATE_WIFI_DISCONNECTED) == RV1126B_APP_OFFLINE);

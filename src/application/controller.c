@@ -7,6 +7,7 @@
 #include "mybot_platform/factory_reset.h"
 #include "mybot_platform/controls.h"
 #include "mybot_platform/power.h"
+#include "mybot_platform/supervisor.h"
 #include "mybot_platform/wifi.h"
 #include "mybot_platform/volume.h"
 #include "mybot_platform/prompt.h"
@@ -63,7 +64,7 @@ static void stop_sdk(void) {
         if (mybot_get_state() != MYBOT_STATE_STOPPED) {
             fprintf(stderr,
                     "SDK cleanup incomplete; terminating without explicit resource cleanup\n");
-            _Exit(EXIT_FAILURE);
+            _Exit(RV1126B_EXIT_UNCLEAN);
         }
     }
 }
