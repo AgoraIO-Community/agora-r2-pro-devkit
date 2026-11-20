@@ -23,6 +23,7 @@ typedef struct {
     int fd;
     unsigned char partial[sizeof(struct input_event)];
     size_t used;
+    bool automatic;
 } input_source_t;
 
 typedef struct {
@@ -31,6 +32,7 @@ typedef struct {
     int stdin_fd;
     input_source_t key, touch;
     rv1126b_touch_t touch_state;
+    unsigned rotation;
     rv1126b_platform_config_t config;
     bool stopping;
     bool talk_down, talk_settings_owned;
@@ -346,14 +348,38 @@ static int drain_input(input_context_t *ctx, input_source_t *source, bool touch)
     return 0;
 }
 
+/* Keep polling live inputs normally while a missing auto source waits for its
+ * next probe. Explicit nodes are opened at startup only. */
+static int retry_auto_inputs(input_context_t *ctx, uint32_t *last_probe) {
+    const uint32_t interval = 1000;
+    bool key = ctx->key.automatic && ctx->key.fd < 0;
+    bool touch = ctx->touch.automatic && ctx->touch.fd < 0;
+    if (!key && !touch)
+        return -1;
+    uint32_t now = now_ms();
+    uint32_t elapsed = now - *last_probe;
+    if (elapsed < interval)
+        return (int)(interval - elapsed);
+    *last_probe = now;
+    if (key)
+        ctx->key.fd = open_input("auto", "adc-keys");
+    if (touch) {
+        ctx->touch.fd = open_input("auto", "axs_ts");
+        configure_touch(ctx, ctx->rotation, true);
+    }
+    return ((key && ctx->key.fd < 0) || (touch && ctx->touch.fd < 0)) ? (int)interval : -1;
+}
+
 static void *input_worker(void *opaque) {
     input_context_t *ctx = opaque;
+    uint32_t last_probe = now_ms();
     while (!__atomic_load_n(&ctx->stopping, __ATOMIC_ACQUIRE)) {
+        int timeout = retry_auto_inputs(ctx, &last_probe);
         struct pollfd fds[4] = {{ctx->wake[0], POLLIN, 0},
                                 {ctx->stdin_fd, POLLIN, 0},
                                 {ctx->key.fd, POLLIN, 0},
                                 {ctx->touch.fd, POLLIN, 0}};
-        int ret = poll(fds, 4, -1);
+        int ret = poll(fds, 4, timeout);
         if (ret < 0 && errno == EINTR)
             continue;
         if (ret < 0 || fds[0].revents || __atomic_load_n(&ctx->stopping, __ATOMIC_ACQUIRE))
@@ -381,6 +407,7 @@ static void *input_worker(void *opaque) {
                 AOSL_LOG_WRN("input: %s source disconnected", i ? "touch" : "key");
                 close(sources[i]->fd);
                 sources[i]->fd = -1;
+                sources[i]->used = 0;
                 if (i == 0)
                     ctx->talk_down = false;
                 else
@@ -421,6 +448,9 @@ int rv1126b_input_start(const rv1126b_platform_config_t *config, unsigned rotati
     }
     ctx->stdin_fd = ctx->key.fd = ctx->touch.fd = ctx->wake[0] = ctx->wake[1] = -1;
     ctx->config = *config;
+    ctx->rotation = rotation;
+    ctx->key.automatic = strcmp(config->input_device, "auto") == 0;
+    ctx->touch.automatic = strcmp(config->touch_device, "auto") == 0;
     ctx->key.fd = open_input(config->input_device, "adc-keys");
     ctx->touch.fd = open_input(config->touch_device, "axs_ts");
     const char *paths[2] = {config->input_device, config->touch_device};

@@ -18,8 +18,8 @@
 | `--no-wifi-provisioning` | 无 | 仅监测既有网络，禁用自动/手动 AP 配网 |
 | `--time-sync-timeout SECONDS` | `RV1126B_TIME_SYNC_TIMEOUT` | 30；联网且退出 AP 后等待时间合理性的秒数，范围 1–300 |
 | `--time-sync-helper PATH` | `RV1126B_TIME_SYNC_HELPER` | 空；默认只等待 OS 校时，显式指定绝对可执行路径才允许启动前台 helper |
-| `--input-device PATH` | `RV1126B_INPUT_DEVICE` | `auto`；可选 `none`、`stdin` 或 evdev 路径 |
-| `--touch-device PATH` | `RV1126B_TOUCH_DEVICE` | `auto`；可选 `none` 或 evdev 路径 |
+| `--input-device PATH` | `RV1126B_INPUT_DEVICE` | `auto`；自动发现及重连按键设备。可选 `none`、`stdin` 或 evdev 路径 |
+| `--touch-device PATH` | `RV1126B_TOUCH_DEVICE` | `auto`；自动发现及重连触摸设备，重连时先松手再操作。可选 `none` 或 evdev 路径 |
 | `--talk-key CODE` | 无 | 139（KEY_MENU），音量/左右键不能用作会话键 |
 | `--drm-device PATH` | 无 | `/dev/dri/card0` |
 | `--rotation DEGREES` | 无 | 270，只接受 0/90/180/270 |
