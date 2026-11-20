@@ -14,13 +14,13 @@ python3 scripts/check-quality.py
 
 ## 构建身份
 
-每个构建目录保留 `build-config.json`（CMake 配置）、`build-inputs.json`（编译前输入快照）与 `build-manifest.json`（最终二进制、ABI 与输入身份）。manifest 绑定版本、源码 revision/dirty、语言、voice/video、板型、SDK/RTSA、音频时长、工具链、运行库和资源。不能手工修改这些文件来给旧程序改版本。
+每个构建目录保留 `build-config.json`（CMake 配置）、`build-inputs.json`（编译前输入快照）与 `build-manifest.json`（最终二进制、ABI 与输入身份）。ELF 绑定产品源码、CMake 定义、嵌入门户等生成输入，以及语言、voice/video、板型、SDK、运行库和工具链。构建 manifest 的 `inputs.source` 同时记录编译时 Git 提交和工作树状态。
 
 构建输入和 manifest 使用 schema 2，嵌入式输入身份使用独立 schema 1。本地完整快照保留原始路径、参数、编译器/工具链字节摘要及 Git 诊断信息，仍逐项检查 freshness；二进制中的输入摘要改由可迁移身份计算，绑定源码内容、依赖内容和完整参数语义，归一化明确配置的 SDK/构建路径及路径参数。生成的 Zig wrapper 归一化编译器位置和缓存目录，同时保留其他 shell 文本、参数、引号及实际编译器内容的身份。未知参数仍参与摘要，不直接公开其可能包含的本机路径。
 
 旧构建目录必须重新配置并编译，不能重新封装旧二进制生成新格式包。已安装的旧 release 仍按摘要、profile 和 `--version` 校验后回退，显式 0.1.1 归档导入保持兼容。输入摘要可迁移不等同于完整目标 ELF 的逐字节可复现；后者仍需独立工具链与构建证据。
 
-开发候选允许脏源码，但必须如实标注。`src/` / `vendor/` 路径迁移会改变输入身份，必须重新生成目标二进制、ABI 报告和 manifest。正式发布使用已提交的源码重新构建，再加 `--release`；仅提交已构建的源码不会让旧 manifest 自动成为干净发布身份。
+打包时，`package-manifest.json` 记录打包时 Git 提交和工作树状态；`SHA256SUMS` 登记归档内的程序、资源、说明、许可证和这份 manifest。仅更新验证记录、操作说明或运行时资源，可以复用编译输入一致的 ELF，其构建 manifest 仍保留原提交。正式发布要求编译和打包都来自干净提交。脏源码的开发构建须在干净源码上重新构建才能正式发布。
 
 正式打包再次核对目标运行库清单与 `dependencies.lock.json` 的固件基线，校验 staging 库的实际字节，并从应用、监督器和重置工具的 ELF 读取动态依赖。缺少解释器、未锁定的系统库、缺失或摘要不匹配的清单都会阻止归档。
 

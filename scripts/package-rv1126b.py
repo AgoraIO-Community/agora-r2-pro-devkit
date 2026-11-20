@@ -12,7 +12,7 @@ import shutil
 import tarfile
 import tempfile
 
-from build_metadata import (digest, git, inputs_digest, public_abi, public_manifest, source_snapshot,
+from build_metadata import (checkout_origin, digest, git, inputs_digest, public_abi, public_manifest,
                             verified_abi, verify_manifest, write_json)
 
 from runtime_baseline import validate_runtime
@@ -168,14 +168,15 @@ def package(root, args):
     root = Path(root)
     profiles = ("voice", "video") if args.profile == "all" else (args.profile,)
     validated = []
-    if args.release:
-        source = source_snapshot(root)
-        if source["dirty"] or not source["revision"]:
-            raise ValueError("Release packaging requires a clean, committed Git source tree")
+    origin = checkout_origin(root)
+    if args.release and (origin["dirty"] or not origin["revision"]):
+        raise ValueError("Release packaging requires a clean, committed Git source tree")
     for profile in profiles:
         build = Path(getattr(args, profile + "_build")).resolve()
         manifest, report = verify_manifest(root, build, args.language, profile == "video")
         inputs = manifest['inputs']
+        if args.release and (inputs["source"]["dirty"] or not inputs["source"]["revision"]):
+            raise ValueError("Release requires binaries built from clean, committed source")
         reports = [(build / "mybot-rv1126b", report)]
         for role in ("supervisor", "factory-reset"):
             helper = verified_abi(build, inputs['config'], inputs['source']['sha256'], inputs_digest(inputs),
@@ -212,6 +213,7 @@ def package(root, args):
         staging = Path(temporary) / name
         (staging / "bin").mkdir(parents=True)
         (staging / "lib").mkdir()
+        write_json(staging / "package-manifest.json", {"schema": 1, "source": origin})
         for profile, build, manifest, report in validated:
             filename = "mybot-rv1126b" + ("-video" if profile == "video" else "")
             shutil.copyfile(build / "mybot-rv1126b", staging / "bin" / filename)
@@ -267,6 +269,8 @@ def package(root, args):
         archive_digest = digest(temporary_archive)
         temporary_checksum = Path(temporary) / checksum.name
         temporary_checksum.write_text(archive_digest + "  " + archive.name + "\n")
+        if checkout_origin(root) != origin:
+            raise ValueError("Packaging checkout changed during assembly; retry with stable inputs")
         # Publish only after every verification, copy and archive operation succeeded.
         staging.rename(destination)
         temporary_archive.rename(archive)

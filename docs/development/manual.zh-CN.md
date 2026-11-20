@@ -41,11 +41,11 @@ build/manual-tools/bin/python scripts/check-device-manual.py --reproduce \
 再生成 PNG 和 PDF，最后登记输入/输出摘要。场景使用虚构热点 `mybot-a1b2` 和配对码
 `000042`，图片是 renderer 输出，不是真机照片，不代表新的硬件验证。
 
-`docs/user/assets/manual-manifest.json` 固定文档日期、应用版本、UI 内容摘要及输入/输出
-身份。封面显示 UI 内容摘要，不读取 Git HEAD；相同内容在后续提交或无 `.git` 的源码包
-中仍使用相同基线。普通质量检查只用标准库校验 manifest，发现 UI、文档、字体或版本
-变动后没有同步图片/PDF 时失败。完整重现另外比较图片像素与 PDF 字节，并检查页数、
-字体嵌入、可选取文字和目录跳转；CI 单独运行此链路。
+`docs/user/assets/manual-manifest.json` 记录应用版本、文档日期、生成工具、字体、渲染输入和输出。
+每种语言的封面摘要来自该语言实际生成的 PNG 场景。修改渲染代码后需要刷新手册，
+画面相同时封面摘要保持一致。验证记录、来源说明和依赖许可可独立更新。
+标准库检查会核对源稿、渲染输入、字体、PNG 和 PDF。完整重现还比较每张图片的像素
+和每份 PDF 的字节，并检查页数、字体嵌入、可选取文字和目录跳转。
 
 只需要排版草稿时，可用 `generate-device-manual.py --language zh-CN --output /tmp/manual.pdf`；
 `--language en-US` 使用英文源稿。`--date`、`--baseline` 及字体覆盖只用于明确的草稿输入，

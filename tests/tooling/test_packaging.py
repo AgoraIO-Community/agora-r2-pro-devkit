@@ -497,6 +497,53 @@ class PackagingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Stale build manifest"):
             packager.package(self.root, self.args)
 
+    def test_documentation_commit_and_runtime_resources_reuse_verified_binaries(self):
+        original = metadata.read_json(self.voice / "build-manifest.json")
+        compiled = original["inputs"]["source"]
+        readme = "packaging/README.zh-CN.md"
+        pcm = "vendor/mybot/assets/locales/zh-CN/0.pcm"
+        for name in ("docs/validation/README.md", "src/ui/views/pixel_glasses/PIXEL_GLASSES_SOURCES.md",
+                     readme, pcm, "LICENSE"):
+            self.write(self.root / name, "Updated material for " + name)
+            current = metadata.source_snapshot(self.root)
+            self.assertEqual(compiled["sha256"], current["sha256"], name)
+        subprocess.run(["git", "-C", str(self.root), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(self.root), "-c", "user.name=Fixture",
+                        "-c", "user.email=fixture@example.invalid", "commit", "-qm", "materials"], check=True)
+        packaged_at = metadata.checkout_origin(self.root)
+        self.assertNotEqual(compiled["revision"], packaged_at["revision"])
+        destination, _, _ = packager.package(self.root, self.args)
+        self.assertEqual(metadata.read_json(destination / "package-manifest.json")["source"], packaged_at)
+        public = metadata.read_json(destination / "build-manifest-voice.json")
+        self.assertEqual(public["inputs"]["source"], compiled)
+        self.assertEqual(metadata.digest(destination / "bin/mybot-rv1126b"), original["binary_sha256"])
+        for source, installed in ((readme, "README.zh-CN.md"), (pcm, "assets/locales/zh-CN/0.pcm"),
+                                  ("LICENSE", "licenses/project-APACHE-2.0.txt")):
+            self.assertEqual((destination / installed).read_bytes(), (self.root / source).read_bytes())
+        self.assertIn("  package-manifest.json\n", (destination / "SHA256SUMS").read_text())
+
+    def test_compiled_ui_portal_and_shared_state_mapping_invalidate_binary(self):
+        for name in ("src/ui/src/renderer.c", "src/platform/src/services/wifi/portal.html",
+                     "src/platform/include/mybot_platform/sdk_states.def", "scripts/embed-wifi-portal.py"):
+            with self.subTest(name=name):
+                path = self.root / name
+                self.write(path, "changed build input")
+                with self.assertRaisesRegex(ValueError, "Stale build manifest"):
+                    metadata.verify_manifest(self.root, self.voice, "zh-CN", False)
+                path.unlink()
+
+    def test_committing_dirty_build_does_not_upgrade_its_release_provenance(self):
+        self.write(self.root / "src/application/production.c", "changed source")
+        for build in (self.voice, self.video):
+            self.refresh_source_marker(build)
+            self.seal(build)
+        subprocess.run(["git", "-C", str(self.root), "add", "src"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "-c", "user.name=Fixture",
+                        "-c", "user.email=fixture@example.invalid", "commit", "-qm", "code"], check=True)
+        self.args.release = True
+        with self.assertRaisesRegex(ValueError, "binaries built from clean, committed source"):
+            packager.package(self.root, self.args)
+
     def test_build_configuration_changes_require_rebuild(self):
         config = metadata.read_json(self.voice / "build-config.json")
         config["language"] = "en-US"

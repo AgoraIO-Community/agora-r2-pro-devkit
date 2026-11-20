@@ -376,14 +376,14 @@ def main():
     parser.add_argument('--bold-font', type=Path, help='Optional bold TrueType/TTC')
     parser.add_argument('--bold-index', type=int, default=0)
     parser.add_argument('--date', help='document date; default: committed manual manifest')
-    parser.add_argument('--baseline', help='content baseline; default: committed UI source digest')
+    parser.add_argument('--baseline', help='content baseline; default: committed screenshot digest for this language')
     args = parser.parse_args()
     rl_config.invariant = 1
     try:
         manifest_path = ROOT / 'docs/user/assets/manual-manifest.json'
         manifest = json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
         date = args.date or manifest.get('document_date')
-        baseline = args.baseline or ('ui-' + manifest.get('ui_source_sha256', '')[:12])
+        baseline = args.baseline or ('ui-' + manifest.get('scene_sha256', {}).get(args.language, '')[:12])
         if not date or not re.fullmatch(r'\d{4}-\d{2}-\d{2}', date) or baseline == 'ui-':
             raise ValueError('Provide --date and --baseline, or refresh the committed manual manifest')
         find_fonts(args)

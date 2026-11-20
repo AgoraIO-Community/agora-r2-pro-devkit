@@ -23,12 +23,14 @@ LANGUAGES = {
 }
 UI_FILES = ('tools/ui_preview/main.c', 'tools/ui_preview/CMakeLists.txt',
             'src/platform/src/drivers/display/pixels.c', 'src/platform/src/drivers/display/pixels.h',
+            'vendor/mybot/include/mybot/platform/mybot_lcd.h', 'cmake/dependencies/public-headers.cmake',
             'cmake/dependencies/lvgl.cmake', 'cmake/dependencies/lvgl-sources.cmake')
-INPUT_FILES = ('CMakeLists.txt', 'CMakePresets.json', 'dependencies.lock.json',
+INPUT_FILES = ('CMakeLists.txt',
                'scripts/generate-device-manual.py', 'scripts/generate-manual-font.py',
                'scripts/check-device-manual.py', 'scripts/requirements-manual.txt',
                'docs/user/device-manual.zh-CN.md', 'docs/user/device-manual.en.md')
-FONT_FILES = ('MyBotManualSans.ttf', 'DejaVuSansMono-Bold.ttf', 'sources.json')
+FONT_FILES = ('MyBotManualSans.ttf', 'DejaVuSansMono-Bold.ttf')
+RENDER_SOURCE = {'.c', '.h', '.cc', '.cpp', '.hpp', '.inc', '.def', '.cmake'}
 
 
 def sha256(path):
@@ -60,16 +62,24 @@ def hashes(root, names):
     return {name: sha256(checked_path(root, name)) for name in sorted(set(names))}
 
 
+def content_digest(values):
+    return hashlib.sha256(json.dumps(values, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def scene_digest(outputs, directory):
+    prefix = 'docs/user/assets/' + directory + '/'
+    return content_digest({name[len(prefix):]: digest for name, digest in outputs.items()
+                           if name.startswith(prefix) and name.endswith('.png')})
+
+
 def snapshot(root):
-    ui = set(UI_FILES) | set(tree_files(root, 'src/ui'))
-    inputs = set(INPUT_FILES) | ui | set(tree_files(root, 'docs/user/assets/fonts'))
-    for name in FONT_FILES:
-        checked_path(root, 'docs/user/assets/fonts/' + name)
-    # Actual LVGL bytes join the UI identity; the committed lock independently
-    # remains in inputs. Business/SDK sources do not invalidate screenshots.
-    ui |= set(tree_files(root, 'vendor/lvgl'))
-    ui_digest = hashlib.sha256(json.dumps(hashes(root, ui), sort_keys=True,
-                                         separators=(',', ':')).encode()).hexdigest()
+    def sources(directory):
+        return {name for name in tree_files(root, directory)
+                if Path(name).suffix in RENDER_SOURCE or Path(name).name == 'CMakeLists.txt'}
+
+    ui = set(UI_FILES) | sources('src/ui')
+    inputs = set(INPUT_FILES) | ui | {'docs/user/assets/fonts/' + name for name in FONT_FILES}
+    ui_digest = content_digest(hashes(root, ui | sources('vendor/lvgl')))
     version = re.search(r'project\(mybot_rv1126b\s+VERSION\s+([\d.]+)',
                         (root / 'CMakeLists.txt').read_text())
     if not version:
@@ -100,9 +110,14 @@ def output_names(root):
 
 def read_manifest(root):
     result = json.loads((root / MANIFEST).read_text())
-    if set(result) != {'schema_version', 'document_date', 'application_version',
-                       'ui_source_sha256', 'inputs', 'outputs'} or type(result['schema_version']) is not int or result['schema_version'] != 1:
+    fields = {'schema_version', 'document_date', 'application_version', 'ui_source_sha256',
+              'scene_sha256', 'inputs', 'outputs'}
+    if set(result) != fields or type(result['schema_version']) is not int or result['schema_version'] != 2:
         raise ValueError('Unsupported or incomplete manual manifest schema')
+    if (not isinstance(result['scene_sha256'], dict) or set(result['scene_sha256']) != set(LANGUAGES)
+            or any(not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest)
+                   for digest in result['scene_sha256'].values())):
+        raise ValueError('Invalid bilingual scene digests')
     if date.fromisoformat(result['document_date']).isoformat() != result['document_date']:
         raise ValueError('Invalid document_date')
     for field in ('inputs', 'outputs'):
@@ -127,7 +142,11 @@ def check(root):
     expected_outputs = output_names(root)
     if sorted(manifest['outputs']) != expected_outputs:
         errors.append('manual output set differs from bilingual sources')
-    errors += differences(manifest['outputs'], hashes(root, expected_outputs), 'manual output changed')
+    actual = hashes(root, expected_outputs)
+    errors += differences(manifest['outputs'], actual, 'manual output changed')
+    for language, (_, directory, _) in LANGUAGES.items():
+        if manifest['scene_sha256'][language] != scene_digest(actual, directory):
+            errors.append('manual scene content changed: ' + language)
     if manifest['ui_source_sha256'] != ui_digest:
         errors.append('manual UI source identity changed')
     if manifest['application_version'] != version:
@@ -189,7 +208,7 @@ def verify_pdf(path, source):
                     raise ValueError('Manual PDF uses an unembedded font: ' + name)
 
 
-def render_assets(root, staging, builds, document_date, ui_digest):
+def render_assets(root, staging, builds, document_date):
     from PIL import Image
     for language, (source, image_directory, pdf) in LANGUAGES.items():
         preview = build_preview(root, builds[language], language)
@@ -206,11 +225,13 @@ def render_assets(root, staging, builds, document_date, ui_digest):
                 if image.size != (640, 480):
                     raise ValueError('Manual scene has the wrong size: ' + path.name)
                 image.convert('RGB').save(images / (path.stem + '.png'), optimize=False, compress_level=9)
+        rendered = hashes(staging, [path.relative_to(staging).as_posix() for path in images.glob('*.png')])
+        baseline = 'ui-' + scene_digest(rendered, image_directory)[:12]
         source_copy = staging / 'docs/user' / source
         shutil.copyfile(root / 'docs/user' / source, source_copy)
         subprocess.run([sys.executable, str(root / 'scripts/generate-device-manual.py'),
                         '--language', language, '--source', str(source_copy), '--output', str(staging / pdf),
-                        '--date', document_date, '--baseline', 'ui-' + ui_digest[:12]], check=True)
+                        '--date', document_date, '--baseline', baseline], check=True)
         verify_pdf(staging / pdf, source_copy)
     expected = output_names(root)
     actual = sorted(path.relative_to(staging).as_posix() for path in (staging / 'docs').rglob('*')
@@ -246,7 +267,7 @@ def refresh(root, builds, requested_date=None, reproduce=False):
     (root / 'build').mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='manual-assets-', dir=root / 'build') as temporary:
         staging = Path(temporary)
-        outputs = render_assets(root, staging, builds, document_date, ui_digest)
+        outputs = render_assets(root, staging, builds, document_date)
         if (inputs, ui_digest, version) != snapshot(root):
             raise ValueError('Manual inputs changed during rendering; retry with stable sources')
         if reproduce:
@@ -258,8 +279,9 @@ def refresh(root, builds, requested_date=None, reproduce=False):
             target = root / name
             target.parent.mkdir(parents=True, exist_ok=True)
             os.replace(staging / name, target)
-        manifest = {'schema_version': 1, 'document_date': document_date, 'application_version': version,
-                    'ui_source_sha256': ui_digest, 'inputs': inputs, 'outputs': outputs}
+        scenes = {language: scene_digest(outputs, values[1]) for language, values in LANGUAGES.items()}
+        manifest = {'schema_version': 2, 'document_date': document_date, 'application_version': version,
+                    'ui_source_sha256': ui_digest, 'scene_sha256': scenes, 'inputs': inputs, 'outputs': outputs}
         target = root / MANIFEST
         temporary_manifest = staging / 'manual-manifest.json'
         temporary_manifest.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n')
