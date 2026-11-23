@@ -93,11 +93,11 @@ playback keeps working.
 
 Implement [mybot_wifi_ops_t](../include/mybot/platform/mybot_wifi.h) as a listener on the
 product's existing network manager and add it to the platform descriptor. Product provisioning,
-credential storage, and connection establishment are independent of MyBot. `init` attaches the SDK
+credential storage, and connection establishment are independent of the SDK. `init` attaches the SDK
 listener and reports the current usable connection; `destroy` detaches that listener without
 shutting down the product's network. Follow the header for event ordering and callback lifetime.
 
-Keep reporting runtime link loss and recovery while MyBot is running. The SDK pauses device-service
+Keep reporting runtime link loss and recovery while the SDK is running. The SDK pauses device-service
 requests while offline and resumes them after reconnection; a lost conversation is ended locally.
 Entering provisioning is a separate product action and follows the stop/start sequence in Step 6.
 The Linux adapter assumes the host network is already available and reports connected immediately;
@@ -109,6 +109,8 @@ Implement all callbacks in `mybot_kv_store_ops_t`.
 
 - `get` returns 0 on success, `MYBOT_ERR_NOT_FOUND` when absent, and negative on failure.
   It must respect `capacity` and set `out_len` only on success.
+  A read failure during credential restoration fails service startup and preserves the record.
+  Once storage recovers, stop and restart the SDK to restore the binding.
 - `set` should survive power loss without exposing a partial replacement.
 - `erase` is idempotent.
 - Protect the device token with appropriate access controls or encryption.
@@ -140,6 +142,8 @@ verification for development certificates; install the required CA in the device
 
 The SDK's HTTP receive buffer grows to at most 32 KiB and reserves one byte for its terminating
 NUL, leaving 32767 bytes for the raw response, including HTTP headers and any chunk framing.
+The client completes a chunked response when it receives the zero-size chunk and the empty line
+ending its trailers. Only a close-delimited body requires a clean peer close.
 The 2 KiB free-space threshold only triggers buffer growth; remaining space at the allocation
 limit is still usable regardless of how the response is split across receive calls. A full buffer
 that still needs an end-of-stream check uses a one-byte probe under the existing request deadline
@@ -168,6 +172,9 @@ conversation state from the LCD or maintain a second platform-side state; runtim
 loss is reported as `MYBOT_STATE_WIFI_DISCONNECTED` and the SDK ends the conversation locally.
 
 ### LCD (optional)
+
+If Wi-Fi reconnects while the device is waiting to be claimed, the SDK renders the current pairing
+code again. The LCD adapter can draw each screen from the supplied content.
 
 Implement `mybot_lcd_ops_t` when a display exists. Render receives semantic content from the
 application control owner; the SDK does not invoke it concurrently. Content is borrowed. Add the
@@ -248,7 +255,7 @@ frames must be complete JPEG images.
 
 `on_target_bitrate_changed()` receives RTSA's current uplink target in bits per second; the encoder
 should adjust its bitrate within its supported range and return promptly. `on_key_frame_request()` is
-optional and handles RTSA key-frame requests. MyBot sends one primary stream and explicitly disables
+optional and handles RTSA key-frame requests. The SDK sends one primary stream and explicitly disables
 remote video subscription.
 
 ## Step 4: Register one platform descriptor
@@ -313,11 +320,11 @@ Run provisioning and SDK lifecycle control as separate product responsibilities:
 1. The product connects using saved credentials or completes its provisioning flow, then signals
    that the network is usable to the product control task.
 2. The product control task calls `mybot_start()`. The Wi-Fi adapter reports the existing connection,
-   allowing MyBot to start device-service pairing, authentication, and conversations.
+   allowing the SDK to start device-service pairing, authentication, and conversations.
 3. Before entering provisioning again, the product control task calls `mybot_stop()` and waits
-   for it to finish before handing shared devices to the provisioning flow. Start MyBot again
+   for it to finish before handing shared devices to the provisioning flow. Start the SDK again
    after usable connectivity returns. Provisioning prompts belong to that product flow;
-   SDK pairing-code announcements belong to MyBot.
+   the SDK handles pairing-code announcements.
 
 For the lifecycle API contract, see [mybot.h](../include/mybot/mybot.h). The following example runs
 on the product control task after network connectivity is ready:
@@ -344,11 +351,15 @@ start after the listener's first connected event. The historical `MYBOT_STATE_WI
 they do not mean the SDK is running provisioning. Do not call stop from a platform callback
 because it waits for workers and callbacks. `mybot_start()` acquires one application reference to the
 process-wide AOSL runtime and `mybot_stop()` releases that reference last, after workers, buffers
-and the RTC callback queues have been torn down. MyBot serializes RTSA lifecycle, state, and
+and the RTC callback queues have been torn down. The SDK serializes RTSA lifecycle, state, and
 vendor callback dispatch on a dedicated `rtc_mpq`; application callbacks must not re-enter the RTC
 API. The RTSA lifecycle is managed through
 `agora_rtc_init()` / `agora_rtc_fini()`. A host that uses AOSL directly must pair its own
 `aosl_ctor()` and `aosl_dtor()` calls and keep that reference until all of its AOSL users have stopped.
+
+If stopping device I/O or joining a worker fails, the SDK retains the resources and reports
+`MYBOT_STATE_STOPPING`. Call `mybot_stop()` again from the product control thread to complete
+cleanup before restarting.
 
 Use `mybot_get_state()` to decide which product actions are currently available; the returned
 states are defined in [mybot.h](../include/mybot/mybot.h). Do not reconstruct the SDK's private
@@ -360,7 +371,10 @@ Failure to queue a key, Wi-Fi, wake-word, or video-start event publishes an exit
 `mybot_is_running()` becomes false, and the product control task must call `mybot_stop()`.
 The callback does not tear down resources.
 
-For an ordinary temporary network outage, keep MyBot running and let the network manager reconnect
+If allocation or queue admission fails for a critical RTC connection or token notification, the
+next control tick ends that conversation through the normal local teardown path.
+
+For an ordinary temporary network outage, keep the SDK running and let the network manager reconnect
 with its existing credentials. The adapter reports the disconnect and subsequent usable connection;
 do not turn every link loss into a provisioning restart. The SDK ends the interrupted conversation
 and resumes device-service work after reconnect; starting a new conversation requires a new trigger.
@@ -535,7 +549,7 @@ host must ensure its include and library paths refer to that package.
   binding-status poll or stop notification does not delay local hangup or a new start request.
 - An already-connected network is reported when the SDK listener attaches; runtime disconnect,
   reconnect, and failure events complete without deadlock.
-- Entering provisioning waits for `mybot_stop()` to finish; the product restarts MyBot only after
+- Entering provisioning waits for `mybot_stop()` to finish; the product restarts the SDK only after
   network connectivity is usable again.
 - KV survives reset, handles not-found and overflow, and protects credentials.
 - Capture/playback pass 16 kHz mono S16 tests at each selected ptime with its matching RTSA package.
