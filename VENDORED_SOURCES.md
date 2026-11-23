@@ -4,7 +4,7 @@ This document describes the inputs actually used by this project. The machine-re
 
 | Input | Fixed source | Current location and adaptation |
 | --- | --- | --- |
-| agent-studio-device-firmware 1.3.0 | [AgoraIO-Community/agent-studio-device-firmware](https://github.com/AgoraIO-Community/agent-studio-device-firmware), `4c36cbee4fe8908b37ccee12dcebc0b17bc436f1` | `vendor/mybot/`; fixed source snapshot, external integration in `cmake/dependencies/` |
+| agent-studio-device-firmware 1.3.0 | [AgoraIO-Community/agent-studio-device-firmware](https://github.com/AgoraIO-Community/agent-studio-device-firmware), `1cd46b003e941551a30719b029157085fd8214e5` | `vendor/mybot/`, Linux production subset with documentation adapted to this application. CMake integration lives in `cmake/dependencies/`. |
 | AOSL | [AgoraIO-Community/aosl](https://github.com/AgoraIO-Community/aosl), recorded commit `84e086084ebcd0ae2455a0ce5721950c5fe2e656` | `vendor/aosl/`; independent fixed snapshot of common implementation and Linux HAL |
 | LVGL 9.5.0 production subset | [lvgl/lvgl](https://github.com/lvgl/lvgl), `85aa60d18b3d5e5588d7b247abf90198f07c8a63` | `vendor/lvgl/`; correctly typed mask callback wrappers; Linux allocator/config outside snapshot |
 | Terminal font | DejaVu Sans Mono Bold from Matplotlib 3.8.2 | `src/ui/fonts/generated/pixel_fonts.c`; 18/20 px renamed subsets; fixed source hash in fonts manifest |
