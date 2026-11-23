@@ -4,7 +4,7 @@ Project-maintained application and Linux integration code uses [Apache-2.0](LICE
 
 | Component | Source / terms | Retained notices |
 | --- | --- | --- |
-| MyBot SDK 1.3.0 | `junlon2006/mybot@4c36cbee4fe8908b37ccee12dcebc0b17bc436f1`; Apache-2.0 except file-level notices | [LICENSE](vendor/mybot/LICENSE), [upstream notices](vendor/mybot/THIRD_PARTY_NOTICES.md) |
+| MyBot SDK 1.3.0 | `junlon2006/mybot@8bae576ce12bd18c77b1aeea560ce2f9f9b7f836`, Apache-2.0 except file-level notices | [LICENSE](vendor/mybot/LICENSE), [upstream notices](vendor/mybot/THIRD_PARTY_NOTICES.md) |
 | cJSON-derived code | Namespaced implementation retains Dave Gamble copyright and MIT terms | [Complete MIT terms](docs/dependencies/cjson-LICENSE.txt); original notices in `vendor/mybot/src/support/mybot_json.c` and `vendor/mybot/src/internal/mybot_json.h` |
 | AOSL | Recorded `84e086084ebcd0ae2455a0ce5721950c5fe2e656`; Apache-2.0-based license **with additional restrictive conditions** | [complete AOSL license](vendor/aosl/LICENSE) |
 | LVGL 9.5.0 production subset | MIT and source-specific notices | [LICENCE.txt](vendor/lvgl/LICENCE.txt), [COPYRIGHTS.md](vendor/lvgl/COPYRIGHTS.md) |
